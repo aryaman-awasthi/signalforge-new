@@ -52,15 +52,18 @@ Goal: a bootable skeleton with frozen contracts and the traceability system live
   Verified: 5 REQ-007 tests (endpoint, CORS, structure, tokens, thin-route rules);
   suite 53 passed; run.sh booted api (:8000, 200) + web (:3000, /health page renders
   the panel) simultaneously, then shut down cleanly.
+- [S0-T04, completed post-sprint 2026-09-01] Doc imports, deferred at task time
+  because the source files were missing: docs/06 replaced by the authored architecture
+  from playbook/signalforge-architecture-final.md (import notes record deltas vs the
+  frozen contracts and the cockpit port 3001), and the memory graph N1-N13 from
+  playbook/signalforge-memory-graph.md merged into docs/decision-record.md as the
+  pre-build section. One departure from "verbatim" recorded in Deviations (DR-009:
+  reference-app name genericized to keep check_clean green).
 
 ## Not built / deferred
-- [S0-T04] Import of signalforge-architecture-final.md into docs/06 and of
-  signalforge-memory-graph.md into docs/decision-record.md: neither file existed in
-  the workspace at task time. RESOLVED 2026-09-01: the human added both files under
-  playbook/ and they are imported - docs/06 replaced by the authored architecture
-  (with import notes for deltas vs frozen contracts), the memory graph N1-N13 merged
-  into docs/decision-record.md as the pre-build section. See Deviations for the one
-  departure from "verbatim".
+- none. (The S0-T04 doc imports were deferred while the source files were missing;
+  the human provided them 2026-09-01 and the import is complete - see the last Built
+  entry and Deviations.)
 
 ## Deviations
 - Environment vs CLAUDE.md spec on this machine: GNU make not installed (choco install
