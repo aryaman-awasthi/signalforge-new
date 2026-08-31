@@ -6,6 +6,24 @@ graph" section at the bottom is the authored pre-build decision record
 (signalforge-memory-graph.md, provided and imported 2026-09-01) - every N-line there
 is treated as already decided.
 
+## DR-011 (2026-09-01, S1) Escalation test-fire is the IC-only demo endpoint
+S1's acceptance needs an Executive denied an "IC-only endpoint", but incident
+endpoints only land in S4. The simulated escalation test-fire (POST
+/escalation/policies/{id}/test) is gated on run_drills - held by incident
+commander and org owner, never Executive - and is a genuine S1 feature (verify
+paging order and timers before a real incident, nobody actually paged, audit
+event emitted). Why: an honest permission-gated endpoint beats a placeholder;
+no stubs in product code. Consequence: the S4 incident routers add
+declare/severity/close gates on top; this endpoint stays.
+
+## DR-010 (2026-09-01, S1) Dev key fallback under var/keys/, env always wins
+SIGNALFORGE_JWT_SECRET and SIGNALFORGE_FERNET_KEY come from the environment;
+on the single dev machine, absent vars are generated once and persisted under
+var/keys/ (gitignored) so restarts keep sessions and secrets decryptable. Why:
+run.sh must boot with zero setup, and an ephemeral key would silently invalidate
+every session and stored secret on restart. Consequence: production posture
+requires the env vars; recorded as a residual risk in docs/12 section 4.
+
 ## DR-009 (2026-09-01) Imported docs genericize the reference app's name
 The authored architecture and memory graph were imported into docs/06 and this file
 with the reference app's name replaced by generic phrasing. Why: CLAUDE.md rule 2

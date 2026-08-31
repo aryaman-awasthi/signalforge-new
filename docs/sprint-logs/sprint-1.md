@@ -1,0 +1,131 @@
+# Sprint 1 log (2026-09-01, one day)
+Goal: enterprise security floor in place; org and people manageable end to end.
+
+## Built
+- [S1-T01][REQ-010] Identity domain in signalforge/domain/identity/: Tenant, User,
+  RoleBinding (per app: app_id None = org-wide), Invite (token stored hashed, open/
+  accepted/revoked/expired windows), Session (refresh hash + prev hash, family id -
+  doubles as the revocation store); RBAC decision service (REQ-012) deciding strictly
+  from the frozen contracts matrix with per-app scoping and audit-ready reasons;
+  OnCallRotation (member order = paging order, bounded handoff interval) and
+  EscalationPolicy/EscalationStep (bounded ack timers, cumulative page offsets)
+  value objects (REQ-014); ports for repositories, hashing, tokens, secrets, audit,
+  rate limiting, clock. RBAC and value objects written failing-test-first.
+  Verified: 14 REQ-tagged tests (6 RBAC + 8 domain).
+- [S1-T02][REQ-010] infrastructure/security + persistence: argon2id hashing (explicit
+  type=ID); 15-minute HS256 access JWTs referencing the session id, TTL capped so
+  config can only shorten it, expiry checked against the injected Clock (drills can
+  freeze time); refresh material 256-bit random, stored sha256-only; sliding-window
+  login rate limiter; Fernet secret store, key from env with one-time var/keys/
+  fallback (DR-010), ciphertext at rest, names-only listing, redacting repr (REQ-015);
+  ingest HMAC verifier per the frozen contract - timestamp.body, 300s replay window
+  config can only tighten (REQ-017); audit hash-chain writer with per-tenant
+  payload_hash/prev_hash links, verify_chain tamper detection, and no disable switch,
+  asserted by test (REQ-016). SQLAlchemy 2 async models (TZDateTime keeps tz through
+  SQLite), repositories with the tenant_id predicate inside every method (REQ-013),
+  Alembic baseline migration, WAL pragma on connect. Verified: 28 security tests.
+- [S1-T03][REQ-012] API + application layer: AuthService (signup->org owner, login
+  with generic failures + audit, refresh rotation with family revocation on reuse,
+  logout, authenticate via session-backed revocation check, authorize writing
+  audit.authz.denied before raising), OrgService (rename, users+bindings, last-org-
+  owner guard, invite lifecycle with one-time token), OnCallService (rotation/policy
+  CRUD with tenant-scoped target validation, run_drills-gated simulated test-fire,
+  DR-011) over a shared unit of work; routers /auth /orgs /users /invites /roles
+  /oncall /escalation - every product route hangs off the RBAC/principal dependency;
+  domain-error -> HTTP mapping in one place (401 generic, clean 403 naming the
+  permission, 429 with Retry-After). run.sh applies migrations before boot.
+  Verified: 17 API flow tests; live smoke on :8000.
+- [S1-T04][REQ-010] Web: /signup, /login, /invite/[token], /setup (tabs: Invites,
+  Roles, On-call, Escalation) as thin routes over features/auth and features/
+  org-setup; auth cookie proxy in app/api - login/signup/accept-invite handlers set
+  httpOnly cookies and strip tokens from browser-visible bodies, /api/proxy/[...path]
+  attaches the bearer server-side with one refresh-rotate-retry on 401; middleware.ts
+  guards per role group (org group -> /setup) as UX over the API's real enforcement;
+  role matrix editor edits org-wide bindings (permission matrix rendered read-only
+  from the contract), on-call editor where list order is the paging order, escalation
+  editor with ack timers, cumulative offsets and simulated test fire surfacing the
+  403 for non-drill roles. next build green. Verified: 7 structural REQ tests.
+- [S1-T05][REQ-018] docs/12 threat model v1: STRIDE per surface with REQ-mapped
+  mitigations and status, the four AI rows (prompt injection, malicious document
+  content, data exfiltration, inappropriate tool invocation) with design-now/
+  enforce-later made explicit, residual risks recorded; 3 content-pinning tests.
+  Security suite completed (artifact 18): 7-role x 6-endpoint authz matrix with
+  clean-403 body checks and denial-count == audit-event-count, router walk proving
+  every product route carries the RBAC dependency. docs/13 controls matrix v1 over
+  specs/controls.yaml with enforcement points (CTL-PRO-03, CTL-PRO-06 already
+  enforced + tested). scripts/gen_test_report.py -> docs/21 (make report works).
+  Specs statuses REQ-010..018 built; RTM regenerated.
+
+## Not built / deferred
+- none.
+
+## Deviations
+- No contract deviations. Frozen surfaces (contracts/, specs/ ids) untouched; specs
+  status fields updated planned->built per the file's own header rule.
+- "IC-only endpoint" for the acceptance demo realized as the run_drills-gated
+  escalation test-fire rather than an S4 incident endpoint (DR-011) - no stubs.
+
+## Tests
+- added: 71 (14 domain unit / 17 API integration / 33 security incl. threat-model
+  content checks / 7 web structural)
+- suite result: 124 passed, 0 failed (docs/21-test-report.md generated by make report)
+
+## Artifacts updated
+- 12 threat model v1 (docs/12-threat-model.md)
+- 13 controls matrix v1 (docs/13-controls-matrix.md)
+- 18 security tests (signalforge/tests/security/, 33 tests)
+- 20 RTM regenerated (docs/20-RTM.md - 8/8 S1 requirements green, 124 tests joined)
+- 21 test execution report (docs/21-test-report.md, generated)
+- 05 specs: requirements.yaml statuses REQ-010..018 -> built
+- decision-record.md: DR-010, DR-011
+
+## Security notes
+- New surfaces: auth endpoints, org management API, web cookie proxy, DB at rest.
+  All covered in docs/12 with REQ-mapped mitigations.
+- Floor already enforced: audit cannot be disabled (no code path exists, test
+  asserts it); cross-tenant access blocked inside repositories; access TTL and
+  HMAC replay window capped by contract values - config can only tighten.
+- Refresh-token reuse is treated as theft: the whole session family is revoked
+  and the event audited.
+- Residual risks recorded in docs/12 section 4 (login timing side-channel bounded
+  by rate limiting; var/keys dev fallback; in-process rate limiter).
+
+## Known issues and technical debt
+- make still requires an elevated install (S0 carry-over); every target verified by
+  running its recipe directly.
+- Web port 3000 vs cockpit 3001 (S0 carry-over, moves with observability work).
+- Invite links are copied manually by the org owner (no mail pipeline by design
+  this sprint); recorded in docs/12 residual risks.
+- Rate limiter state is in-process (fine for the one-machine deployment; port
+  allows a shared store later).
+
+## Demoable checkpoint
+1. `bash run.sh` - migrations apply, api on :8000, web on :3000.
+2. Open http://localhost:3000/signup - create an org; you land on /setup as owner
+   (middleware let you in; sign out and back in via /login to see the guard).
+3. On /setup: Invites tab - invite exec@yourco.io with role executive; copy the
+   one-time /invite/<token> link, open it in a private window, join.
+4. On-call tab - create rotation "primary" (order = paging order); Escalation tab -
+   create policy "sev1" with a 300s ack step; press "Test fire (simulated)" as the
+   owner: the resolved page plan renders. In the executive's window the same button
+   shows "Denied: ... run_drills".
+5. Recorded live via API (the S1 acceptance): Executive POST
+   /escalation/policies/{id}/test -> 403 {"detail": "permission denied",
+   "permission": "run_drills", "reason": "no applicable role grants run_drills
+   (roles held: executive)"}; owner same call -> 200 simulated plan; audit chain
+   shows audit.authz.denied with actor, permission, resource; tenant chain length 7.
+6. `.venv/Scripts/python.exe -m pytest -q` - 124 passed, all REQ-tagged;
+   `python scripts/gen_rtm.py` regenerates the RTM with REQ-010..018 green;
+   `bash scripts/check_clean.sh` stays green.
+
+## Coverage checklist ticks
+- S1 Multi-tenant orgs, signup, invites, sessions, JWT + refresh, revocation, rate limits
+- S1 Roles per app (all seven roles); permission matrix enforced on every route;
+  cross-tenant isolation tested
+- S1 On-call rotations and escalation policies
+- S1 Secrets encrypted (Fernet); audit hash chain; threat model doc
+
+## Entry criteria for next sprint: met
+- Sprint 1 acceptance satisfied: security suite green (33 tests), the Executive
+  403 + audit demo recorded live against the running server, artifacts 12/13/18/20/21
+  updated, run.sh boots api + web, check_clean green.
