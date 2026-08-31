@@ -55,10 +55,12 @@ Goal: a bootable skeleton with frozen contracts and the traceability system live
 
 ## Not built / deferred
 - [S0-T04] Import of signalforge-architecture-final.md into docs/06 and of
-  signalforge-memory-graph.md into docs/decision-record.md: neither file exists in the
-  workspace. Impact: docs/06 is a skeleton and the decision record starts at S0.
-  Plan: import verbatim when the human provides the files, replacing the skeleton
-  sections; no other task depends on them.
+  signalforge-memory-graph.md into docs/decision-record.md: neither file existed in
+  the workspace at task time. RESOLVED 2026-09-01: the human added both files under
+  playbook/ and they are imported - docs/06 replaced by the authored architecture
+  (with import notes for deltas vs frozen contracts), the memory graph N1-N13 merged
+  into docs/decision-record.md as the pre-build section. See Deviations for the one
+  departure from "verbatim".
 
 ## Deviations
 - Environment vs CLAUDE.md spec on this machine: GNU make not installed (choco install
@@ -66,6 +68,11 @@ Goal: a bootable skeleton with frozen contracts and the traceability system live
   `choco install make -y`; Makefile targets verified by running their recipe commands
   directly in bash); Python 3.11 absent, venv built on Python 3.12.8; Node 22.15.1
   instead of Node 20. No contract deviations.
+- Import not strictly verbatim: the authored architecture and memory graph name the
+  reference app throughout; CLAUDE.md rule 2 (enforced by check_clean.sh) forbids that
+  string in docs/. Imported with the name genericized (DR-009); originals kept in
+  playbook/. Authorizing instruction: the human provided the files for import on
+  2026-09-01 ("i have added these files in playbook").
 
 ## Tests
 - added: 53 unit (5 repo layout + 37 contract validation + 6 traceability + 5 web/api scaffold)
@@ -84,6 +91,9 @@ Goal: a bootable skeleton with frozen contracts and the traceability system live
 
 ## Known issues and technical debt
 - make not runnable until installed with admin rights (see Deviations).
+- Web dev server runs on 3000; the imported architecture assigns the cockpit 3001
+  (Grafana takes 3000). Move the web port + API CORS origins when Grafana is
+  provisioned (observability sprint work).
 
 ## Demoable checkpoint
 1. `bash run.sh` - boots api on :8000 and web on :3000.
