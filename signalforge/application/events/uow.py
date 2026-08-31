@@ -15,6 +15,7 @@ from signalforge.domain.events.ports import (
     SealStore,
 )
 from signalforge.domain.identity.ports import AuditWriter
+from signalforge.domain.observability.agent_runs import AgentRunStore
 
 
 class EventUnitOfWork(ABC):
@@ -24,6 +25,7 @@ class EventUnitOfWork(ABC):
     dead_letters: DeadLetterStore
     seals: SealStore
     retention: RetentionStore
+    agent_runs: AgentRunStore
     audit: AuditWriter
 
     @abstractmethod

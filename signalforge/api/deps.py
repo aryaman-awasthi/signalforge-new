@@ -16,17 +16,26 @@ from fastapi import Depends, Query, Request
 from signalforge.contracts.roles import Permission
 from signalforge.domain.identity.errors import AuthenticationError
 from signalforge.application.events.bus import EventBus
+from signalforge.application.events.consumers import BUS_METRICS_GROUP, BusMetricsConsumer
 from signalforge.application.events.dispatcher import Dispatcher
 from signalforge.application.events.replay import ReplayService
 from signalforge.application.events.retention import RetentionService
 from signalforge.application.events.sealing import SealService
+from signalforge.application.observability.health import ConnectorHealthService
+from signalforge.application.observability.platform_status import PlatformStatusService
 from signalforge.application.identity.auth_service import AuthService
 from signalforge.application.identity.oncall_service import OnCallService
 from signalforge.application.identity.org_service import OrgService
 from signalforge.application.identity.principal import Principal
 from signalforge.domain.events.retention import RetentionPolicy
 from signalforge.infrastructure.clock import SwitchableClock, SystemClock
-from signalforge.infrastructure.config import Settings, load_settings
+from signalforge.infrastructure.config import VERSION, Settings, load_settings
+from signalforge.infrastructure.observability.metrics import build_registry
+from signalforge.infrastructure.observability.sources import (
+    DatabaseHealthSource,
+    EventBusHealthSource,
+    WorkerHealthSource,
+)
 from signalforge.infrastructure.persistence.db import make_engine, make_session_factory
 from signalforge.infrastructure.persistence.event_uow import SqlEventUnitOfWork
 from signalforge.infrastructure.persistence.uow import SqlIdentityUnitOfWork
@@ -84,31 +93,87 @@ class Container:
 
         # Event backbone (S2). recorded_at always comes from the wall clock even
         # when a drill has moved the clock the rest of the system reads.
+        self.metrics = build_registry()
+        self.metrics.set_gauge(
+            "signalforge_build_info",
+            1,
+            {"version": VERSION, "clock_source": getattr(self.clock, "source", "wall")},
+        )
         self.event_uow_factory = lambda: SqlEventUnitOfWork(
             self.session_factory, clock=self.clock, recording_clock=self.wall_clock
         )
-        self.bus = EventBus(recording_clock=self.wall_clock)
+        self.bus = EventBus(recording_clock=self.wall_clock, metrics=self.metrics)
         self.replay = ReplayService(self.event_uow_factory)
         self.seals = SealService(self.event_uow_factory, clock=self.clock)
-        self.dispatcher = Dispatcher(self.event_uow_factory, clock=self.wall_clock)
+        self.dispatcher = Dispatcher(
+            self.event_uow_factory, clock=self.wall_clock, metrics=self.metrics
+        )
+        self.dispatcher.register(BUS_METRICS_GROUP, BusMetricsConsumer(self.metrics))
         self.retention = RetentionService(
             self.event_uow_factory,
             self.bus,
             clock=self.wall_clock,
             policy=RetentionPolicy(self.settings.signal_retention_days),
         )
+
+        # Self-observability (S2-T03).
+        self.health = ConnectorHealthService(
+            self.event_uow_factory, self.bus, clock=self.wall_clock, metrics=self.metrics
+        )
         self.worker = PlatformWorker(self._jobs(), clock=self.wall_clock)
+        self.health.register(DatabaseHealthSource(self.session_factory))
+        self.health.register(EventBusHealthSource(self.event_uow_factory))
+        if self.settings.worker_enabled:
+            # An API-only node (the enterprise split the architecture allows)
+            # has no worker group of its own, so it does not report one; a node
+            # that should have one and does not is DOWN, not silent.
+            self.health.register(WorkerHealthSource(self.worker))
+        self.platform_status = PlatformStatusService(
+            self.event_uow_factory,
+            self.health,
+            self.worker,
+            clock=self.clock,
+            version=VERSION,
+            retention_days=self.settings.signal_retention_days,
+        )
 
     def _jobs(self) -> list[ScheduledJob]:
         """What runs beside the API. Consumers and pollers join this list as the
         sprints add them; each one owns its own failures."""
         return [
             ScheduledJob(
+                name="dispatcher",
+                interval_s=self.settings.dispatch_interval_s,
+                run=self.dispatcher.run_once,
+            ),
+            ScheduledJob(
+                name="connector-health",
+                interval_s=self.settings.health_interval_s,
+                run=self.health.report,
+            ),
+            ScheduledJob(
                 name="retention",
                 interval_s=self.settings.retention_interval_s,
                 run=self.retention.sweep,
             ),
         ]
+
+    async def refresh_platform_gauges(self) -> None:
+        """Point-in-time gauges are computed when /metrics is scraped rather than
+        kept up to date on every write, so a scrape costs one query and a quiet
+        platform costs nothing."""
+        bus = await self.platform_status.bus_status()
+        self.metrics.set_gauge("signalforge_event_seq", bus.head_seq)
+        for group, lag in bus.groups.items():
+            self.metrics.set_gauge("signalforge_consumer_lag", lag, {"group": group})
+        for state, count in bus.dead_letters.items():
+            self.metrics.set_gauge("signalforge_dead_letters", count, {"state": state})
+        for status in self.worker.statuses:
+            self.metrics.set_gauge(
+                "signalforge_connector_health",
+                1.0 if status.healthy else 0.0,
+                {"connector": f"job:{status.name}"},
+            )
 
 
 _container: Optional[Container] = None

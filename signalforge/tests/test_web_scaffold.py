@@ -14,9 +14,10 @@ WEB = ROOT / "web"
 
 
 @pytest.mark.req("REQ-007")
-def test_api_health_endpoint():
-    client = TestClient(app)
-    response = client.get("/health")
+def test_api_health_endpoint(api):
+    """Goes through the per-test container: /health became a real readiness
+    check in S2, so it needs a database to report on."""
+    response = api.client.get("/health")
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "ok"
@@ -25,9 +26,8 @@ def test_api_health_endpoint():
 
 
 @pytest.mark.req("REQ-007")
-def test_api_cors_allows_web_dev_origin():
-    client = TestClient(app)
-    response = client.get("/health", headers={"Origin": "http://localhost:3000"})
+def test_api_cors_allows_web_dev_origin(api):
+    response = api.client.get("/health", headers={"Origin": "http://localhost:3000"})
     assert response.headers.get("access-control-allow-origin") == "http://localhost:3000"
 
 

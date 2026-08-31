@@ -48,13 +48,40 @@ Goal: durable, ordered, replayable event spine everything else rides on.
   Verified: 15 REQ-tagged tests (retention policy and sweep written
   failing-test-first).
 
+- [S2-T03][REQ-025] Platform self-observability. Structured JSON logging
+  (infrastructure/observability/logging.py): one line per event with a request
+  id carried in a context var so a request can be followed through the API, the
+  worker and the bus; known-sensitive keys redacted by the formatter rather than
+  by callers; unserialisable values stringified so a log line is never lost;
+  uvicorn/sqlalchemy/alembic loggers adopted and the duplicate access log
+  silenced, so the process emits exactly one format. Hand-rolled Prometheus
+  registry (metrics.py): counters, gauges and histograms where every metric
+  declares its label names and an undeclared or identifying label is a hard
+  error - which is what makes the unauthenticated /metrics scrape safe, asserted
+  by both an observability test and a security test. /metrics returns text
+  exposition at the frozen observe content type. /health became a real readiness
+  check over the HealthSource port (database, event bus lag/DLQ, worker group),
+  503 when a component is down, still carrying the S1 fields and still naming no
+  tenant; a node with the worker disabled does not claim one. ConnectorHealthService
+  polls every source, publishes system.connector.health per source under the
+  reserved _platform tenant on the signal plane, audits transitions only, and
+  reports a source whose check raises as DOWN instead of dying. Worker now runs
+  three jobs: dispatcher (0.5s), connector-health (30s), retention (1h), with the
+  BusMetricsConsumer as the first real consumer group so the backbone is exercised
+  in the running product. Operator surface: GET /platform/status (manage_apps),
+  GET /platform/dead-letters + POST .../requeue (manage_apps, tenant-scoped),
+  GET /platform/agent-runs[/{id}] (read_audit). agent_runs / agent_run_steps
+  tables + store + Alembic c7ed709bb625, tenant-scoped and exercised by tests,
+  empty until S5. Verified: 21 REQ-tagged tests; live boot on :8013 showing
+  connector-health events published, dispatched and counted, and JSON logs only.
+
 ## Not built / deferred
 
 ## Deviations
 
 ## Tests
-- added: 56 (41 S2-T01 / 15 S2-T02)
-- suite result: 180 passed, 0 failed
+- added: 78 (41 S2-T01 / 15 S2-T02 / 22 S2-T03)
+- suite result: 202 passed, 0 failed
 
 ## Artifacts updated
 - 14 functional tests (signalforge/tests/events/)

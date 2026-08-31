@@ -253,6 +253,46 @@ class DeadLetterRow(Base):
     resolved_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, nullable=True)
 
 
+class AgentRunRow(Base):
+    """One agent invocation. Empty until the agent suite lands in S5; the table
+    exists now so agents are born observable rather than instrumented later."""
+
+    __tablename__ = "agent_runs"
+    __table_args__ = (
+        Index("ix_agent_runs_tenant_started", "tenant_id", "started_at"),
+        Index("ix_agent_runs_incident", "tenant_id", "incident_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    agent: Mapped[str] = mapped_column(String(100))
+    status: Mapped[str] = mapped_column(String(20))
+    incident_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    trigger_topic: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    trigger_event_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    started_at: Mapped[datetime] = mapped_column(TZDateTime)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, nullable=True)
+    model: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    prompt_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    completion_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
+class AgentRunStepRow(Base):
+    __tablename__ = "agent_run_steps"
+    __table_args__ = (Index("ix_agent_run_steps_run", "run_id", "seq"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    run_id: Mapped[str] = mapped_column(ForeignKey("agent_runs.id"), index=True)
+    seq: Mapped[int] = mapped_column(Integer)
+    step: Mapped[str] = mapped_column(String(100))
+    status: Mapped[str] = mapped_column(String(20))
+    started_at: Mapped[datetime] = mapped_column(TZDateTime)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, nullable=True)
+    tokens: Mapped[int] = mapped_column(Integer, default=0)
+    detail: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
 class RetentionWatermarkRow(Base):
     """What retention removed from a (tenant, plane) chain, and the hash the
     surviving events verify against."""

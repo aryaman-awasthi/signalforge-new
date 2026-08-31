@@ -20,6 +20,8 @@ from signalforge.domain.events.retention import SIGNAL_RETENTION_DEFAULT_DAYS
 ROOT = Path(__file__).resolve().parents[2]
 KEYS_DIR = ROOT / "var" / "keys"
 
+VERSION = "0.2.0"
+
 ACCESS_TTL_CAP_S = 900  # 15-minute JWT access tokens (REQ-010); config may only shorten
 
 
@@ -49,6 +51,9 @@ class Settings:
     signal_retention_days: int
     worker_enabled: bool
     retention_interval_s: int
+    dispatch_interval_s: float
+    health_interval_s: float
+    log_level: str
 
 
 def load_settings() -> Settings:
@@ -81,4 +86,10 @@ def load_settings() -> Settings:
         retention_interval_s=int(
             os.environ.get("SIGNALFORGE_RETENTION_INTERVAL_S", 3_600)
         ),
+        dispatch_interval_s=float(
+            os.environ.get("SIGNALFORGE_DISPATCH_INTERVAL_S", 0.5)
+        ),
+        # Connector health every 30s per the architecture's poller cadence.
+        health_interval_s=float(os.environ.get("SIGNALFORGE_HEALTH_INTERVAL_S", 30)),
+        log_level=os.environ.get("SIGNALFORGE_LOG_LEVEL", "INFO").upper(),
     )

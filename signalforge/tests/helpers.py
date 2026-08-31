@@ -40,6 +40,9 @@ def make_test_settings(db_url: str) -> Settings:
         # the same SQLite file would make assertions depend on timing.
         worker_enabled=False,
         retention_interval_s=3_600,
+        dispatch_interval_s=0.5,
+        health_interval_s=30,
+        log_level="INFO",
     )
 
 

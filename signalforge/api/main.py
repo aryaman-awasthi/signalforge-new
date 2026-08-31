@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from signalforge.api import deps
 from signalforge.api.errors import register_error_handlers
+from signalforge.api.middleware import RequestContextMiddleware
 from signalforge.api.routers import (
     auth,
     escalation,
@@ -24,18 +25,26 @@ from signalforge.api.routers import (
     invites,
     oncall,
     orgs,
+    platform,
     roles,
     users,
 )
+from signalforge.infrastructure.config import VERSION, load_settings
+from signalforge.infrastructure.observability.logging import configure_logging
+
+def current_container() -> deps.Container:
+    """Resolve through the dependency override so the middleware and the worker
+    use a test's container - and its database - rather than the real one."""
+    provider = app.dependency_overrides.get(deps.get_container, deps.get_container)
+    return provider()
+
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
-    # Resolve through the override so a test's container - and its database -
-    # is the one the worker runs against, or nothing runs at all.
-    provider = application.dependency_overrides.get(
-        deps.get_container, deps.get_container
-    )
-    container = provider()
+    container = current_container()
+    # Again here: the server installs its own plain-text handlers between import
+    # and startup, so this is where one log format finally wins.
+    configure_logging(container.settings.log_level)
     if container.settings.worker_enabled:
         await container.worker.start()
     try:
@@ -44,7 +53,11 @@ async def lifespan(application: FastAPI):
         await container.worker.stop()
 
 
-app = FastAPI(title="SignalForge API", version="0.2.0", lifespan=lifespan)
+configure_logging(load_settings().log_level)
+
+app = FastAPI(title="SignalForge API", version=VERSION, lifespan=lifespan)
+
+app.add_middleware(RequestContextMiddleware, container_provider=current_container)
 
 # Dev CORS for the web dev server; the browser talks to the Next.js auth
 # cookie proxy in production-shaped setups.
@@ -67,3 +80,4 @@ app.include_router(roles.router)
 app.include_router(oncall.router)
 app.include_router(escalation.router)
 app.include_router(events.router)
+app.include_router(platform.router)

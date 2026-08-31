@@ -9,6 +9,7 @@ import pytest
 
 from signalforge.api import deps
 from signalforge.api.main import app
+from signalforge.api.routers.health import ComponentOut, HealthResponse
 
 # Endpoints under test -> (method, path template, permission needed).
 GATED = {
@@ -135,12 +136,38 @@ def _walk_api_routes(routes):
             yield from _walk_api_routes(nested)
 
 
+PUBLIC_ROUTES = {
+    "/", "/docs", "/openapi.json", "/docs/oauth2-redirect", "/redoc",
+    # Bootstrap: these are how a caller gets a session in the first place.
+    "/auth/signup", "/auth/login", "/auth/refresh", "/auth/accept-invite",
+    # Probes and scrapes have no session by design. Their compensating control
+    # is that neither can name a tenant: /health returns component statuses
+    # only, and /metrics is rendered by a registry that rejects identifying
+    # labels at declaration time. Both are asserted below.
+    "/health", "/metrics",
+}
+
+
+@pytest.mark.req("REQ-012", "REQ-025")
+def test_unauthenticated_platform_endpoints_cannot_name_a_tenant():
+    """The two routes with no principal are only safe because of what they are
+    incapable of saying. If that ever changes, this fails before the leak ships."""
+    from signalforge.infrastructure.observability.metrics import (
+        FORBIDDEN_LABEL_NAMES,
+        build_registry,
+    )
+
+    for metric in build_registry().declared:
+        assert not FORBIDDEN_LABEL_NAMES & set(metric.label_names), metric.name
+
+    health_fields = set(HealthResponse.model_fields)
+    assert health_fields == {"status", "service", "version", "time", "components"}
+    assert set(ComponentOut.model_fields) == {"component", "status", "detail"}
+
+
 @pytest.mark.req("REQ-012")
 def test_every_product_route_carries_the_rbac_dependency():
-    public = {
-        "/", "/health", "/docs", "/openapi.json", "/docs/oauth2-redirect", "/redoc",
-        "/auth/signup", "/auth/login", "/auth/refresh", "/auth/accept-invite",
-    }
+    public = PUBLIC_ROUTES
     unguarded = []
     covered = 0
     for route in _walk_api_routes(app.routes):
