@@ -3,6 +3,10 @@ name = "signalforge"
 version = "0.0.1"
 description = "Enterprise incident command centre - app-agnostic core"
 requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.7",
+    "jsonschema>=4.21",
+]
 
 [project.optional-dependencies]
 dev = ["pytest"]

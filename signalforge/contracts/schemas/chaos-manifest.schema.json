@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://signalforge.dev/schemas/chaos-manifest/v1",
+  "title": "SignalForge chaos manifest",
+  "description": "Published by an onboarded application to declare the fault injections it supports. Every injection requires an authorized drill scope at runtime; the manifest only declares what is possible.",
+  "type": "object",
+  "required": ["schema_version", "scenarios"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": 1 },
+    "app": { "type": "string" },
+    "scenarios": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/scenario" }
+    }
+  },
+  "$defs": {
+    "scenario": {
+      "type": "object",
+      "required": ["scenario_id", "name", "description", "fault_type", "target", "max_duration_s"],
+      "additionalProperties": false,
+      "properties": {
+        "scenario_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$" },
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+        "fault_type": {
+          "enum": ["latency", "error_rate", "kill", "cpu", "memory", "dependency_down"]
+        },
+        "target": { "type": "string", "minLength": 1 },
+        "params_schema": { "type": "object" },
+        "max_duration_s": { "type": "number", "exclusiveMinimum": 0 },
+        "blast_radius": {
+          "type": "string",
+          "description": "Human-readable statement of what this fault can affect."
+        },
+        "abort_conditions": { "type": "array", "items": { "type": "string" } },
+        "simulated": { "type": "boolean", "default": true }
+      }
+    }
+  }
+}

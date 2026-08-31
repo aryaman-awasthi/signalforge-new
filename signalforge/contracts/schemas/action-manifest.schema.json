@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://signalforge.dev/schemas/action-manifest/v1",
+  "title": "SignalForge action manifest",
+  "description": "Published by an onboarded application to declare its executable remediation and diagnostic actions. High-risk actions must name approver roles; the policy floor never allows them to auto-execute.",
+  "type": "object",
+  "required": ["schema_version", "actions"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": 1 },
+    "app": {
+      "type": "string",
+      "description": "Optional self-declared application name; SignalForge binds the manifest to an app at onboarding regardless."
+    },
+    "actions": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/action" }
+    }
+  },
+  "$defs": {
+    "action": {
+      "type": "object",
+      "required": ["action_id", "name", "description", "action_class", "risk"],
+      "additionalProperties": false,
+      "properties": {
+        "action_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$" },
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+        "action_class": {
+          "enum": [
+            "rollback",
+            "restart",
+            "failover",
+            "traffic_shift",
+            "config_change",
+            "customer_impacting",
+            "diagnostic",
+            "other"
+          ]
+        },
+        "risk": { "enum": ["low", "medium", "high"] },
+        "target": { "type": "string" },
+        "params_schema": {
+          "type": "object",
+          "description": "JSON schema for execute() params; empty object means no params."
+        },
+        "timeout_s": { "type": "number", "exclusiveMinimum": 0, "default": 60 },
+        "idempotent": { "type": "boolean", "default": false },
+        "reversible": { "type": "boolean", "default": false },
+        "reverse_action_id": { "type": "string" },
+        "preconditions": { "type": "array", "items": { "type": "string" } },
+        "verification": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Post-execution checks a validator can run."
+        },
+        "approver_roles": { "type": "array", "items": { "type": "string" } },
+        "simulated": { "type": "boolean", "default": false }
+      },
+      "allOf": [
+        {
+          "if": { "required": ["risk"], "properties": { "risk": { "const": "high" } } },
+          "then": {
+            "required": ["approver_roles"],
+            "properties": { "approver_roles": { "minItems": 1 } }
+          }
+        },
+        {
+          "if": { "required": ["reversible"], "properties": { "reversible": { "const": true } } },
+          "then": { "required": ["reverse_action_id"] }
+        }
+      ]
+    }
+  }
+}
