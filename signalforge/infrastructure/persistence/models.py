@@ -253,6 +253,20 @@ class DeadLetterRow(Base):
     resolved_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, nullable=True)
 
 
+class RetentionWatermarkRow(Base):
+    """What retention removed from a (tenant, plane) chain, and the hash the
+    surviving events verify against."""
+
+    __tablename__ = "retention_watermarks"
+
+    tenant_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    plane: Mapped[str] = mapped_column(String(20), primary_key=True)
+    pruned_through_seq: Mapped[int] = mapped_column(Integer)
+    anchor_hash: Mapped[str] = mapped_column(String(64))
+    pruned_count: Mapped[int] = mapped_column(Integer, default=0)
+    pruned_at: Mapped[datetime] = mapped_column(TZDateTime)
+
+
 class EventSealRow(Base):
     __tablename__ = "event_seals"
     __table_args__ = (Index("ix_event_seals_tenant", "tenant_id", "sealed_at"),)

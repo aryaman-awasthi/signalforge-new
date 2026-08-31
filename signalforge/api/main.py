@@ -2,13 +2,19 @@
 
 Every router except /health and the /auth bootstrap endpoints hangs off the
 RBAC dependency (REQ-012); domain errors map to HTTP in api/errors.py.
+
+One process, two asyncio groups (architecture section 4): the app serves
+requests, and the lifespan owns the worker group that runs everything scheduled.
 """
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from signalforge.api import deps
 from signalforge.api.errors import register_error_handlers
 from signalforge.api.routers import (
     auth,
@@ -22,7 +28,23 @@ from signalforge.api.routers import (
     users,
 )
 
-app = FastAPI(title="SignalForge API", version="0.1.0")
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    # Resolve through the override so a test's container - and its database -
+    # is the one the worker runs against, or nothing runs at all.
+    provider = application.dependency_overrides.get(
+        deps.get_container, deps.get_container
+    )
+    container = provider()
+    if container.settings.worker_enabled:
+        await container.worker.start()
+    try:
+        yield
+    finally:
+        await container.worker.stop()
+
+
+app = FastAPI(title="SignalForge API", version="0.2.0", lifespan=lifespan)
 
 # Dev CORS for the web dev server; the browser talks to the Next.js auth
 # cookie proxy in production-shaped setups.

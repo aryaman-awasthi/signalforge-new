@@ -35,6 +35,11 @@ def make_test_settings(db_url: str) -> Settings:
         login_rate_limit=5,
         login_rate_window_s=300,
         invite_ttl_s=7 * 86_400,
+        signal_retention_days=7,
+        # The worker is driven explicitly in tests: a background loop writing to
+        # the same SQLite file would make assertions depend on timing.
+        worker_enabled=False,
+        retention_interval_s=3_600,
     )
 
 

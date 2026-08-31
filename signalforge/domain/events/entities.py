@@ -57,6 +57,20 @@ class DeadLetter:
         )
 
 
+@dataclass(frozen=True)
+class RetentionWatermark:
+    """What retention removed from one (tenant, plane) chain, and the hash it
+    left behind so the surviving chain still verifies. Without the anchor a
+    prune and a deletion look identical (REQ-023)."""
+
+    tenant_id: str
+    plane: Plane
+    pruned_through_seq: int
+    anchor_hash: str
+    pruned_count: int
+    pruned_at: datetime
+
+
 class SealScope(str, Enum):
     INCIDENT = "incident"
     TENANT = "tenant"

@@ -13,23 +13,36 @@ from signalforge.infrastructure.persistence.event_store import (
     SqlDeadLetterStore,
     SqlEventStore,
     SqlProcessedLedger,
+    SqlRetentionStore,
     SqlSealStore,
 )
 from signalforge.infrastructure.security.audit import AuditChainWriter
 
 
 class SqlEventUnitOfWork(EventUnitOfWork):
-    def __init__(self, session_factory: async_sessionmaker[AsyncSession], *, clock: Clock):
+    """recording_clock stamps everything durable and operational (recorded_at,
+    offset timestamps) and is always wall time; clock is the platform clock a
+    drill may have made virtual, and only dates the audit entries."""
+
+    def __init__(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        *,
+        clock: Clock,
+        recording_clock: Clock | None = None,
+    ):
         self._session_factory = session_factory
         self._clock = clock
+        self._recording_clock = recording_clock or clock
 
     async def __aenter__(self) -> "SqlEventUnitOfWork":
         self._session = self._session_factory()
-        self.events = SqlEventStore(self._session, clock=self._clock)
-        self.offsets = SqlConsumerOffsetStore(self._session, clock=self._clock)
+        self.events = SqlEventStore(self._session, clock=self._recording_clock)
+        self.offsets = SqlConsumerOffsetStore(self._session, clock=self._recording_clock)
         self.processed = SqlProcessedLedger(self._session)
         self.dead_letters = SqlDeadLetterStore(self._session)
         self.seals = SqlSealStore(self._session)
+        self.retention = SqlRetentionStore(self._session)
         self.audit = AuditChainWriter(self._session, clock=self._clock)
         return self
 

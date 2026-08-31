@@ -17,7 +17,12 @@ from typing import TYPE_CHECKING, Optional, Sequence
 
 from signalforge.contracts.envelope import EventEnvelope, Plane
 from signalforge.domain.events.chain import ChainLink
-from signalforge.domain.events.entities import DeadLetter, DeadLetterState, EventSeal
+from signalforge.domain.events.entities import (
+    DeadLetter,
+    DeadLetterState,
+    EventSeal,
+    RetentionWatermark,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - typing only, avoids an import cycle
     from signalforge.application.events.uow import EventUnitOfWork
@@ -72,6 +77,39 @@ class EventStore(ABC):
 
     @abstractmethod
     async def max_seq(self) -> int: ...
+
+    @abstractmethod
+    async def tenants(self) -> Sequence[str]:
+        """Every tenant with at least one recorded event - the retention sweep's
+        work list, and the only cross-tenant read besides dispatch."""
+
+    @abstractmethod
+    async def prune(
+        self,
+        *,
+        tenant_id: str,
+        plane: Plane,
+        recorded_before: datetime,
+        protect_from_seq: Optional[int] = None,
+    ) -> tuple[int, Optional[ChainLink], int]:
+        """Remove aged events from one (tenant, plane) chain.
+
+        protect_from_seq is the first sealed seq: nothing at or after it may be
+        removed, because a seal promised that range would still verify. Returns
+        (pruned count, the last pruned link to anchor the survivors, the number
+        of otherwise-eligible events a seal protected).
+        """
+
+
+class RetentionStore(ABC):
+    @abstractmethod
+    async def get(self, tenant_id: str, plane: Plane) -> Optional[RetentionWatermark]: ...
+
+    @abstractmethod
+    async def upsert(self, watermark: RetentionWatermark) -> None: ...
+
+    @abstractmethod
+    async def list_for_tenant(self, tenant_id: str) -> Sequence[RetentionWatermark]: ...
 
 
 class ConsumerOffsetStore(ABC):

@@ -15,6 +15,8 @@ from pathlib import Path
 
 from cryptography.fernet import Fernet
 
+from signalforge.domain.events.retention import SIGNAL_RETENTION_DEFAULT_DAYS
+
 ROOT = Path(__file__).resolve().parents[2]
 KEYS_DIR = ROOT / "var" / "keys"
 
@@ -44,6 +46,9 @@ class Settings:
     login_rate_limit: int
     login_rate_window_s: int
     invite_ttl_s: int
+    signal_retention_days: int
+    worker_enabled: bool
+    retention_interval_s: int
 
 
 def load_settings() -> Settings:
@@ -65,4 +70,15 @@ def load_settings() -> Settings:
         login_rate_limit=int(os.environ.get("SIGNALFORGE_LOGIN_RATE_LIMIT", 5)),
         login_rate_window_s=int(os.environ.get("SIGNALFORGE_LOGIN_RATE_WINDOW_S", 300)),
         invite_ttl_s=int(os.environ.get("SIGNALFORGE_INVITE_TTL_S", 7 * 86_400)),
+        # Bounds are enforced by RetentionPolicy, not here: config chooses a
+        # window inside the floor, it cannot remove the floor (REQ-023).
+        signal_retention_days=int(
+            os.environ.get(
+                "SIGNALFORGE_SIGNAL_RETENTION_DAYS", SIGNAL_RETENTION_DEFAULT_DAYS
+            )
+        ),
+        worker_enabled=os.environ.get("SIGNALFORGE_WORKER_ENABLED", "1") != "0",
+        retention_interval_s=int(
+            os.environ.get("SIGNALFORGE_RETENTION_INTERVAL_S", 3_600)
+        ),
     )

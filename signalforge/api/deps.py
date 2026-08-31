@@ -18,16 +18,19 @@ from signalforge.domain.identity.errors import AuthenticationError
 from signalforge.application.events.bus import EventBus
 from signalforge.application.events.dispatcher import Dispatcher
 from signalforge.application.events.replay import ReplayService
+from signalforge.application.events.retention import RetentionService
 from signalforge.application.events.sealing import SealService
 from signalforge.application.identity.auth_service import AuthService
 from signalforge.application.identity.oncall_service import OnCallService
 from signalforge.application.identity.org_service import OrgService
 from signalforge.application.identity.principal import Principal
-from signalforge.infrastructure.clock import SystemClock
+from signalforge.domain.events.retention import RetentionPolicy
+from signalforge.infrastructure.clock import SwitchableClock, SystemClock
 from signalforge.infrastructure.config import Settings, load_settings
 from signalforge.infrastructure.persistence.db import make_engine, make_session_factory
 from signalforge.infrastructure.persistence.event_uow import SqlEventUnitOfWork
 from signalforge.infrastructure.persistence.uow import SqlIdentityUnitOfWork
+from signalforge.workers.runner import PlatformWorker, ScheduledJob
 from signalforge.infrastructure.security.passwords import Argon2PasswordHasher
 from signalforge.infrastructure.security.ratelimit import SlidingWindowRateLimiter
 from signalforge.infrastructure.security.tokens import JWTAccessTokenService
@@ -41,19 +44,26 @@ class Container:
         clock=None,
     ):
         self.settings = settings or load_settings()
-        self.clock = clock or SystemClock()
+        # Two clocks (REQ-024). wall_clock is what security and durability read -
+        # token expiry, refresh windows, rate limits, recorded_at, retention -
+        # so a drill cannot expire a session or age out real data early. clock is
+        # the platform clock a drill may switch to scenario time. An injected
+        # clock (tests, drills) is used for both, which is what makes a frozen
+        # clock able to prove an expiry.
+        self.wall_clock = clock or SystemClock()
+        self.clock = clock or SwitchableClock(self.wall_clock)
         self.engine = engine if engine is not None else make_engine(self.settings.db_url)
         self.session_factory = make_session_factory(self.engine)
         self.hasher = Argon2PasswordHasher()
         self.token_service = JWTAccessTokenService(
             secret=self.settings.jwt_secret,
-            clock=self.clock,
+            clock=self.wall_clock,
             ttl_s=self.settings.access_ttl_s,
         )
         self.rate_limiter = SlidingWindowRateLimiter(
             limit=self.settings.login_rate_limit,
             window_s=self.settings.login_rate_window_s,
-            clock=self.clock,
+            clock=self.wall_clock,
         )
         self.uow_factory = lambda: SqlIdentityUnitOfWork(
             self.session_factory,
@@ -74,14 +84,31 @@ class Container:
 
         # Event backbone (S2). recorded_at always comes from the wall clock even
         # when a drill has moved the clock the rest of the system reads.
-        self.wall_clock = SystemClock()
         self.event_uow_factory = lambda: SqlEventUnitOfWork(
-            self.session_factory, clock=self.clock
+            self.session_factory, clock=self.clock, recording_clock=self.wall_clock
         )
         self.bus = EventBus(recording_clock=self.wall_clock)
         self.replay = ReplayService(self.event_uow_factory)
         self.seals = SealService(self.event_uow_factory, clock=self.clock)
-        self.dispatcher = Dispatcher(self.event_uow_factory, clock=self.clock)
+        self.dispatcher = Dispatcher(self.event_uow_factory, clock=self.wall_clock)
+        self.retention = RetentionService(
+            self.event_uow_factory,
+            self.bus,
+            clock=self.wall_clock,
+            policy=RetentionPolicy(self.settings.signal_retention_days),
+        )
+        self.worker = PlatformWorker(self._jobs(), clock=self.wall_clock)
+
+    def _jobs(self) -> list[ScheduledJob]:
+        """What runs beside the API. Consumers and pollers join this list as the
+        sprints add them; each one owns its own failures."""
+        return [
+            ScheduledJob(
+                name="retention",
+                interval_s=self.settings.retention_interval_s,
+                run=self.retention.sweep,
+            ),
+        ]
 
 
 _container: Optional[Container] = None

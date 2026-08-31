@@ -11,6 +11,7 @@ from signalforge.domain.events.ports import (
     DeadLetterStore,
     EventStore,
     ProcessedLedger,
+    RetentionStore,
     SealStore,
 )
 from signalforge.domain.identity.ports import AuditWriter
@@ -22,6 +23,7 @@ class EventUnitOfWork(ABC):
     processed: ProcessedLedger
     dead_letters: DeadLetterStore
     seals: SealStore
+    retention: RetentionStore
     audit: AuditWriter
 
     @abstractmethod

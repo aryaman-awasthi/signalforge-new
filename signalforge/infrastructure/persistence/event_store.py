@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional, Sequence
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from signalforge.contracts.envelope import (
@@ -24,6 +24,7 @@ from signalforge.domain.events.entities import (
     DeadLetter,
     DeadLetterState,
     EventSeal,
+    RetentionWatermark,
     SealScope,
 )
 from signalforge.domain.events.lanes import lane_for
@@ -32,6 +33,7 @@ from signalforge.domain.events.ports import (
     DeadLetterStore,
     EventStore,
     ProcessedLedger,
+    RetentionStore,
     SealStore,
 )
 from signalforge.domain.identity.ports import Clock
@@ -41,6 +43,7 @@ from signalforge.infrastructure.persistence.models import (
     DeadLetterRow,
     EventRow,
     EventSealRow,
+    RetentionWatermarkRow,
 )
 
 MAX_CAUSAL_CHAIN_DEPTH = 500
@@ -197,6 +200,62 @@ class SqlEventStore(EventStore):
 
     async def max_seq(self) -> int:
         return (await self._s.execute(select(func.max(EventRow.seq)))).scalar() or 0
+
+    async def tenants(self) -> Sequence[str]:
+        rows = (await self._s.execute(select(EventRow.tenant_id).distinct())).scalars().all()
+        return list(rows)
+
+    async def prune(
+        self,
+        *,
+        tenant_id: str,
+        plane: Plane,
+        recorded_before: datetime,
+        protect_from_seq: Optional[int] = None,
+    ) -> tuple[int, Optional[ChainLink], int]:
+        if plane is not Plane.SIGNAL:
+            # Defence in depth behind RetentionPolicy.applies_to: the kept plane
+            # has no removal path at all, so no future caller can grow one.
+            raise ValueError("only the signal plane may be pruned")
+
+        eligible = (
+            await self._s.execute(
+                select(
+                    EventRow.seq,
+                    EventRow.event_id,
+                    EventRow.payload_hash,
+                    EventRow.prev_hash,
+                )
+                .where(
+                    EventRow.tenant_id == tenant_id,
+                    EventRow.plane == plane.value,
+                    EventRow.recorded_at < recorded_before,
+                )
+                .order_by(EventRow.seq)
+            )
+        ).all()
+        if not eligible:
+            return 0, None, 0
+
+        if protect_from_seq is not None:
+            prunable = [row for row in eligible if row[0] < protect_from_seq]
+            protected = len(eligible) - len(prunable)
+        else:
+            prunable, protected = list(eligible), 0
+        if not prunable:
+            return 0, None, protected
+
+        last = prunable[-1]
+        await self._s.execute(
+            delete(EventRow).where(
+                EventRow.tenant_id == tenant_id,
+                EventRow.plane == plane.value,
+                EventRow.seq.in_([row[0] for row in prunable]),
+            )
+        )
+        await self._s.flush()
+        anchor = ChainLink(seq=last[0], event_id=last[1], payload_hash=last[2], prev_hash=last[3])
+        return len(prunable), anchor, protected
 
     # -- helpers -----------------------------------------------------------
 
@@ -415,6 +474,58 @@ class SqlDeadLetterStore(DeadLetterStore):
             requeued_at=row.requeued_at,
             requeued_by=row.requeued_by,
             resolved_at=row.resolved_at,
+        )
+
+
+class SqlRetentionStore(RetentionStore):
+    def __init__(self, session: AsyncSession):
+        self._s = session
+
+    async def get(self, tenant_id: str, plane: Plane) -> Optional[RetentionWatermark]:
+        row = await self._s.get(RetentionWatermarkRow, (tenant_id, plane.value))
+        return self._to_entity(row) if row is not None else None
+
+    async def upsert(self, watermark: RetentionWatermark) -> None:
+        row = await self._s.get(
+            RetentionWatermarkRow, (watermark.tenant_id, watermark.plane.value)
+        )
+        if row is None:
+            self._s.add(
+                RetentionWatermarkRow(
+                    tenant_id=watermark.tenant_id,
+                    plane=watermark.plane.value,
+                    pruned_through_seq=watermark.pruned_through_seq,
+                    anchor_hash=watermark.anchor_hash,
+                    pruned_count=watermark.pruned_count,
+                    pruned_at=watermark.pruned_at,
+                )
+            )
+        else:
+            row.pruned_through_seq = watermark.pruned_through_seq
+            row.anchor_hash = watermark.anchor_hash
+            row.pruned_count = watermark.pruned_count
+            row.pruned_at = watermark.pruned_at
+        await self._s.flush()
+
+    async def list_for_tenant(self, tenant_id: str) -> Sequence[RetentionWatermark]:
+        rows = (
+            await self._s.execute(
+                select(RetentionWatermarkRow).where(
+                    RetentionWatermarkRow.tenant_id == tenant_id
+                )
+            )
+        ).scalars().all()
+        return [self._to_entity(r) for r in rows]
+
+    @staticmethod
+    def _to_entity(row: RetentionWatermarkRow) -> RetentionWatermark:
+        return RetentionWatermark(
+            tenant_id=row.tenant_id,
+            plane=Plane(row.plane),
+            pruned_through_seq=row.pruned_through_seq,
+            anchor_hash=row.anchor_hash,
+            pruned_count=row.pruned_count,
+            pruned_at=row.pruned_at,
         )
 
 
