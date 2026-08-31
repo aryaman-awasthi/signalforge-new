@@ -6,6 +6,74 @@ graph" section at the bottom is the authored pre-build decision record
 (signalforge-memory-graph.md, provided and imported 2026-09-01) - every N-line there
 is treated as already decided.
 
+## DR-018 (2026-09-01, S2) Requeue is a state transition, not a dispatcher call
+Requeueing a dead letter marks it for redelivery and audits the operator's
+intent; whichever dispatcher owns that consumer group drains it. The first
+implementation put requeue on Dispatcher and refused when the group was not
+registered there. Why changed: the architecture allows splitting api and worker
+into two processes, and on an api-only node the API owns no consumer groups at
+all, so requeue would have been impossible in a deployment shape we ship for.
+Consequence: DeadLetterService owns list and requeue; the API reports
+drained_here so an operator is told when no local worker will pick it up, and
+the UI surfaces that instead of pretending it moved.
+
+## DR-017 (2026-09-01, S2) /health and /metrics are unauthenticated, and cannot name a tenant
+A liveness probe has no session and a Prometheus scrape has no token, so both
+stay public on the loopback bind. The compensating control is capability, not
+policy: /health returns component statuses only, and the metrics registry
+rejects tenant, incident, user and org label names at declaration time, so a
+metric that could identify a customer cannot be declared. Both are asserted in
+the security suite alongside the router-coverage walk. Consequence: the public
+route list in test_authz_matrix grew by two entries, each justified there;
+anything an operator needs that does name a tenant lives on /platform/status
+behind manage_apps.
+
+## DR-016 (2026-09-01, S2) Platform-scoped events use a reserved _platform tenant
+Events about the platform itself - connector health, and later adapter
+lifecycle - are published under tenant id "_platform" rather than duplicated per
+customer or given a nullable tenant. Why: the envelope contract requires a
+tenant, replay is tenant-scoped, and a reserved id means no customer can read
+platform internals through their own timeline without a single special case in
+the query path. Consequence: operators read them through /platform/status and
+/metrics; if a per-tenant view of adapter health is wanted in S3, adapters
+publish under the real tenant because they are bound to one.
+
+## DR-015 (2026-09-01, S2) Sealing is close_incident work; replay is read_audit
+The frozen roles matrix makes Auditor strictly read-only, so sealing - which
+writes a permanent record - cannot hang off read_audit. It hangs off
+close_incident, which matches when a seal is actually taken: at the end of an
+incident. Replay, the audit surface, hangs off read_audit. Why: keeping the
+frozen matrix honest beats inventing a permission. Consequence: an Auditor can
+verify any seal but never create one; the S4 incident lifecycle calls the same
+seal service when an incident closes.
+
+## DR-014 (2026-09-01, S2) The hash chain is per (tenant, plane), anchored on prune
+Signal-plane events age out; incident-plane events are kept. One chain across
+both would be broken by the first retention prune, so chains are per (tenant,
+plane) and a prune records the payload hash of the last event it removed.
+Verification of the survivors starts from that anchor. Why: without it a prune
+and a deletion are indistinguishable, which would make the whole chain
+unfalsifiable. Consequence: retention_watermarks is part of the audit evidence,
+not bookkeeping; seals bind (seq, event_id, payload_hash, prev_hash) so position
+and identity are covered, not only content.
+
+## DR-013 (2026-09-01, S2) Two clocks in the container, wall time for anything durable
+wall_clock drives token expiry, refresh windows, rate limits, recorded_at,
+retention cutoffs and offsets; clock is the switchable platform clock a drill can
+point at scenario time, and only occurred_at follows it. Why: a drill running at
+100000x would otherwise expire every session and delete a week of real telemetry,
+both of which are now asserted by test. Consequence: an injected clock (tests,
+drills) is used for both, which is what lets a frozen clock still prove an expiry;
+S7's drill engine switches only the platform clock.
+
+## DR-012 (2026-09-01, S2) Lane count is a stored on-disk constant, not config
+Lanes come from blake2b(partition_key) % 16, computed at write time and stored on
+the row. Why: the mapping must be identical across processes and restarts, and
+Python's hash() is salted per process - two workers disagreeing about a lane is
+silent reordering rather than a visible error. Consequence: changing LANE_COUNT
+re-shards the bus and requires a migration that recomputes every lane value; the
+constant lives in the domain, not in Settings.
+
 ## DR-011 (2026-09-01, S1) Escalation test-fire is the IC-only demo endpoint
 S1's acceptance needs an Executive denied an "IC-only endpoint", but incident
 endpoints only land in S4. The simulated escalation test-fire (POST

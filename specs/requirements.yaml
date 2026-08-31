@@ -177,7 +177,7 @@ requirements:
     area: event-backbone
     sprint: S2
     priority: must
-    status: planned
+    status: built
     acceptance: >
       Events written in the same transaction as state; dispatcher delivers to consumer
       groups; killing the process mid-consumption loses nothing.
@@ -187,7 +187,7 @@ requirements:
     area: event-backbone
     sprint: S2
     priority: must
-    status: planned
+    status: built
     acceptance: >
       Stored offsets per group; ordered lane per (group, hash(incident_id else app_id));
       duplicate deliveries are harmless.
@@ -197,7 +197,7 @@ requirements:
     area: event-backbone
     sprint: S2
     priority: must
-    status: planned
+    status: built
     acceptance: >
       Poisoned handlers land events in the DLQ visibly; requeue works; consumers catch
       up after restart.
@@ -207,7 +207,7 @@ requirements:
     area: event-backbone
     sprint: S2
     priority: must
-    status: planned
+    status: built
     acceptance: >
       GET /events replays by after_seq/until/topics/incident_id returning the exact
       causal chain; signal plane ages out by config, incident plane is kept and sealed
@@ -218,7 +218,7 @@ requirements:
     area: event-backbone
     sprint: S2
     priority: must
-    status: planned
+    status: built
     acceptance: >
       occurred_at can follow a drill clock while recorded_at stays wall time, via a
       swappable clock source.
@@ -228,7 +228,7 @@ requirements:
     area: event-backbone
     sprint: S2
     priority: must
-    status: planned
+    status: built
     acceptance: >
       Structured JSON logs, /metrics, /health, system.connector.health events, DLQ
       list and requeue API, agent-run trace tables.
