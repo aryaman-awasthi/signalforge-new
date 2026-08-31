@@ -21,6 +21,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/health" className="hover:text-ink">
                 Health
               </Link>
+              <Link href="/setup" className="hover:text-ink">
+                Setup
+              </Link>
+              <Link href="/login" className="hover:text-ink">
+                Sign in
+              </Link>
             </nav>
           </div>
         </header>
