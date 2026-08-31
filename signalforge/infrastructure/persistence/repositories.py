@@ -174,6 +174,20 @@ class SqlRoleBindingRepository(RoleBindingRepository):
             for r in rows
         ]
 
+    async def list_for_tenant(self, tenant_id: str) -> Sequence[RoleBinding]:
+        rows = (
+            await self._s.execute(
+                select(RoleBindingRow).where(RoleBindingRow.tenant_id == tenant_id)
+            )
+        ).scalars().all()
+        return [
+            RoleBinding(
+                tenant_id=r.tenant_id, user_id=r.user_id,
+                role=Role(r.role), app_id=r.app_id,
+            )
+            for r in rows
+        ]
+
     async def replace_for_user(
         self, tenant_id: str, user_id: str, bindings: Sequence[RoleBinding]
     ) -> None:

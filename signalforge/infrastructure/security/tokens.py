@@ -10,7 +10,6 @@ Security floor: ttl_s can only shorten the cap, never extend it.
 
 from __future__ import annotations
 
-import hashlib
 import secrets
 from typing import Any
 
@@ -18,6 +17,10 @@ import jwt
 
 from signalforge.domain.identity.errors import AuthenticationError
 from signalforge.domain.identity.ports import AccessTokenService, Clock
+from signalforge.domain.identity.tokens import (  # noqa: F401  (re-export)
+    hash_refresh_token,
+    new_refresh_token,
+)
 from signalforge.infrastructure.config import ACCESS_TTL_CAP_S
 
 _ALGORITHM = "HS256"
@@ -67,9 +70,3 @@ class JWTAccessTokenService(AccessTokenService):
         return claims
 
 
-def new_refresh_token() -> str:
-    return secrets.token_urlsafe(32)
-
-
-def hash_refresh_token(token: str) -> str:
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()

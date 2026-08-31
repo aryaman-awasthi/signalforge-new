@@ -2,24 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from signalforge.domain.identity.ports import Clock
 from signalforge.infrastructure.persistence.models import Base
-
-
-class FakeClock(Clock):
-    def __init__(self, start: datetime | None = None):
-        self.current = start or datetime(2026, 9, 1, 12, 0, tzinfo=timezone.utc)
-
-    def now(self) -> datetime:
-        return self.current
-
-    def advance(self, **kwargs) -> None:
-        self.current += timedelta(**kwargs)
+from signalforge.tests.helpers import FakeClock
 
 
 @pytest.fixture

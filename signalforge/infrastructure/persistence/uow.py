@@ -1,0 +1,54 @@
+"""SQL unit of work: one AsyncSession shared by every repository, the secret
+store and the audit writer, so a use case commits atomically or not at all."""
+
+from __future__ import annotations
+
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from signalforge.application.identity.uow import IdentityUnitOfWork
+from signalforge.domain.identity.ports import Clock
+from signalforge.infrastructure.persistence.repositories import (
+    SqlEscalationRepository,
+    SqlInviteRepository,
+    SqlOnCallRepository,
+    SqlRoleBindingRepository,
+    SqlSessionRepository,
+    SqlTenantRepository,
+    SqlUserRepository,
+)
+from signalforge.infrastructure.security.audit import AuditChainWriter
+from signalforge.infrastructure.security.secrets import FernetSecretStore
+
+
+class SqlIdentityUnitOfWork(IdentityUnitOfWork):
+    def __init__(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        *,
+        fernet_key: str,
+        clock: Clock,
+    ):
+        self._session_factory = session_factory
+        self._fernet_key = fernet_key
+        self._clock = clock
+
+    async def __aenter__(self) -> "SqlIdentityUnitOfWork":
+        self._session = self._session_factory()
+        self.tenants = SqlTenantRepository(self._session)
+        self.users = SqlUserRepository(self._session)
+        self.bindings = SqlRoleBindingRepository(self._session)
+        self.invites = SqlInviteRepository(self._session)
+        self.sessions = SqlSessionRepository(self._session)
+        self.oncall = SqlOnCallRepository(self._session)
+        self.escalations = SqlEscalationRepository(self._session)
+        self.secrets = FernetSecretStore(self._session, key=self._fernet_key)
+        self.audit = AuditChainWriter(self._session, clock=self._clock)
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        if exc_type is not None:
+            await self._session.rollback()
+        await self._session.close()
+
+    async def commit(self) -> None:
+        await self._session.commit()

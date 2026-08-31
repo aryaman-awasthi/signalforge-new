@@ -58,6 +58,9 @@ class RoleBindingRepository(ABC):
     async def list_for_user(self, tenant_id: str, user_id: str) -> Sequence[RoleBinding]: ...
 
     @abstractmethod
+    async def list_for_tenant(self, tenant_id: str) -> Sequence[RoleBinding]: ...
+
+    @abstractmethod
     async def replace_for_user(
         self, tenant_id: str, user_id: str, bindings: Sequence[RoleBinding]
     ) -> None: ...

@@ -12,6 +12,10 @@ started=0
 pids=()
 
 if [ -f "$ROOT/signalforge/api/main.py" ]; then
+  if [ -f "$ROOT/alembic.ini" ]; then
+    echo "[run] applying database migrations"
+    (cd "$ROOT" && "$PY" -m alembic upgrade head)
+  fi
   echo "[run] starting api on :8000"
   (cd "$ROOT" && "$PY" -m uvicorn signalforge.api.main:app --host 127.0.0.1 --port 8000) &
   pids+=($!)
