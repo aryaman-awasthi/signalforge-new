@@ -1,0 +1,551 @@
+# SignalForge requirements catalogue (artifact 05, SPECS/DSL).
+# Frozen contract surface (CLAUDE.md rule 3): entries are appended or status-updated;
+# ids are never reused or renumbered. Tests link here via @pytest.mark.req("REQ-xxx").
+# areas mirror coverage-checklist.md sections.
+
+schema_version: 1
+
+requirements:
+  # --- foundation / engineering guide (S0) -----------------------------------
+  - id: REQ-000
+    title: Repo scaffolding, build interface and app-agnostic guard
+    area: engineering-guide
+    sprint: S0
+    priority: must
+    status: built
+    acceptance: >
+      Layout per CLAUDE.md exists; Makefile exposes run/test/rtm/report/evidence/clean-check;
+      run.sh boots; check_clean.sh fails on any app-specific string outside allowed paths.
+
+  - id: REQ-001
+    title: Event envelope contract
+    area: engineering-guide
+    sprint: S0
+    priority: must
+    status: built
+    acceptance: >
+      Envelope carries ids, occurred_at vs recorded_at, actor, source with
+      authority/freshness/simulated, confidence, correlation, causation, supersedes,
+      idempotency_key, redaction and hash-chain fields; partition key resolves
+      incident, then app, then tenant; timestamps must be timezone-aware.
+
+  - id: REQ-002
+    title: Adapter SPI for all 13 integration kinds
+    area: engineering-guide
+    sprint: S0
+    priority: must
+    status: built
+    acceptance: >
+      Abstract interfaces exist for metrics, logs, traces, health, alerts, changes,
+      topology, collaboration, itsm, actions, notifications, knowledge, chaos, with
+      canonical models; actions expose reconcile-before-retry; chaos inject requires scope.
+
+  - id: REQ-003
+    title: Action and chaos manifest schemas
+    area: engineering-guide
+    sprint: S0
+    priority: must
+    status: built
+    acceptance: >
+      JSON schemas validate manifests; high-risk actions require approver roles;
+      reversible actions require a reverse action; chaos scenarios require bounded duration.
+
+  - id: REQ-004
+    title: Observe and ingest API shapes
+    area: engineering-guide
+    sprint: S0
+    priority: must
+    status: built
+    acceptance: >
+      /observe/* paths and response shapes and /api/v1/ingest/* batch shapes with HMAC
+      headers, replay window and 202 ack are frozen and validated.
+
+  - id: REQ-005
+    title: Roles and permissions matrix
+    area: engineering-guide
+    sprint: S0
+    priority: must
+    status: built
+    acceptance: >
+      Seven roles and eleven permissions with separation of duties: high-risk approval
+      restricted to incident command; auditor read-only; executive cannot run incidents.
+
+  - id: REQ-006
+    title: Live traceability - REQ markers and generated RTM
+    area: engineering-guide
+    sprint: S0
+    priority: must
+    status: built
+    acceptance: >
+      Tests carry REQ markers collected at run time; make rtm generates docs/20-RTM.md
+      from specs plus test results, and works with zero executed tests.
+
+  - id: REQ-007
+    title: Web scaffold with health page and typed client
+    area: engineering-guide
+    sprint: S0
+    priority: must
+    status: planned
+    acceptance: >
+      Next.js 14 shell with design-system tokens, /health page calling the API through
+      the typed client, and a WebSocket client stub.
+
+  # --- platform and identity (S1) --------------------------------------------
+  - id: REQ-010
+    title: Multi-tenant identity - orgs, signup, invites, sessions
+    area: platform-identity
+    sprint: S1
+    priority: must
+    status: planned
+    acceptance: >
+      Orgs, users, invites and sessions with argon2id hashing, 15-minute JWT access,
+      rotating refresh, revocation store and login rate limiting.
+
+  - id: REQ-012
+    title: RBAC enforced on every route with per-app role bindings
+    area: platform-identity
+    sprint: S1
+    priority: must
+    status: planned
+    acceptance: >
+      Every router carries the RBAC dependency; permissions come from the roles matrix;
+      an Executive session is denied an IC-only endpoint with a clean 403 and an audit event.
+
+  - id: REQ-013
+    title: Cross-tenant isolation at the repository layer
+    area: platform-identity
+    sprint: S1
+    priority: must
+    status: planned
+    acceptance: >
+      tenant_id filtering is enforced in repositories, not handlers; cross-tenant access
+      attempts fail and are covered by security tests.
+
+  - id: REQ-014
+    title: On-call rotations and escalation policies
+    area: platform-identity
+    sprint: S1
+    priority: must
+    status: planned
+    acceptance: >
+      Rotation and escalation-policy value objects with ordering and timers, editable
+      through the org setup screens.
+
+  - id: REQ-015
+    title: Secrets encrypted at rest
+    area: platform-identity
+    sprint: S1
+    priority: must
+    status: planned
+    acceptance: >
+      Connector credentials and other secrets stored Fernet-encrypted with the key from
+      the environment; never logged or returned in plaintext.
+
+  - id: REQ-016
+    title: Immutable audit hash chain
+    area: platform-identity
+    sprint: S1
+    priority: must
+    status: planned
+    acceptance: >
+      Audit events are hash-chained via payload_hash/prev_hash; tampering is detectable;
+      audit can never be disabled.
+
+  - id: REQ-017
+    title: Ingest HMAC verification
+    area: platform-identity
+    sprint: S1
+    priority: must
+    status: planned
+    acceptance: >
+      HMAC-SHA256 over timestamp.body with replay window per the ingest contract;
+      forged signatures and stale timestamps rejected with audit events.
+
+  - id: REQ-018
+    title: Threat model including AI rows
+    area: platform-identity
+    sprint: S1
+    priority: must
+    status: planned
+    acceptance: >
+      STRIDE analysis plus prompt injection, malicious document content, data
+      exfiltration and inappropriate tool invocation rows in docs/12.
+
+  # --- event backbone (S2) ---------------------------------------------------
+  - id: REQ-020
+    title: Transactional outbox and dispatcher
+    area: event-backbone
+    sprint: S2
+    priority: must
+    status: planned
+    acceptance: >
+      Events written in the same transaction as state; dispatcher delivers to consumer
+      groups; killing the process mid-consumption loses nothing.
+
+  - id: REQ-021
+    title: Ordered, at-least-once consumption with idempotent handlers
+    area: event-backbone
+    sprint: S2
+    priority: must
+    status: planned
+    acceptance: >
+      Stored offsets per group; ordered lane per (group, hash(incident_id else app_id));
+      duplicate deliveries are harmless.
+
+  - id: REQ-022
+    title: Retries, dead letters and catch-up
+    area: event-backbone
+    sprint: S2
+    priority: must
+    status: planned
+    acceptance: >
+      Poisoned handlers land events in the DLQ visibly; requeue works; consumers catch
+      up after restart.
+
+  - id: REQ-023
+    title: Replay API, retention planes and sealing
+    area: event-backbone
+    sprint: S2
+    priority: must
+    status: planned
+    acceptance: >
+      GET /events replays by after_seq/until/topics/incident_id returning the exact
+      causal chain; signal plane ages out by config, incident plane is kept and sealed
+      with the hash chain.
+
+  - id: REQ-024
+    title: Virtual clock for drills
+    area: event-backbone
+    sprint: S2
+    priority: must
+    status: planned
+    acceptance: >
+      occurred_at can follow a drill clock while recorded_at stays wall time, via a
+      swappable clock source.
+
+  - id: REQ-025
+    title: Platform self-observability
+    area: event-backbone
+    sprint: S2
+    priority: must
+    status: planned
+    acceptance: >
+      Structured JSON logs, /metrics, /health, system.connector.health events, DLQ
+      list and requeue API, agent-run trace tables.
+
+  # --- integrations (S3) -----------------------------------------------------
+  - id: REQ-030
+    title: Adapter registry with manifests, capabilities and credential scopes
+    area: integrations
+    sprint: S3
+    priority: must
+    status: planned
+    acceptance: >
+      Registry over adapters/**/manifest.yaml with mode, capabilities, auth,
+      credential_scope read_only/remediation/drill, config schema, limits, redaction
+      and simulated flag; per-app bindings with encrypted credentials; health loop.
+
+  - id: REQ-031
+    title: Generic pull adapters over the observe contract
+    area: integrations
+    sprint: S3
+    priority: must
+    status: planned
+    acceptance: >
+      http-observe metrics/logs/traces/health/actions/chaos plus prometheus
+      query_range work against any app implementing /observe/*; enterprise interfaces
+      (datadog, splunk, servicenow, jenkins, github) visible as mocks.
+
+  - id: REQ-032
+    title: Push ingest endpoints, authenticated and idempotent
+    area: integrations
+    sprint: S3
+    priority: must
+    status: planned
+    acceptance: >
+      /api/v1/ingest/{changes,alerts,topology,messages,tickets} enforce bearer + HMAC,
+      event_id idempotency, replay window and schema validation, answering 202; forged
+      HMAC and duplicate event_id rejected with audit events.
+
+  - id: REQ-033
+    title: Notification and collaboration channels with simulation labelling
+    area: integrations
+    sprint: S3
+    priority: must
+    status: planned
+    acceptance: >
+      Real in-app WebSocket and browser push; teams-sim bridge/chat, itsm-lite and
+      page-sim SMS/voice clearly labelled SIMULATED end to end.
+
+  - id: REQ-035
+    title: Knowledge indexing and search
+    area: integrations
+    sprint: S3
+    priority: should
+    status: planned
+    acceptance: >
+      kb-index stores runbooks and PIRs with embeddings via llm.provider or BM25
+      fallback; search returns scored hits.
+
+  - id: REQ-036
+    title: Onboarding wizard with integration health visibility
+    area: integrations
+    sprint: S3
+    priority: must
+    status: planned
+    acceptance: >
+      Connect/auto-discover/map/topology/SLO/baseline/test steps with direction-correct
+      connection tests including a failure state, readiness score, and an integration
+      health screen showing direction, freshness, errors and SIMULATED flags.
+
+  - id: REQ-038
+    title: App-agnostic onboarding proven by the reference harness
+    area: integrations
+    sprint: S3
+    priority: must
+    status: planned
+    acceptance: >
+      The reference harness onboards fully through the UI using only public contracts;
+      check_clean.sh stays green.
+
+  # --- detection and lifecycle (S4) ------------------------------------------
+  - id: REQ-040
+    title: Rollups, baselines and sustained anomaly detection
+    area: detection-lifecycle
+    sprint: S4
+    priority: must
+    status: planned
+    acceptance: >
+      5-second rollups, rolling baselines, anomaly requires a breach sustained across
+      three evaluations.
+
+  - id: REQ-041
+    title: SLO burn rates and corroboration
+    area: detection-lifecycle
+    sprint: S4
+    priority: must
+    status: planned
+    acceptance: >
+      Fast burn proposes, slow burn opens Watch; corroboration needs two independent
+      signal families with one customer-facing.
+
+  - id: REQ-042
+    title: Health score and alert-storm clustering
+    area: detection-lifecycle
+    sprint: S4
+    priority: must
+    status: planned
+    acceptance: >
+      Weighted score (availability 30, errors 25, business 20, latency 15, saturation 10),
+      worst region wins; storms cluster by time and topology with suppressed counts.
+
+  - id: REQ-043
+    title: Human-only incident lifecycle
+    area: detection-lifecycle
+    sprint: S4
+    priority: must
+    status: planned
+    acceptance: >
+      Steady/Watch/Proposed/Active/Recovering/Closed; only humans declare, change
+      severity and close; itsm sync follows.
+
+  - id: REQ-044
+    title: Change window tracking from deploy hooks
+    area: detection-lifecycle
+    sprint: S4
+    priority: must
+    status: planned
+    acceptance: >
+      deployment.started without completed opens a visible change window chip sourced
+      from a real webhook call.
+
+  - id: REQ-045
+    title: War room with paging, acknowledgement and escalation
+    area: war-room
+    sprint: S4
+    priority: must
+    status: planned
+    acceptance: >
+      War room on declare; membership by blast radius; paging with ack; per-row
+      countdowns escalate to next-in-rotation; join brief; bridge commitments become
+      tasks with owner and due time.
+
+  # --- incident brain (S5) ---------------------------------------------------
+  - id: REQ-050
+    title: Versioned incident graph
+    area: incident-brain
+    sprint: S5
+    priority: must
+    status: planned
+    acceptance: >
+      Node types fact/assumption/hypothesis/evidence/impact/risk/action/approval/
+      communication with provenance, confidence and supersedes; nothing deleted;
+      situation snapshots; topology versions with delta and confirmed vs predicted
+      blast radius.
+
+  - id: REQ-051
+    title: LLM provider discipline with degraded fallback
+    area: incident-brain
+    sprint: S5
+    priority: must
+    status: planned
+    acceptance: >
+      Single llm.provider adapter per CLAUDE.md: configured endpoint and models,
+      structured outputs, retries, cache, per-incident budgets; failure flips to a
+      deterministic mode emitting system.llm.degraded and the system continues.
+
+  - id: REQ-052
+    title: Agent suite under the incident governor
+    area: incident-brain
+    sprint: S5
+    priority: must
+    status: planned
+    acceptance: >
+      Conversation understanding (statement types, contradiction detection), telemetry,
+      topology, change intelligence, historical learning with mistake warnings,
+      hypothesis reasoning and communication agents run event-triggered and budgeted,
+      merging into the graph.
+
+  - id: REQ-053
+    title: Explainable hypothesis confidence
+    area: incident-brain
+    sprint: S5
+    priority: must
+    status: planned
+    acceptance: >
+      Deterministic confidence from weighted evidence with full history; a scripted
+      evidence sequence moves three hypotheses with explainable deltas; the LLM writes
+      only the narrative.
+
+  - id: REQ-054
+    title: Progressive evidence with budgets and redaction
+    area: incident-brain
+    sprint: S5
+    priority: must
+    status: planned
+    acceptance: >
+      Broad-to-narrow evidence gathering under per-hypothesis query budgets with size
+      caps, redaction and result_ref drill-down.
+
+  - id: REQ-055
+    title: Grounded copilot and AI evaluation suite
+    area: incident-brain
+    sprint: S5
+    priority: must
+    status: planned
+    acceptance: >
+      Copilot answers strictly from graph nodes with provenance chips; ai-eval covers
+      grounding, hallucination probes, classification accuracy, low-confidence
+      escalation and degraded mode.
+
+  # --- governance and execution (S6) -----------------------------------------
+  - id: REQ-060
+    title: Policy engine above a hardcoded floor
+    area: governance-execution
+    sprint: S6
+    priority: must
+    status: planned
+    acceptance: >
+      Per-app policy YAML sits above the floor: high-risk classes can never
+      auto-execute, read_only can never mutate, approval TTL capped, audit immutable;
+      setting a high-risk action to auto is rejected with an audit event.
+
+  - id: REQ-061
+    title: Tool Gateway with explicit decisions and approvals
+    area: governance-execution
+    sprint: S6
+    priority: must
+    status: planned
+    acceptance: >
+      Every action passes validate/authn/authz/policy producing allow, approve or
+      block with rules_hit; approvals carry identity and expiry; every step is an event
+      in the execution ledger.
+
+  - id: REQ-062
+    title: Uncertain-outcome handling and safe retries
+    area: governance-execution
+    sprint: S6
+    priority: must
+    status: planned
+    acceptance: >
+      Timeout lands UNCERTAIN with retry blocked; reconcile-before-retry resolves
+      COMPLETED_LATE/NOT_APPLIED/PARTIAL then mark/retry/compensate/cancel; duplicates
+      prevented; compensation and human takeover supported.
+
+  - id: REQ-063
+    title: Next-best-action scoring and plan revision
+    area: governance-execution
+    sprint: S6
+    priority: must
+    status: planned
+    acceptance: >
+      Deterministic urgency x impact x information gain minus risk with permission and
+      dependency filters, alternatives, fallback and rollback; plan revisions show
+      kept/paused/added with changed assumptions.
+
+  - id: REQ-064
+    title: Governed communications lifecycle
+    area: governance-execution
+    sprint: S6
+    priority: must
+    status: planned
+    acceptance: >
+      Audience drafts grounded on graph nodes move draft/approved/issued; contradiction
+      auto-flags when grounded nodes are superseded; corrections carry redlines;
+      per-audience approvers; nothing auto-sends.
+
+  - id: REQ-065
+    title: Layered validation and closure gate
+    area: governance-execution
+    sprint: S6
+    priority: must
+    status: planned
+    acceptance: >
+      Technical/service/customer/business layers read the app independently of the
+      graph; stability window resets on regression; customer layer blocks closure;
+      revalidation failure returns the incident to Active feeding hypothesis evidence,
+      with escalation after N cycles.
+
+  # --- drills, audit, learning (S7) ------------------------------------------
+  - id: REQ-070
+    title: Drill engine with virtual clock and scoped chaos
+    area: drills-audit
+    sprint: S7
+    priority: must
+    status: planned
+    acceptance: >
+      Scenario YAML replays human/machine/inject/checkpoint events on a visible virtual
+      clock with speeds and stepping; chaos adapter locked to drill scope; one-command
+      reset; Drill Author draft is reviewed by a human.
+
+  - id: REQ-071
+    title: Recovery Collision drill as pure data
+    area: drills-audit
+    sprint: S7
+    priority: must
+    status: planned
+    acceptance: >
+      The flagship drill lives entirely in drills/ against the reference harness; two
+      full rehearsals warm the LLM cache; deleting drills leaves a working product.
+
+  - id: REQ-072
+    title: Audit replay and post-incident review
+    area: drills-audit
+    sprint: S7
+    priority: must
+    status: planned
+    acceptance: >
+      Scrubber re-renders graph, hypotheses and blast radius at any seq; PIR generates
+      timeline, verified causes, wrong assumptions, comms corrections and action items
+      behind the verified-lessons gate; seal and export work.
+
+  - id: REQ-073
+    title: Hardening, release package and full test completion
+    area: drills-audit
+    sprint: S7
+    priority: must
+    status: planned
+    acceptance: >
+      Non-functional, performance, security (incl. prompt-injection probes) and
+      vulnerability suites executed and reported; release package and user guide
+      shipped; full scripted run with no live-LLM dependency on the critical path.

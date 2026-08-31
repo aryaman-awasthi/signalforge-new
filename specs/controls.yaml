@@ -1,0 +1,94 @@
+# SignalForge controls matrix (artifact 13, seeded S0, matrix v1 in S1, enforced S6).
+# Five categories. Entries with floor: true are the hardcoded policy floor:
+# per-app policy YAML can tighten them, never loosen them (CLAUDE.md rule 4).
+
+schema_version: 1
+
+categories:
+  allowed:
+    description: What the system and its agents may do autonomously.
+    entries:
+      - id: CTL-ALW-01
+        statement: Read-only telemetry queries within declared budgets and size caps.
+      - id: CTL-ALW-02
+        statement: Detection, correlation, hypothesis scoring and evidence aggregation.
+      - id: CTL-ALW-03
+        statement: Drafting briefs, communications and plans - never issuing them.
+      - id: CTL-ALW-04
+        statement: >
+          Executing low-risk diagnostic actions marked idempotent in the action
+          manifest, under policy and budgets.
+      - id: CTL-ALW-05
+        statement: Paging and notification delivery per escalation policy, with ack tracking.
+
+  human_approved:
+    description: Requires an explicit, recorded human decision before execution.
+    entries:
+      - id: CTL-HUM-01
+        floor: true
+        statement: >
+          High-risk action classes (rollback, restart, failover, traffic shift,
+          config change, customer-impacting) execute only after approval by a role
+          named in the action's approver list.
+      - id: CTL-HUM-02
+        statement: Any remediation through a credential scope above read_only.
+      - id: CTL-HUM-03
+        statement: Issuing communications, per-audience approver roles.
+      - id: CTL-HUM-04
+        floor: true
+        statement: >
+          Incident lifecycle transitions declare, change severity and close are
+          performed by humans directly - agents may only propose.
+      - id: CTL-HUM-05
+        statement: Policy edits during an active incident require a confirmation step.
+
+  prohibited:
+    description: Never permitted, regardless of configuration.
+    entries:
+      - id: CTL-PRO-01
+        floor: true
+        statement: Auto-execution of any high-risk action class.
+      - id: CTL-PRO-02
+        floor: true
+        statement: Mutation of any external system through a read_only credential scope.
+      - id: CTL-PRO-03
+        floor: true
+        statement: Disabling, truncating or rewriting the audit trail.
+      - id: CTL-PRO-04
+        floor: true
+        statement: Chaos injection outside an authorized drill scope.
+      - id: CTL-PRO-05
+        floor: true
+        statement: Auto-sending any communication to any audience.
+      - id: CTL-PRO-06
+        floor: true
+        statement: Cross-tenant data access or action execution.
+
+  escalation:
+    description: When the system must hand off or raise urgency.
+    entries:
+      - id: CTL-ESC-01
+        statement: Unacknowledged page escalates to next-in-rotation when its countdown expires.
+      - id: CTL-ESC-02
+        statement: Low model confidence or contradiction between human and machine statements surfaces to the IC.
+      - id: CTL-ESC-03
+        statement: Repeated validation failure after N cycles escalates rather than retrying silently.
+      - id: CTL-ESC-04
+        statement: LLM failure or budget exhaustion degrades to deterministic mode and emits system.llm.degraded.
+      - id: CTL-ESC-05
+        statement: UNCERTAIN execution outcomes block retries until reconciled, then follow mark/retry/compensate/cancel.
+
+  auditability:
+    description: What must always be observable after the fact.
+    entries:
+      - id: CTL-AUD-01
+        floor: true
+        statement: Every event is hash-chained; the incident plane is kept and sealed.
+      - id: CTL-AUD-02
+        statement: Every gateway decision records allow/approve/block with the rules hit.
+      - id: CTL-AUD-03
+        statement: Every approval records identity, rule and expiry; every execution step is an event.
+      - id: CTL-AUD-04
+        statement: Agent runs are traced with inputs, outputs, budgets and model ids.
+      - id: CTL-AUD-05
+        statement: Audit access itself is permissioned (read_audit) and logged.

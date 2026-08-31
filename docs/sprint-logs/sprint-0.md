@@ -26,6 +26,16 @@ Goal: a bootable skeleton with frozen contracts and the traceability system live
   roles.py 7-role x 11-permission matrix with separation-of-duties invariants.
   Verified: 37 REQ-tagged contract tests (REQ-001 envelope, REQ-002 SPI, REQ-003 manifests,
   REQ-004 http shapes, REQ-005 roles); suite 42 passed; check_clean.sh green.
+- [S0-T03][REQ-006] Traceability live: specs/requirements.yaml with 51 REQ entries spanning
+  all 9 coverage-checklist areas and all 8 sprints (51 rather than ~40 - granularity chosen
+  so each sprint's tests tag precisely; ids stable, never renumbered); specs/controls.yaml
+  with the five control categories (allowed, human_approved, prohibited, escalation,
+  auditability), every prohibited entry flagged floor: true; pytest plumbing in
+  signalforge/tests/conftest.py recording test-to-REQ mapping + outcomes to
+  var/rtm/test-results.json on every run; scripts/gen_rtm.py joins specs + results into
+  docs/20-RTM.md (make rtm), renders the full chain with zero executed tests, lists
+  untagged tests, exits 2 on unknown REQ ids. Verified: 6 REQ-006 tests incl. RTM
+  generation with and without results; suite 48 passed; RTM committed.
 
 ## Not built / deferred
 
@@ -37,11 +47,13 @@ Goal: a bootable skeleton with frozen contracts and the traceability system live
   instead of Node 20. No contract deviations.
 
 ## Tests
-- added: 42 unit (5 repo layout + 37 contract validation)
-- suite result: 42 passed, 0 failed
+- added: 48 unit (5 repo layout + 37 contract validation + 6 traceability)
+- suite result: 48 passed, 0 failed
 
 ## Artifacts updated
-- none yet (Makefile/scripts are tooling; artifact docs start at S0-T03/T04)
+- 05 SPECS/DSL: specs/requirements.yaml, specs/controls.yaml
+- 13 Controls matrix (seed): specs/controls.yaml
+- 20 RTM: docs/20-RTM.md (generated)
 
 ## Security notes
 - check_clean.sh enforces the app-agnostic core rule from day one; the guard has a
