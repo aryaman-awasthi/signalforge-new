@@ -6,6 +6,71 @@ graph" section at the bottom is the authored pre-build decision record
 (signalforge-memory-graph.md, provided and imported 2026-09-01) - every N-line there
 is treated as already decided.
 
+## DR-024 (2026-09-01, S3) The capability matrix is a declaration view, not a runtime view
+Coverage per kind is computed from the manifests' `availability`, so an
+interface-only adapter is listed and never counted, while a `built_in` manifest
+whose runtime is missing still counts. Why: the matrix answers "what can this
+installation's adapter set do", which is a property of the adapters, and keeping
+it a pure function of manifests keeps it in the domain with no knowledge of what
+a particular node happens to have loaded. The runtime question is answered
+separately and per node by the registry listing's `runnable`/`status`.
+Consequence: a packaging fault (manifest without runtime) shows as "runtime
+missing" in the listing rather than as a coverage gap, and the two views are
+documented as different questions.
+
+## DR-023 (2026-09-01, S3) Connector health is polled through a provider, not a fixed list
+ConnectorHealthService gained register_provider: an async callable re-asked on
+every poll. Static registration was enough for the database, the bus and the
+worker, which exist for the process's lifetime; bindings do not. Why: a binding
+created, disabled or deleted while the process runs has to join or leave the
+loop without a restart, and "an operator turned it off" must mean it stops being
+polled now. Consequence: one extra database read per poll cycle, and a provider
+that raises is logged and skipped rather than costing the platform its own
+verdict.
+
+## DR-022 (2026-09-01, S3) A HealthSource knows which tenant it belongs to
+HealthSource gained tenant_id, app_id and metric_label; a null tenant means the
+platform itself. Why: one poll loop now produces both this node's readiness and
+every customer's connector health, and three different rules have to follow from
+one fact. Readiness (/health) counts platform sources only, so a customer's dead
+integration never takes a node out of rotation. Visibility (/platform/status)
+filters to the asking tenant. Metrics key on metric_label - the adapter id, not
+the binding id - because /metrics has no session, and several bindings of one
+adapter collapse to their worst verdict. Consequence: platform_report() was
+split from report(), and signalforge_connector_bindings{state} was added so the
+scrape can count bindings without naming one.
+
+## DR-021 (2026-09-01, S3) A binding with no runtime is UNKNOWN, never UP or DOWN
+An adapter whose manifest is installed but whose runtime is not - the honest
+state of every enterprise connector in this deployment - reports UNKNOWN with
+the reason, and the integration health screen shows that rather than a green
+tick or a red cross. Why: nothing was measured, and both a tick and a cross
+claim a measurement. Overall status already treats UNKNOWN as degraded rather
+than healthy (S2), so an unmeasurable connector cannot be mistaken for a
+working one. Consequence: the health table has three failure shades - terminal
+(auth rejected, orphaned binding, missing credential) is DOWN at once, transient
+(timeout, unreachable, ping false) is DEGRADED until the third consecutive
+failure, and unmeasurable is UNKNOWN.
+
+## DR-020 (2026-09-01, S3) Credential scope is part of the binding's identity
+Bindings are unique on (tenant, app, adapter, credential_scope), so read-only
+and remediation for the same adapter are two rows with two secrets. Why the
+architecture already said separate keys: they have different blast radii, and a
+single row with a scope field would have made rotating or revoking one touch the
+other. Consequence: the wizard creates one binding per scope, the floor
+"read-only can never drive remediation" is structural rather than a check, and
+deleting a binding deletes exactly its own secrets because the binding id is in
+the secret name.
+
+## DR-019 (2026-09-01, S3) The capability catalogue is read off the SPI, not written down
+A manifest's `capabilities` are validated against the abstract methods of that
+kind's SPI class, reflected at import time. Why: the alternative is a second
+list beside contracts/spi.py that drifts the first time a kind gains a method,
+and a manifest promising a capability with no SPI name fails at 3am with an
+AttributeError instead of at load with a sentence. Consequence: adding an SPI
+method makes it declarable on the same commit; `ping` is excluded because every
+adapter must answer it and the health loop depends on that being unconditional.
+
 ## DR-018 (2026-09-01, S2) Requeue is a state transition, not a dispatcher call
 Requeueing a dead letter marks it for redelivery and audits the operator's
 intent; whichever dispatcher owns that consumer group drains it. The first

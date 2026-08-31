@@ -9,12 +9,16 @@ raises the domain error the handlers map to a clean 403.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Optional
 
 from fastapi import Depends, Query, Request
 
 from signalforge.contracts.roles import Permission
 from signalforge.domain.identity.errors import AuthenticationError
+from signalforge.application.adapters.connector_service import ConnectorService
+from signalforge.application.adapters.health import ConnectorHealthSources
+from signalforge.application.adapters.registry_service import AdapterRegistryService
 from signalforge.application.events.bus import EventBus
 from signalforge.application.events.consumers import BUS_METRICS_GROUP, BusMetricsConsumer
 from signalforge.application.events.dead_letters import DeadLetterService
@@ -29,6 +33,8 @@ from signalforge.application.identity.oncall_service import OnCallService
 from signalforge.application.identity.org_service import OrgService
 from signalforge.application.identity.principal import Principal
 from signalforge.domain.events.retention import RetentionPolicy
+from signalforge.infrastructure.adapters.registry import FileAdapterRegistry
+from signalforge.infrastructure.adapters.runtimes import AdapterRuntimeRegistry
 from signalforge.infrastructure.clock import SwitchableClock, SystemClock
 from signalforge.infrastructure.config import VERSION, Settings, load_settings
 from signalforge.infrastructure.observability.metrics import build_registry
@@ -118,6 +124,18 @@ class Container:
             policy=RetentionPolicy(self.settings.signal_retention_days),
         )
 
+        # Adapter registry (S3-T01). Manifests are discovered from the adapters
+        # tree; runtimes register themselves here and an adapter with a manifest
+        # but no runtime stays visible and honestly unmeasurable.
+        self.adapter_registry = FileAdapterRegistry(Path(self.settings.adapters_dir))
+        self.adapter_runtimes = AdapterRuntimeRegistry()
+        self.adapters = AdapterRegistryService(
+            self.adapter_registry, self.adapter_runtimes
+        )
+        self.connectors = ConnectorService(
+            self.uow_factory, self.adapter_registry, self.bus, self.clock
+        )
+
         # Self-observability (S2-T03).
         self.health = ConnectorHealthService(
             self.event_uow_factory, self.bus, clock=self.wall_clock, metrics=self.metrics
@@ -125,6 +143,17 @@ class Container:
         self.worker = PlatformWorker(self._jobs(), clock=self.wall_clock)
         self.health.register(DatabaseHealthSource(self.session_factory))
         self.health.register(EventBusHealthSource(self.event_uow_factory))
+        # Connector bindings join the same loop, re-read every poll so a binding
+        # an operator just disabled leaves it on the next tick (S3-T01).
+        self.health.register_provider(
+            ConnectorHealthSources(
+                self.uow_factory,
+                self.adapter_registry,
+                self.adapter_runtimes,
+                self.connectors,
+                clock=self.wall_clock,
+            )
+        )
         if self.settings.worker_enabled:
             # An API-only node (the enterprise split the architecture allows)
             # has no worker group of its own, so it does not report one; a node

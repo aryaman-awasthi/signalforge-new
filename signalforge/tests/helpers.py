@@ -11,7 +11,7 @@ from pathlib import Path
 from cryptography.fernet import Fernet
 
 from signalforge.domain.identity.ports import Clock
-from signalforge.infrastructure.config import Settings
+from signalforge.infrastructure.config import ADAPTERS_DIR, Settings
 
 
 class FakeClock(Clock):
@@ -25,7 +25,7 @@ class FakeClock(Clock):
         self.current += timedelta(**kwargs)
 
 
-def make_test_settings(db_url: str) -> Settings:
+def make_test_settings(db_url: str, adapters_dir: str | None = None) -> Settings:
     return Settings(
         db_url=db_url,
         jwt_secret="test-jwt-secret-with-enough-length-0123456789",
@@ -43,6 +43,9 @@ def make_test_settings(db_url: str) -> Settings:
         dispatch_interval_s=0.5,
         health_interval_s=30,
         log_level="INFO",
+        # Tests that care about the registry point it at a tree they wrote; the
+        # rest run against the adapters this deployment actually ships.
+        adapters_dir=adapters_dir or str(ADAPTERS_DIR),
     )
 
 

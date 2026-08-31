@@ -5,8 +5,8 @@ SQLAlchemy models Alembic also autogenerates migrations from, so this document
 cannot drift from the schema. The design notes below are authored; the ERD and
 the column tables are not.
 
-Generated: 2026-08-31T21:10:01+00:00
-Tables: 17
+Generated: 2026-08-31T22:21:42+00:00
+Tables: 18
 
 ## 1. Entity relationship diagram
 
@@ -187,6 +187,34 @@ erDiagram
         string anchor_hash
         integer pruned_count
         datetime pruned_at
+    }
+```
+
+### Adapter registry (S3)
+
+Manifests are files, not rows: what a deployment stores is which app is wired to which adapter, at which credential scope, and what the health loop last saw. Credentials are not here - they live encrypted in `secrets` under connector/<binding>/<field>.
+
+```mermaid
+erDiagram
+    connector_bindings {
+        string id "PK"
+        string tenant_id
+        string app_id
+        string adapter_id
+        string name
+        string credential_scope
+        json config
+        json credential_fields
+        boolean enabled
+        datetime created_at
+        string created_by
+        datetime updated_at
+        string status
+        text status_detail
+        datetime last_checked_at
+        datetime last_ok_at
+        text last_error
+        integer consecutive_failures
     }
 ```
 
@@ -475,6 +503,35 @@ Indexes: `ix_event_seals_tenant`, `ix_event_seals_tenant_id`
 | `pruned_at` | datetime | no |  |
 
 
+### Adapter registry (S3)
+
+#### `connector_bindings`
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | string | no | primary key |
+| `tenant_id` | string | no |  |
+| `app_id` | string | no |  |
+| `adapter_id` | string | no |  |
+| `name` | string | no |  |
+| `credential_scope` | string | no |  |
+| `config` | json | no |  |
+| `credential_fields` | json | no |  |
+| `enabled` | boolean | no |  |
+| `created_at` | datetime | no |  |
+| `created_by` | string | no |  |
+| `updated_at` | datetime | no |  |
+| `status` | string | no |  |
+| `status_detail` | text | yes |  |
+| `last_checked_at` | datetime | yes |  |
+| `last_ok_at` | datetime | yes |  |
+| `last_error` | text | yes |  |
+| `consecutive_failures` | integer | no |  |
+
+Indexes: `ix_connector_bindings_enabled`, `ix_connector_bindings_tenant_app`, `ix_connector_bindings_tenant_id`  
+Constraints: unique (tenant_id, app_id, adapter_id, credential_scope)
+
+
 ### Agent traces (S2, filled S5)
 
 #### `agent_runs`
@@ -573,9 +630,32 @@ deliberately cross-tenant and documented at their definitions:
   hands handlers a full envelope carrying `tenant_id`, and handler writes go
   through tenant-scoped repositories.
 - `EventStore.tenants` - the retention sweep's work list.
+- `ConnectorBindingRepository.list_enabled_for_health` - one connector health
+  loop serves the install. Every binding it returns carries its own `tenant_id`,
+  the health event is published on that tenant's timeline, and everything the
+  loop writes back goes through the tenant-scoped methods.
 
 `_platform` is a reserved tenant id used for events about the platform itself
-(connector health). Because replay is tenant-scoped, no customer can read them.
+(the database, the bus, the worker group). Because replay is tenant-scoped, no
+customer can read them - and a customer's connector health deliberately does
+*not* go there: it belongs to the tenant that owns the binding.
+
+## 6a. Connector bindings and credentials
+
+`connector_bindings` is keyed by `(tenant_id, app_id, adapter_id,
+credential_scope)`. The scope is part of the key because read-only and
+remediation are different credentials with different blast radii: they are two
+rows, and revoking one leaves the other alone. The row holds
+`credential_fields` - names only - while the values live in `secrets` as Fernet
+ciphertext under `connector/<binding_id>/<field>`, so a binding can be listed,
+logged and returned over the API without a decrypt, and deleting a binding
+deletes exactly its own secrets.
+
+The `status`, `status_detail`, `last_checked_at`, `last_ok_at`, `last_error` and
+`consecutive_failures` columns are written by the connector health loop and are
+what the integration health screen reads. They are durable on purpose: after a
+restart the screen shows the last observed verdict and the last error rather
+than an empty table until the next poll.
 
 ## 7. Indexes
 
@@ -592,6 +672,8 @@ Every index exists for a query the platform actually makes:
 | `ix_dead_letters_tenant_state` | the operator's dead-letter pane |
 | `ix_dead_letters_group_state` | the dispatcher draining requeues |
 | `ix_audit_log_tenant_seq` | audit chain verification |
+| `ix_connector_bindings_tenant_app` | the integration health screen, per app |
+| `ix_connector_bindings_enabled` | the connector health loop's cross-tenant work list |
 
 ## 8. Portability
 

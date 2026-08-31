@@ -64,8 +64,10 @@ class PlatformStatusService:
         self._retention_days = retention_days
 
     async def health_report(self) -> HealthReport:
-        """Fresh check for the liveness probe - never a cached verdict."""
-        return await self._health.report()
+        """Fresh check for the liveness probe - never a cached verdict, and only
+        this node's own components: a customer's connector being down (S3) is
+        not a reason for the process to answer 503."""
+        return await self._health.platform_report()
 
     async def bus_status(self, tenant_id: Optional[str] = None) -> BusStatus:
         async with self._uow_factory() as uow:
@@ -82,15 +84,20 @@ class PlatformStatusService:
         )
 
     async def status(self, tenant_id: str) -> PlatformStatus:
-        report = self._health.last_report or await self._health.report()
+        if self._health.last_checked_at is None:
+            await self._health.report()
+        # Platform components plus this tenant's connectors, never another
+        # tenant's, even though one poll loop produced them all.
+        components = self._health.components_for(tenant_id)
+        checked_at = self._health.last_checked_at
         bus = await self.bus_status(tenant_id)
         async with self._uow_factory() as uow:
             watermarks = list(await uow.retention.list_for_tenant(tenant_id))
         clock = getattr(self._clock, "source", None)
         return PlatformStatus(
-            status=overall_status(report.components),
+            status=overall_status(components),
             version=self._version,
-            checked_at=report.checked_at,
+            checked_at=checked_at,
             clock={
                 "source": clock or "wall",
                 "now": self._clock.now(),
@@ -101,7 +108,7 @@ class PlatformStatusService:
             worker=self._worker.snapshot(),
             components=[
                 {"component": c.component, "status": c.status.value, "detail": c.detail}
-                for c in report.components
+                for c in components
             ],
             retention=[
                 {

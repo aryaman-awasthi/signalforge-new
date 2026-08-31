@@ -32,10 +32,29 @@ _SEVERITY = {
 
 
 class HealthSource(ABC):
-    """Something whose health the platform polls."""
+    """Something whose health the platform polls.
+
+    `tenant_id` is None for the platform's own components - the database, the
+    bus, the worker group - and set for a customer's connector binding (S3).
+    That single field decides three things at once: which tenant's timeline the
+    health event lands on, who may see the component on /platform/status, and
+    whether the component counts towards this node's readiness. A customer's
+    broken connector is not a reason for /health to answer 503.
+
+    `metric_label` is what /metrics is allowed to say about the source. It
+    defaults to the source id, and a source that carries an identifier a scrape
+    should not see overrides it with something coarser - the adapter id rather
+    than the binding id.
+    """
 
     source_id: str
     kind: Optional[AdapterKind] = None
+    tenant_id: Optional[str] = None
+    app_id: Optional[str] = None
+
+    @property
+    def metric_label(self) -> str:
+        return self.source_id
 
     @abstractmethod
     async def check(self) -> ComponentHealth: ...

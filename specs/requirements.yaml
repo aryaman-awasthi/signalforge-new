@@ -239,7 +239,7 @@ requirements:
     area: integrations
     sprint: S3
     priority: must
-    status: planned
+    status: built
     acceptance: >
       Registry over adapters/**/manifest.yaml with mode, capabilities, auth,
       credential_scope read_only/remediation/drill, config schema, limits, redaction

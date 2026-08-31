@@ -18,6 +18,7 @@ from signalforge.api import deps
 from signalforge.api.errors import register_error_handlers
 from signalforge.api.middleware import RequestContextMiddleware
 from signalforge.api.routers import (
+    adapters,
     auth,
     escalation,
     events,
@@ -80,4 +81,5 @@ app.include_router(roles.router)
 app.include_router(oncall.router)
 app.include_router(escalation.router)
 app.include_router(events.router)
+app.include_router(adapters.router)
 app.include_router(platform.router)

@@ -40,6 +40,14 @@ GROUPS: list[tuple[str, str, tuple[str, ...]]] = [
          "event_seals", "retention_watermarks"),
     ),
     (
+        "Adapter registry (S3)",
+        "Manifests are files, not rows: what a deployment stores is which app is "
+        "wired to which adapter, at which credential scope, and what the health "
+        "loop last saw. Credentials are not here - they live encrypted in "
+        "`secrets` under connector/<binding>/<field>.",
+        ("connector_bindings",),
+    ),
+    (
         "Agent traces (S2, filled S5)",
         "Written from Sprint 5 by the agent suite; shipped now so agents are born "
         "observable rather than instrumented afterwards.",
@@ -106,9 +114,32 @@ deliberately cross-tenant and documented at their definitions:
   hands handlers a full envelope carrying `tenant_id`, and handler writes go
   through tenant-scoped repositories.
 - `EventStore.tenants` - the retention sweep's work list.
+- `ConnectorBindingRepository.list_enabled_for_health` - one connector health
+  loop serves the install. Every binding it returns carries its own `tenant_id`,
+  the health event is published on that tenant's timeline, and everything the
+  loop writes back goes through the tenant-scoped methods.
 
 `_platform` is a reserved tenant id used for events about the platform itself
-(connector health). Because replay is tenant-scoped, no customer can read them.
+(the database, the bus, the worker group). Because replay is tenant-scoped, no
+customer can read them - and a customer's connector health deliberately does
+*not* go there: it belongs to the tenant that owns the binding.
+
+## 6a. Connector bindings and credentials
+
+`connector_bindings` is keyed by `(tenant_id, app_id, adapter_id,
+credential_scope)`. The scope is part of the key because read-only and
+remediation are different credentials with different blast radii: they are two
+rows, and revoking one leaves the other alone. The row holds
+`credential_fields` - names only - while the values live in `secrets` as Fernet
+ciphertext under `connector/<binding_id>/<field>`, so a binding can be listed,
+logged and returned over the API without a decrypt, and deleting a binding
+deletes exactly its own secrets.
+
+The `status`, `status_detail`, `last_checked_at`, `last_ok_at`, `last_error` and
+`consecutive_failures` columns are written by the connector health loop and are
+what the integration health screen reads. They are durable on purpose: after a
+restart the screen shows the last observed verdict and the last error rather
+than an empty table until the next poll.
 
 ## 7. Indexes
 
@@ -125,6 +156,8 @@ Every index exists for a query the platform actually makes:
 | `ix_dead_letters_tenant_state` | the operator's dead-letter pane |
 | `ix_dead_letters_group_state` | the dispatcher draining requeues |
 | `ix_audit_log_tenant_seq` | audit chain verification |
+| `ix_connector_bindings_tenant_app` | the integration health screen, per app |
+| `ix_connector_bindings_enabled` | the connector health loop's cross-tenant work list |
 
 ## 8. Portability
 

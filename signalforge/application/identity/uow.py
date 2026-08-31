@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
+from signalforge.domain.adapters.ports import ConnectorBindingRepository
 from signalforge.domain.events.ports import EventStore
 from signalforge.domain.identity.ports import (
     AuditWriter,
@@ -29,6 +30,11 @@ class IdentityUnitOfWork(ABC):
     oncall: OnCallRepository
     escalations: EscalationRepository
     secrets: SecretStore
+    connectors: ConnectorBindingRepository
+    """Adapter bindings (S3). They live on this unit of work because a binding,
+    its Fernet-encrypted credentials and its audit entry have to be one commit:
+    a stored credential with no binding is unreachable, and a binding with no
+    credential is a connector that silently cannot authenticate."""
     audit: AuditWriter
     events: EventStore
     """The outbox: an event published here shares the use case's transaction."""

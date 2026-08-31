@@ -19,6 +19,7 @@ from signalforge.domain.events.retention import SIGNAL_RETENTION_DEFAULT_DAYS
 
 ROOT = Path(__file__).resolve().parents[2]
 KEYS_DIR = ROOT / "var" / "keys"
+ADAPTERS_DIR = Path(__file__).resolve().parent / "adapters"
 
 VERSION = "0.2.0"
 
@@ -54,6 +55,7 @@ class Settings:
     dispatch_interval_s: float
     health_interval_s: float
     log_level: str
+    adapters_dir: str
 
 
 def load_settings() -> Settings:
@@ -92,4 +94,8 @@ def load_settings() -> Settings:
         # Connector health every 30s per the architecture's poller cadence.
         health_interval_s=float(os.environ.get("SIGNALFORGE_HEALTH_INTERVAL_S", 30)),
         log_level=os.environ.get("SIGNALFORGE_LOG_LEVEL", "INFO").upper(),
+        # Where the adapter registry looks for **/manifest.yaml. Configurable so
+        # a deployment can mount an adapter bundle outside the package, and so a
+        # test can point the registry at a tree it wrote itself.
+        adapters_dir=os.environ.get("SIGNALFORGE_ADAPTERS_DIR", str(ADAPTERS_DIR)),
     )

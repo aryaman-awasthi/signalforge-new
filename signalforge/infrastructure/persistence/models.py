@@ -307,6 +307,49 @@ class RetentionWatermarkRow(Base):
     pruned_at: Mapped[datetime] = mapped_column(TZDateTime)
 
 
+# --- adapter registry (S3) ---------------------------------------------------
+
+
+class ConnectorBindingRow(Base):
+    """One application wired to one adapter at one credential scope.
+
+    No credential is stored here: `credential_fields` names them and the values
+    live Fernet-encrypted in `secrets` under connector/<id>/<field> (REQ-015),
+    so this row can be listed and rendered without a decrypt. The health columns
+    are written by the connector health loop and are what the integration health
+    screen reads for freshness and last error.
+    """
+
+    __tablename__ = "connector_bindings"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "app_id", "adapter_id", "credential_scope",
+            name="uq_connector_bindings_scope",
+        ),
+        Index("ix_connector_bindings_tenant_app", "tenant_id", "app_id"),
+        Index("ix_connector_bindings_enabled", "enabled"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    app_id: Mapped[str] = mapped_column(String(100))
+    adapter_id: Mapped[str] = mapped_column(String(64))
+    name: Mapped[str] = mapped_column(String(200))
+    credential_scope: Mapped[str] = mapped_column(String(20))
+    config: Mapped[dict] = mapped_column(JSON, default=dict)
+    credential_fields: Mapped[list] = mapped_column(JSON, default=list)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime)
+    created_by: Mapped[str] = mapped_column(String(36))
+    updated_at: Mapped[datetime] = mapped_column(TZDateTime)
+    status: Mapped[str] = mapped_column(String(20), default="unknown")
+    status_detail: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    last_checked_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, nullable=True)
+    last_ok_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, nullable=True)
+    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    consecutive_failures: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class EventSealRow(Base):
     __tablename__ = "event_seals"
     __table_args__ = (Index("ix_event_seals_tenant", "tenant_id", "sealed_at"),)

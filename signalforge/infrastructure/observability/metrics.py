@@ -236,6 +236,13 @@ def build_registry() -> MetricsRegistry:
         "Connector health: 1 up, 0.5 degraded or unknown, 0 down", ("connector",),
     )
     registry.declare(
+        # Bindings are counted, never named: a binding id belongs to one tenant
+        # and /metrics has no session. Which binding is which is answered by
+        # GET /connectors/health behind RBAC.
+        "signalforge_connector_bindings", MetricType.GAUGE,
+        "Connector bindings currently in each health state", ("state",),
+    )
+    registry.declare(
         "signalforge_worker_job_failures_total", MetricType.COUNTER,
         "Scheduled job runs that raised", ("job",),
     )
