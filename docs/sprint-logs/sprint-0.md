@@ -1,4 +1,4 @@
-# Sprint 0 log (started 2026-09-01, in progress)
+# Sprint 0 log (2026-09-01, one day)
 Goal: a bootable skeleton with frozen contracts and the traceability system live.
 
 ## Built
@@ -43,6 +43,15 @@ Goal: a bootable skeleton with frozen contracts and the traceability system live
   06-solution-architecture skeleton recording what contracts already fix; decision-record.md
   seeded with DR-001..008 (real S0 decisions); stubs with owner + due sprint for
   04, 07, 08, 09, 10, 11, 12, 13, 15, 19, 21, 22, 23 and demo-script.
+- [S0-T05][REQ-007] Web scaffold + minimal API: Next.js 14 + Tailwind under web/ with
+  design-system/tokens.css as the single theming surface (Tailwind palette resolves to
+  tokens; light/dark; no hex in config - tested), authless shell layout, /health page as a
+  thin route over features/health/{components,hooks,api}, typed API client in lib/api/client.ts
+  with ApiError + unreachable handling, single WebSocket store stub in lib/ws/store.ts;
+  signalforge/api/main.py (FastAPI, CORS for dev web) + routers/health.py GET /health.
+  Verified: 5 REQ-007 tests (endpoint, CORS, structure, tokens, thin-route rules);
+  suite 53 passed; run.sh booted api (:8000, 200) + web (:3000, /health page renders
+  the panel) simultaneously, then shut down cleanly.
 
 ## Not built / deferred
 - [S0-T04] Import of signalforge-architecture-final.md into docs/06 and of
@@ -59,13 +68,15 @@ Goal: a bootable skeleton with frozen contracts and the traceability system live
   instead of Node 20. No contract deviations.
 
 ## Tests
-- added: 48 unit (5 repo layout + 37 contract validation + 6 traceability)
-- suite result: 48 passed, 0 failed
+- added: 53 unit (5 repo layout + 37 contract validation + 6 traceability + 5 web/api scaffold)
+- suite result: 53 passed, 0 failed (docs/21-test-report.md generation lands with make report)
 
 ## Artifacts updated
-- 05 SPECS/DSL: specs/requirements.yaml, specs/controls.yaml
+- 01 BRD v1, 02 future-state, 03 stories (generated), 06 solution architecture (skeleton)
+- 05 SPECS/DSL: specs/requirements.yaml (51 REQs), specs/controls.yaml
 - 13 Controls matrix (seed): specs/controls.yaml
-- 20 RTM: docs/20-RTM.md (generated)
+- 20 RTM: docs/20-RTM.md (generated; 53 tests recorded, 8 REQs test-linked)
+- stubs with owners: 04, 07, 08, 09, 10, 11, 12, 15, 19, 21, 22, 23, demo-script
 
 ## Security notes
 - check_clean.sh enforces the app-agnostic core rule from day one; the guard has a
@@ -75,10 +86,20 @@ Goal: a bootable skeleton with frozen contracts and the traceability system live
 - make not runnable until installed with admin rights (see Deviations).
 
 ## Demoable checkpoint
-- `bash run.sh` boots in skeleton mode; `bash scripts/check_clean.sh` returns OK;
-  `.venv/Scripts/python.exe -m pytest -q` shows 5 passing.
+1. `bash run.sh` - boots api on :8000 and web on :3000.
+2. Open http://localhost:3000/health - the panel shows status ok, service version and
+   latency from GET /health via the typed client; stop the api and Refresh to see the
+   designed failure state ("API unreachable").
+3. `.venv/Scripts/python.exe -m pytest -q` - 53 passed, all REQ-tagged.
+4. `.venv/Scripts/python.exe scripts/gen_rtm.py` (= make rtm) - regenerates docs/20-RTM.md
+   with the full 51-REQ chain joined to recorded results.
+5. `bash scripts/check_clean.sh` - proves the core is app-agnostic.
 
 ## Coverage checklist ticks
-- none yet
+- none - the checklist's first items are Sprint 1 capabilities; Sprint 0's acceptance
+  (contract tests green, run.sh boots api + web, RTM with full REQ chain) is met.
 
-## Entry criteria for next sprint: pending (sprint 0 in progress)
+## Entry criteria for next sprint: met
+- Sprint 0 acceptance satisfied: contract validation green (37 tests), run.sh boots
+  api + web (verified live), make rtm produces the full REQ chain, artifacts
+  01/02/03/05/06/20 present (06 as skeleton pending the human-provided import).

@@ -1,0 +1,45 @@
+/* SignalForge design tokens (design-system/, the single theming surface).
+   Authored in the spirit of the Claude Design skeleton (warm neutrals, terracotta
+   accent); extraction from the skeleton's styles.css is pending - that file was
+   not present in the workspace at S0-T05. Only tokens live here, never content.
+   Color triplets are space-separated RGB so Tailwind can apply alpha. */
+
+:root {
+  /* surfaces and ink */
+  --sf-surface: 250 249 245;
+  --sf-surface-raised: 255 255 255;
+  --sf-ink: 20 20 19;
+  --sf-ink-muted: 94 94 87;
+  --sf-line: 222 220 209;
+
+  /* brand accent */
+  --sf-accent: 204 120 92;
+  --sf-accent-strong: 176 92 66;
+
+  /* status */
+  --sf-ok: 74 141 89;
+  --sf-warn: 191 139 48;
+  --sf-danger: 178 66 58;
+
+  /* shape and type */
+  --sf-radius-card: 0.75rem;
+  --sf-font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --sf-font-mono: ui-monospace, "Cascadia Code", "Segoe UI Mono", monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --sf-surface: 38 38 36;
+    --sf-surface-raised: 48 48 46;
+    --sf-ink: 245 244 238;
+    --sf-ink-muted: 168 167 158;
+    --sf-line: 68 68 64;
+
+    --sf-accent: 217 133 106;
+    --sf-accent-strong: 230 155 128;
+
+    --sf-ok: 108 169 122;
+    --sf-warn: 209 162 73;
+    --sf-danger: 205 98 89;
+  }
+}

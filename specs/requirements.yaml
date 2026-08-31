@@ -85,7 +85,7 @@ requirements:
     area: engineering-guide
     sprint: S0
     priority: must
-    status: planned
+    status: built
     acceptance: >
       Next.js 14 shell with design-system tokens, /health page calling the API through
       the typed client, and a WebSocket client stub.
