@@ -37,7 +37,19 @@ Goal: a bootable skeleton with frozen contracts and the traceability system live
   untagged tests, exits 2 on unknown REQ ids. Verified: 6 REQ-006 tests incl. RTM
   generation with and without results; suite 48 passed; RTM committed.
 
+- [S0-T04] Docs: 01-BRD v1 (problem, goals, personas, success measures, risks);
+  02-future-state journey narrative naming screens and controls; 03-stories generated
+  from specs/requirements.yaml by scripts/gen_stories.py (51 stories, GENERATED header);
+  06-solution-architecture skeleton recording what contracts already fix; decision-record.md
+  seeded with DR-001..008 (real S0 decisions); stubs with owner + due sprint for
+  04, 07, 08, 09, 10, 11, 12, 13, 15, 19, 21, 22, 23 and demo-script.
+
 ## Not built / deferred
+- [S0-T04] Import of signalforge-architecture-final.md into docs/06 and of
+  signalforge-memory-graph.md into docs/decision-record.md: neither file exists in the
+  workspace. Impact: docs/06 is a skeleton and the decision record starts at S0.
+  Plan: import verbatim when the human provides the files, replacing the skeleton
+  sections; no other task depends on them.
 
 ## Deviations
 - Environment vs CLAUDE.md spec on this machine: GNU make not installed (choco install
