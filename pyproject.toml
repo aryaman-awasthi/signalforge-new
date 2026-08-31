@@ -7,6 +7,12 @@ dependencies = [
     "pydantic>=2.7",
     "jsonschema>=4.21",
     "pyyaml>=6",
+    "argon2-cffi>=23",
+    "PyJWT>=2.8",
+    "cryptography>=42",
+    "sqlalchemy[asyncio]>=2.0.30",
+    "aiosqlite>=0.20",
+    "alembic>=1.13",
 ]
 
 [project.optional-dependencies]
