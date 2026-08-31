@@ -15,6 +15,10 @@ from fastapi import Depends, Query, Request
 
 from signalforge.contracts.roles import Permission
 from signalforge.domain.identity.errors import AuthenticationError
+from signalforge.application.events.bus import EventBus
+from signalforge.application.events.dispatcher import Dispatcher
+from signalforge.application.events.replay import ReplayService
+from signalforge.application.events.sealing import SealService
 from signalforge.application.identity.auth_service import AuthService
 from signalforge.application.identity.oncall_service import OnCallService
 from signalforge.application.identity.org_service import OrgService
@@ -22,6 +26,7 @@ from signalforge.application.identity.principal import Principal
 from signalforge.infrastructure.clock import SystemClock
 from signalforge.infrastructure.config import Settings, load_settings
 from signalforge.infrastructure.persistence.db import make_engine, make_session_factory
+from signalforge.infrastructure.persistence.event_uow import SqlEventUnitOfWork
 from signalforge.infrastructure.persistence.uow import SqlIdentityUnitOfWork
 from signalforge.infrastructure.security.passwords import Argon2PasswordHasher
 from signalforge.infrastructure.security.ratelimit import SlidingWindowRateLimiter
@@ -66,6 +71,17 @@ class Container:
             invite_ttl_s=self.settings.invite_ttl_s,
         )
         self.oncall = OnCallService(self.uow_factory, self.clock)
+
+        # Event backbone (S2). recorded_at always comes from the wall clock even
+        # when a drill has moved the clock the rest of the system reads.
+        self.wall_clock = SystemClock()
+        self.event_uow_factory = lambda: SqlEventUnitOfWork(
+            self.session_factory, clock=self.clock
+        )
+        self.bus = EventBus(recording_clock=self.wall_clock)
+        self.replay = ReplayService(self.event_uow_factory)
+        self.seals = SealService(self.event_uow_factory, clock=self.clock)
+        self.dispatcher = Dispatcher(self.event_uow_factory, clock=self.clock)
 
 
 _container: Optional[Container] = None

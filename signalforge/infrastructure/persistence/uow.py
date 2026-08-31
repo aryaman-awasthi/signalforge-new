@@ -1,5 +1,8 @@
 """SQL unit of work: one AsyncSession shared by every repository, the secret
-store and the audit writer, so a use case commits atomically or not at all."""
+store, the audit writer and the event outbox, so a use case commits atomically
+or not at all. The outbox lives on this unit of work on purpose (REQ-020): a use
+case that changes state publishes its event through the same transaction, so the
+two can never disagree."""
 
 from __future__ import annotations
 
@@ -16,6 +19,7 @@ from signalforge.infrastructure.persistence.repositories import (
     SqlTenantRepository,
     SqlUserRepository,
 )
+from signalforge.infrastructure.persistence.event_store import SqlEventStore
 from signalforge.infrastructure.security.audit import AuditChainWriter
 from signalforge.infrastructure.security.secrets import FernetSecretStore
 
@@ -43,6 +47,7 @@ class SqlIdentityUnitOfWork(IdentityUnitOfWork):
         self.escalations = SqlEscalationRepository(self._session)
         self.secrets = FernetSecretStore(self._session, key=self._fernet_key)
         self.audit = AuditChainWriter(self._session, clock=self._clock)
+        self.events = SqlEventStore(self._session, clock=self._clock)
         return self
 
     async def __aexit__(self, exc_type, exc, tb) -> None:

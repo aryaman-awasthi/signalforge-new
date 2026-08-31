@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
+from signalforge.domain.events.ports import EventStore
 from signalforge.domain.identity.ports import (
     AuditWriter,
     EscalationRepository,
@@ -29,6 +30,8 @@ class IdentityUnitOfWork(ABC):
     escalations: EscalationRepository
     secrets: SecretStore
     audit: AuditWriter
+    events: EventStore
+    """The outbox: an event published here shares the use case's transaction."""
 
     @abstractmethod
     async def __aenter__(self) -> "IdentityUnitOfWork": ...

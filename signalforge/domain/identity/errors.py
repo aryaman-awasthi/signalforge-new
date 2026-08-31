@@ -1,14 +1,28 @@
-"""Identity domain errors. Pure domain: no framework or transport concerns."""
+"""Identity domain errors. Pure domain: no framework or transport concerns.
+
+The four generic categories live in domain/shared/errors.py so every bounded
+context raises the same ones; they are re-exported here because identity was
+their first home and the API error map imports them from this module.
+"""
 
 from __future__ import annotations
 
+from signalforge.domain.shared.errors import (
+    ConflictError,
+    DomainError,
+    DomainValidationError,
+    NotFoundError,
+)
 
-class DomainError(Exception):
-    """Base for all identity domain errors."""
-
-
-class DomainValidationError(DomainError):
-    """An entity or value object was constructed with invalid data."""
+__all__ = [
+    "AuthenticationError",
+    "ConflictError",
+    "DomainError",
+    "DomainValidationError",
+    "NotFoundError",
+    "PermissionDeniedError",
+    "RateLimitedError",
+]
 
 
 class AuthenticationError(DomainError):
@@ -29,11 +43,3 @@ class RateLimitedError(DomainError):
     def __init__(self, message: str, retry_after_s: int):
         super().__init__(message)
         self.retry_after_s = retry_after_s
-
-
-class NotFoundError(DomainError):
-    """Entity does not exist in this tenant's scope."""
-
-
-class ConflictError(DomainError):
-    """Uniqueness violated (duplicate email, slug, open invite)."""
