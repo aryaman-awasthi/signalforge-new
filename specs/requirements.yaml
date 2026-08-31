@@ -96,7 +96,7 @@ requirements:
     area: platform-identity
     sprint: S1
     priority: must
-    status: planned
+    status: built
     acceptance: >
       Orgs, users, invites and sessions with argon2id hashing, 15-minute JWT access,
       rotating refresh, revocation store and login rate limiting.
@@ -106,7 +106,7 @@ requirements:
     area: platform-identity
     sprint: S1
     priority: must
-    status: planned
+    status: built
     acceptance: >
       Every router carries the RBAC dependency; permissions come from the roles matrix;
       an Executive session is denied an IC-only endpoint with a clean 403 and an audit event.
@@ -116,7 +116,7 @@ requirements:
     area: platform-identity
     sprint: S1
     priority: must
-    status: planned
+    status: built
     acceptance: >
       tenant_id filtering is enforced in repositories, not handlers; cross-tenant access
       attempts fail and are covered by security tests.
@@ -126,7 +126,7 @@ requirements:
     area: platform-identity
     sprint: S1
     priority: must
-    status: planned
+    status: built
     acceptance: >
       Rotation and escalation-policy value objects with ordering and timers, editable
       through the org setup screens.
@@ -136,7 +136,7 @@ requirements:
     area: platform-identity
     sprint: S1
     priority: must
-    status: planned
+    status: built
     acceptance: >
       Connector credentials and other secrets stored Fernet-encrypted with the key from
       the environment; never logged or returned in plaintext.
@@ -146,7 +146,7 @@ requirements:
     area: platform-identity
     sprint: S1
     priority: must
-    status: planned
+    status: built
     acceptance: >
       Audit events are hash-chained via payload_hash/prev_hash; tampering is detectable;
       audit can never be disabled.
@@ -156,7 +156,7 @@ requirements:
     area: platform-identity
     sprint: S1
     priority: must
-    status: planned
+    status: built
     acceptance: >
       HMAC-SHA256 over timestamp.body with replay window per the ingest contract;
       forged signatures and stale timestamps rejected with audit events.
@@ -166,7 +166,7 @@ requirements:
     area: platform-identity
     sprint: S1
     priority: must
-    status: planned
+    status: built
     acceptance: >
       STRIDE analysis plus prompt injection, malicious document content, data
       exfiltration and inappropriate tool invocation rows in docs/12.
