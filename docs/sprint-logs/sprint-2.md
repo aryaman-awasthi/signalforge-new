@@ -75,13 +75,38 @@ Goal: durable, ordered, replayable event spine everything else rides on.
   empty until S5. Verified: 21 REQ-tagged tests; live boot on :8013 showing
   connector-health events published, dispatched and counted, and JSON logs only.
 
+- [S2-T04][REQ-023,025] Web: timeline primitives and the S21 settings shell.
+  web/features/timeline/ - api.ts types track the frozen envelope field for field
+  (a test fails if the contract gains a field the cockpit does not decode);
+  store.ts merges by event_id and orders by seq, because at-least-once reaches
+  the browser too once replay pages and the socket both feed it, and holds the
+  seq anchor; useVirtualRows windows a fixed-height list so only the rows near
+  the viewport mount and scrollTop maps exactly to an index, which is what lets
+  the anchor jump without rendering everything above it; EventTimeline composes
+  the list with TopicFilter (chips per topic and per namespace wildcard) and
+  SeqAnchorBar (pin, clear, jump to a seq). web/features/platform/ - settings
+  screen with Platform health (component pills, bus head/lag/DLQ counts, clock
+  source with a visible "drill clock" badge, worker jobs with last error,
+  retention watermarks), Dead letters (requeue, with an honest notice when no
+  consumer for that group runs on this node) and the timeline pane. /settings
+  route is thin; middleware guards it with the org role group as UX over the
+  API's real RBAC. Refactor found by the live run: requeue moved off Dispatcher
+  into DeadLetterService, because requiring a locally registered consumer group
+  made requeue impossible in the split api/worker deployment the architecture
+  allows; the API now records the intent, audits it, and reports drained_here.
+  scripts/seed_bus_demo.py (demo tooling, not product code) puts a causal chain
+  and one poisoned event on the bus so the panes have something real to act on
+  before the S3 integrations. next build green.
+  Verified: 8 structural REQ tests; live end-to-end through the cookie proxy -
+  timeline, dead letter, requeue and drain to resolved.
+
 ## Not built / deferred
 
 ## Deviations
 
 ## Tests
-- added: 78 (41 S2-T01 / 15 S2-T02 / 22 S2-T03)
-- suite result: 202 passed, 0 failed
+- added: 86 (41 S2-T01 / 15 S2-T02 / 22 S2-T03 / 8 S2-T04)
+- suite result: 210 passed, 0 failed
 
 ## Artifacts updated
 - 14 functional tests (signalforge/tests/events/)

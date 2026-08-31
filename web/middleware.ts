@@ -1,7 +1,9 @@
 /**
  * Route guards per role group (REQ-012, UX layer only - the API enforces RBAC
  * for real and audits denials). Groups:
- *   org group (org_owner): /setup organisation administration
+ *   org group (org_owner): /setup organisation administration, /settings
+ *     platform operations - both need manage_org or manage_apps, which only the
+ *     org owner holds in the frozen matrix
  *   any authenticated session: everything except the public pages
  */
 
@@ -9,6 +11,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 const PUBLIC_PATHS = ["/", "/health", "/login", "/signup"];
 const ORG_GROUP = ["org_owner"];
+const ORG_GROUP_PATHS = ["/setup", "/settings"];
 
 function isPublic(pathname: string): boolean {
   return (
@@ -33,10 +36,13 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(login);
   }
 
-  if (pathname.startsWith("/setup")) {
+  const orgGroupPath = ORG_GROUP_PATHS.find((path) => pathname.startsWith(path));
+  if (orgGroupPath) {
     const roles = (request.cookies.get("sf_roles")?.value ?? "").split(",");
     if (!ORG_GROUP.some((role) => roles.includes(role))) {
-      return NextResponse.redirect(new URL("/?denied=setup", request.url));
+      return NextResponse.redirect(
+        new URL(`/?denied=${orgGroupPath.slice(1)}`, request.url),
+      );
     }
   }
 

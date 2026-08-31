@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from signalforge.application.events.dispatcher import DEAD_LETTER_TOPIC, REQUEUED_TOPIC
+from signalforge.application.events.dead_letters import REQUEUED_TOPIC, DeadLetterService
+from signalforge.application.events.dispatcher import DEAD_LETTER_TOPIC
+from signalforge.application.identity.principal import Principal
 from signalforge.domain.events.dispatch import (
     MAX_ATTEMPTS_CAP,
     DeliveryOutcome,
@@ -12,15 +14,24 @@ from signalforge.domain.events.dispatch import (
     topic_matches,
 )
 from signalforge.domain.events.entities import DeadLetterState
-from signalforge.domain.events.errors import (
-    DeadLetterNotFoundError,
-    UnknownConsumerGroupError,
-)
+from signalforge.domain.events.errors import DeadLetterNotFoundError
+from signalforge.domain.identity.errors import ConflictError
 from signalforge.tests.events.conftest import RecordingHandler
 
 pytestmark = pytest.mark.anyio
 
 NO_WAIT = RetryPolicy(max_attempts=3, base_backoff_s=0.0, max_backoff_s=0.0)
+
+
+def _operator(tenant_id: str, user_id: str = "operator-1") -> Principal:
+    return Principal(
+        user_id=user_id,
+        tenant_id=tenant_id,
+        session_id="session-1",
+        email="ops@acme.io",
+        display_name="Operator",
+        bindings=(),
+    )
 
 
 class FlakyHandler(RecordingHandler):
@@ -144,10 +155,13 @@ async def test_requeue_redelivers_and_resolves(bus):
 
     # the operator fixes the handler, then asks for redelivery
     handler.fail_topics = ()
-    requeued = await dispatcher.requeue(
-        dead.id, tenant_id="tenant-a", requested_by="operator-1"
+    operator = _operator("tenant-a")
+    service = DeadLetterService(bus.uow_factory, clock=bus.wall_clock)
+    result = await service.requeue(
+        operator, dead.id, local_groups=dispatcher.groups
     )
-    assert requeued.state is DeadLetterState.REQUEUED
+    assert result.dead_letter.state is DeadLetterState.REQUEUED
+    assert result.drained_here, "this node runs the group, so it will pick it up"
     assert REQUEUED_TOPIC in _audit_topics(bus, "tenant-a")
 
     report = await dispatcher.run_once()
@@ -172,7 +186,8 @@ async def test_requeue_of_a_still_broken_handler_returns_to_dead(bus):
 
     async with bus.uow_factory() as uow:
         dead = (await uow.dead_letters.list(tenant_id="tenant-a"))[0]
-    await dispatcher.requeue(dead.id, tenant_id="tenant-a", requested_by="operator-1")
+    service = DeadLetterService(bus.uow_factory, clock=bus.wall_clock)
+    await service.requeue(_operator("tenant-a"), dead.id, local_groups=dispatcher.groups)
 
     report = await dispatcher.run_once()
     assert report.redelivery_failed == 1
@@ -185,7 +200,7 @@ async def test_requeue_of_a_still_broken_handler_returns_to_dead(bus):
 
 
 @pytest.mark.req("REQ-022", "REQ-013")
-async def test_requeue_is_tenant_scoped_and_group_checked(bus):
+async def test_requeue_is_tenant_scoped_and_reports_who_will_drain_it(bus):
     await bus.publish(topic="app.poison.dropped", tenant_id="tenant-a")
 
     handler = RecordingHandler(fail_topics=("app.poison.dropped",))
@@ -195,14 +210,23 @@ async def test_requeue_is_tenant_scoped_and_group_checked(bus):
 
     async with bus.uow_factory() as uow:
         dead = (await uow.dead_letters.list(tenant_id="tenant-a"))[0]
+    service = DeadLetterService(bus.uow_factory, clock=bus.wall_clock)
 
     with pytest.raises(DeadLetterNotFoundError):
-        await dispatcher.requeue(dead.id, tenant_id="tenant-b", requested_by="attacker")
+        await service.requeue(_operator("tenant-b"), dead.id)
 
-    other = bus.dispatcher(retry_policy=NO_WAIT)
-    other.register("some-other-group", RecordingHandler())
-    with pytest.raises(UnknownConsumerGroupError):
-        await other.requeue(dead.id, tenant_id="tenant-a", requested_by="operator-1")
+    # An api-only node owns no consumer groups. The requeue is still recorded -
+    # a worker elsewhere drains it - but the operator is told so.
+    result = await service.requeue(_operator("tenant-a"), dead.id, local_groups=())
+    assert result.dead_letter.state is DeadLetterState.REQUEUED
+    assert result.drained_here is False
+
+    with pytest.raises(ConflictError):
+        await service.requeue(_operator("tenant-a"), dead.id)
+
+    assert (await dispatcher.run_once()).redelivery_failed == 1, (
+        "the worker that owns the group still picks it up"
+    )
 
 
 def _audit_topics(bus, tenant_id: str) -> list[str]:

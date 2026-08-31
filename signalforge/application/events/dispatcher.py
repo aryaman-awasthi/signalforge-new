@@ -39,15 +39,10 @@ from signalforge.domain.events.dispatch import (
     topic_matches,
 )
 from signalforge.domain.events.entities import DeadLetter, DeadLetterState
-from signalforge.domain.events.errors import (
-    DeadLetterNotFoundError,
-    UnknownConsumerGroupError,
-)
 from signalforge.domain.events.lanes import LANE_COUNT, lane_for
 from signalforge.domain.identity.ports import Clock
 
 DEAD_LETTER_TOPIC = "system.bus.dead_letter"
-REQUEUED_TOPIC = "system.bus.requeued"
 
 
 @dataclass
@@ -255,38 +250,7 @@ class Dispatcher:
             await uow.commit()
         self._count("signalforge_dead_letters_total", subscription.group)
 
-    # -- operator actions --------------------------------------------------
-
-    async def requeue(
-        self, dead_letter_id: str, *, tenant_id: str, requested_by: str
-    ) -> DeadLetter:
-        """Mark a dead letter for redelivery. The next sweep of the owning group
-        picks it up; the processed ledger still protects a handler that already
-        succeeded for this event."""
-        async with self._uow_factory() as uow:
-            dead_letter = await uow.dead_letters.get(dead_letter_id, tenant_id=tenant_id)
-            if dead_letter is None:
-                raise DeadLetterNotFoundError(f"dead letter {dead_letter_id} not found")
-            if dead_letter.group not in self.groups:
-                raise UnknownConsumerGroupError(
-                    f"no consumer group {dead_letter.group!r} is registered on this dispatcher"
-                )
-            requeued = dead_letter.requeued(by=requested_by, at=self._clock.now())
-            await uow.dead_letters.update(requeued)
-            await uow.audit.append(
-                tenant_id=dead_letter.tenant_id,
-                topic=REQUEUED_TOPIC,
-                actor_type="human",
-                actor_id=requested_by,
-                payload={
-                    "dead_letter_id": dead_letter.id,
-                    "group": dead_letter.group,
-                    "event_id": dead_letter.event_id,
-                    "attempts": dead_letter.attempts,
-                },
-            )
-            await uow.commit()
-        return requeued
+    # -- redelivery --------------------------------------------------------
 
     async def _drain_requeued(
         self, subscription: Subscription, report: DispatchReport

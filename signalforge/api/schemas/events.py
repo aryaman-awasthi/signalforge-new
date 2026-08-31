@@ -75,6 +75,13 @@ class DeadLetterOut(BaseModel):
     resolved_at: Optional[datetime] = None
 
 
+class RequeueOut(DeadLetterOut):
+    drained_here: bool
+    """Whether a consumer for this group runs on the node that took the request.
+    False is not a failure - the event is queued - but an operator needs to know
+    that a worker has to be running somewhere for it to move."""
+
+
 def page_out(page: ReplayPage) -> EventPageOut:
     return EventPageOut(
         events=list(page.events),

@@ -17,6 +17,7 @@ from signalforge.contracts.roles import Permission
 from signalforge.domain.identity.errors import AuthenticationError
 from signalforge.application.events.bus import EventBus
 from signalforge.application.events.consumers import BUS_METRICS_GROUP, BusMetricsConsumer
+from signalforge.application.events.dead_letters import DeadLetterService
 from signalforge.application.events.dispatcher import Dispatcher
 from signalforge.application.events.replay import ReplayService
 from signalforge.application.events.retention import RetentionService
@@ -109,6 +110,7 @@ class Container:
             self.event_uow_factory, clock=self.wall_clock, metrics=self.metrics
         )
         self.dispatcher.register(BUS_METRICS_GROUP, BusMetricsConsumer(self.metrics))
+        self.dead_letters = DeadLetterService(self.event_uow_factory, clock=self.clock)
         self.retention = RetentionService(
             self.event_uow_factory,
             self.bus,

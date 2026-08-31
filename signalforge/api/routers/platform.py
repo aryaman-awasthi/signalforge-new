@@ -14,7 +14,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query, Response
 
 from signalforge.api import deps
-from signalforge.api.schemas.events import DeadLetterOut, dead_letter_out
+from signalforge.api.schemas.events import DeadLetterOut, RequeueOut, dead_letter_out
 from signalforge.api.schemas.platform import (
     AgentRunDetailOut,
     AgentRunOut,
@@ -56,23 +56,25 @@ async def list_dead_letters(
     principal: Principal = Depends(deps.require(Permission.MANAGE_APPS)),
     container: deps.Container = Depends(deps.get_container),
 ):
-    async with container.event_uow_factory() as uow:
-        rows = await uow.dead_letters.list(
-            tenant_id=principal.tenant_id, group=group, state=state, limit=limit
-        )
+    rows = await container.dead_letters.list(
+        principal, state=state, group=group, limit=limit
+    )
     return [dead_letter_out(row) for row in rows]
 
 
-@router.post("/platform/dead-letters/{dead_letter_id}/requeue", response_model=DeadLetterOut)
+@router.post("/platform/dead-letters/{dead_letter_id}/requeue", response_model=RequeueOut)
 async def requeue_dead_letter(
     dead_letter_id: str,
     principal: Principal = Depends(deps.require(Permission.MANAGE_APPS)),
     container: deps.Container = Depends(deps.get_container),
 ):
-    requeued = await container.dispatcher.requeue(
-        dead_letter_id, tenant_id=principal.tenant_id, requested_by=principal.user_id
+    result = await container.dead_letters.requeue(
+        principal, dead_letter_id, local_groups=container.dispatcher.groups
     )
-    return dead_letter_out(requeued)
+    return RequeueOut(
+        **dead_letter_out(result.dead_letter).model_dump(),
+        drained_here=result.drained_here,
+    )
 
 
 @router.get("/platform/agent-runs", response_model=list[AgentRunOut])
