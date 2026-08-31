@@ -1,0 +1,14 @@
+[project]
+name = "signalforge"
+version = "0.0.1"
+description = "Enterprise incident command centre - app-agnostic core"
+requires-python = ">=3.11"
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+testpaths = ["signalforge/tests"]
+markers = [
+    "req(id): links the test to a REQ id in specs/requirements.yaml (traceability, RTM)",
+]

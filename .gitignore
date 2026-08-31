@@ -1,0 +1,30 @@
+# session/tooling files - never committed (CLAUDE.md rule 9)
+CLAUDE.md
+playbook/
+.claude/
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# node
+node_modules/
+.next/
+web/out/
+
+# runtime state, databases, local binaries
+var/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+observability/bin/
+
+# secrets and env
+.env
+.env.*
+
+# build output
+dist/
