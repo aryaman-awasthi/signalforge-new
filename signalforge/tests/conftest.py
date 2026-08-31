@@ -12,7 +12,15 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
+
+
+@pytest.fixture
+def anyio_backend():
+    """Async tests run on asyncio via the anyio pytest plugin."""
+    return "asyncio"
 RESULTS_PATH = ROOT / "var" / "rtm" / "test-results.json"
 
 _tests: dict[str, dict] = {}
