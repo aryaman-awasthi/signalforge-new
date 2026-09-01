@@ -220,6 +220,13 @@ def build_registry() -> MetricsRegistry:
         "Events observed by the bus metrics consumer", ("topic",),
     )
     registry.declare(
+        "signalforge_socket_nudges_total", MetricType.COUNTER,
+        "Cockpit sockets told that a watched incident moved. The label is the "
+        "event topic, which is a closed vocabulary; the incident, the tenant and "
+        "the recipient are all absent, because a scrape has no session.",
+        ("topic",),
+    )
+    registry.declare(
         "signalforge_event_seq", MetricType.GAUGE,
         "Highest recorded event seq", (),
     )

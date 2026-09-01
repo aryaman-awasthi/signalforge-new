@@ -184,6 +184,18 @@ async def test_nothing_the_wizard_writes_carries_a_credential(api):
     assert binding["id"] not in scrape
 
 
+# Three GETs under /apps are not the wizard: they are what the app-detail screen
+# and the proposal sheet are made of, read by the person who declares - who by
+# the frozen roles matrix never holds manage_apps. Pinned as a literal list so a
+# fourth cannot join them without somebody deciding it here, and asserted from
+# the other side in tests/security/test_detection_boundary.py (DR-089).
+RESPONDER_READS_UNDER_APPS = {
+    ("GET", "/apps/{app_id}/detection"),
+    ("GET", "/apps/{app_id}/lifecycle"),
+    ("GET", "/apps/{app_id}/change-window"),
+}
+
+
 @pytest.mark.req("REQ-012", "REQ-036")
 async def test_every_onboarding_route_is_manage_apps(api):
     """The wizard holds credentials, edits policy and points the platform at
@@ -193,9 +205,14 @@ async def test_every_onboarding_route_is_manage_apps(api):
 
     unguarded = []
     covered = 0
+    seen_reads = set()
     for route in _walk_api_routes(api_app.routes):
         path = getattr(route, "path", "")
         if not path.startswith("/apps"):
+            continue
+        methods = getattr(route, "methods", set()) or set()
+        if {(method, path) for method in methods} & RESPONDER_READS_UNDER_APPS:
+            seen_reads |= {(method, path) for method in methods}
             continue
         covered += 1
         names = _dependency_names(route.dependant)
@@ -203,6 +220,10 @@ async def test_every_onboarding_route_is_manage_apps(api):
             unguarded.append(f"{route.methods} {path}")
     assert covered >= 12, "the walk must cover the wizard's routes"
     assert not unguarded, f"onboarding routes not behind manage_apps: {unguarded}"
+    assert seen_reads == RESPONDER_READS_UNDER_APPS, (
+        "a responder read named here no longer exists; the exemption must not "
+        f"outlive its route: {RESPONDER_READS_UNDER_APPS - seen_reads}"
+    )
 
 
 def _dependency_names(dependant) -> set[str]:

@@ -46,30 +46,119 @@ pytestmark = pytest.mark.anyio
 
 APP_TOKEN = "s3cr3t-metrics-token"
 
-DETECTION_ROUTES = {
-    ("GET", "/apps/{app_id}/detection"),
+DETECTION_OPERATOR_ROUTES = {
+    # Forcing an evaluation is a human override of the detector's own cadence,
+    # and the raw bucket series is the telemetry itself. Both stay operator work,
+    # narrowed per application.
     ("POST", "/apps/{app_id}/detection/evaluate"),
     ("GET", "/apps/{app_id}/rollups"),
 }
 
+DETECTION_RESPONDER_READS = {
+    # What the platform currently *believes*, and where the application sits.
+    # Session-scoped to the caller's tenant and carrying no permission, for the
+    # reason the incident routes already carry none: the frozen roles matrix
+    # gives the incident commander no `manage_apps` and the SME nothing at all,
+    # and the S7 proposal sheet - the screen a declaration is made from - is
+    # built out of exactly these three reads. A permission here does not protect
+    # anything: `GET /incidents/{id}` already publishes the same proposal
+    # snapshot, with its families, health score and evidence refs, to any
+    # session in the tenant. Found by the S4 browser walkthrough, where no
+    # single role could complete "the IC declares in the UI" (DR-089).
+    ("GET", "/apps/{app_id}/detection"),
+    ("GET", "/apps/{app_id}/lifecycle"),
+    ("GET", "/apps/{app_id}/change-window"),
+}
 
-@pytest.mark.req("REQ-012", "REQ-040")
-async def test_every_detection_route_is_behind_manage_apps(api):
-    """Detection reads an application's telemetry and can be made to run a
-    scrape. It is the same operator job the rest of `/apps` is."""
+
+def _route_guards() -> dict[tuple[str, str], tuple[set[str], str]]:
+    """Each route's (permissions, credential), read from its own dependency
+    closure - so a route guarded by the wrong thing fails, not only an
+    unguarded one."""
+    from signalforge.api.openapi import guard_of
     from signalforge.tests.security.test_authz_matrix import _walk_api_routes
     from signalforge.tests.security.test_onboarding_boundary import _dependency_names
 
-    found = set()
+    found: dict[tuple[str, str], tuple[set[str], str]] = {}
     for route in _walk_api_routes(api_app.routes):
         path = getattr(route, "path", "")
         for method in getattr(route, "methods", set()) or set():
-            if (method, path) not in DETECTION_ROUTES:
-                continue
-            found.add((method, path))
-            names = _dependency_names(route.dependant)
-            assert Permission.MANAGE_APPS.value in names, f"{method} {path}"
-    assert found == DETECTION_ROUTES, f"missing detection routes: {DETECTION_ROUTES - found}"
+            found[(method, path)] = (
+                _dependency_names(route.dependant),
+                guard_of(route.dependant).auth,
+            )
+    return found
+
+
+@pytest.mark.req("REQ-012", "REQ-040")
+async def test_detection_writes_stay_operator_work_and_the_reads_are_responder_work(api):
+    """The split, pinned in both directions.
+
+    Written failing-first when the reads were loosened: the previous version of
+    this file asserted `manage_apps` on the detection read, so making the
+    proposal sheet reachable by the person who declares had to be a decision
+    taken here rather than a guard quietly disappearing.
+    """
+    guards = _route_guards()
+
+    for method, path in DETECTION_OPERATOR_ROUTES:
+        assert (method, path) in guards, f"missing route {method} {path}"
+        permissions, _auth = guards[(method, path)]
+        assert Permission.MANAGE_APPS.value in permissions, (
+            f"{method} {path} must stay behind manage_apps"
+        )
+
+    for method, path in DETECTION_RESPONDER_READS:
+        assert (method, path) in guards, f"missing route {method} {path}"
+        permissions, auth = guards[(method, path)]
+        assert Permission.MANAGE_APPS.value not in permissions, (
+            f"{method} {path} is read by the person who declares, who by the "
+            "frozen roles matrix never holds manage_apps"
+        )
+        # Not unguarded: still a real session, resolved before the handler runs.
+        assert auth == "session", f"{method} {path} must still resolve a session"
+
+
+@pytest.mark.req("REQ-012", "REQ-043", "REQ-046")
+async def test_the_person_who_declares_can_read_the_proposal_they_declare_from(api):
+    """The S4 acceptance clause "the IC declares in the UI", as a guard test.
+
+    An incident commander holds `declare_incident` and, by the frozen matrix,
+    never holds `manage_apps`. If the three reads behind the proposal sheet
+    demanded one, the only person allowed to declare could not see what they
+    were declaring - and the only person who could see it could not declare.
+    """
+    owner_token, _tenant = owner(api)
+    onboard(api, owner_token)
+    ic = api.invite_and_accept(
+        owner_token,
+        email="ic@acme.io",
+        roles=["incident_commander"],
+        display_name="Ida Commander",
+        password="ic-strong-password",
+    )
+    token = ic["tokens"]["access_token"]
+    headers = api.auth_header(token)
+
+    for path in ("detection", "lifecycle", "change-window"):
+        response = api.client.get(f"/apps/{APP_ID}/{path}", headers=headers)
+        assert response.status_code == 200, f"/{path}: {response.text}"
+
+    # And the operator half is still refused to them: reading what the platform
+    # believes is not permission to change what it watches or to force a scrape.
+    assert (
+        api.client.post(
+            f"/apps/{APP_ID}/detection/evaluate", json={}, headers=headers
+        ).status_code
+        == 403
+    )
+    assert api.client.get(f"/apps/{APP_ID}/rollups", headers=headers).status_code == 403
+    assert (
+        api.client.put(
+            f"/apps/{APP_ID}/mapping", json={"signals": []}, headers=headers
+        ).status_code
+        == 403
+    )
 
 
 @pytest.mark.req("REQ-013", "REQ-040")
@@ -130,9 +219,19 @@ async def test_an_operator_narrowed_to_one_application_is_refused_on_another(
     token = member["tokens"]["access_token"]
 
     assert detection(api, token, APP_ID)["app_id"] == APP_ID
+    # The *operator* half is narrowed per application; the read is not, because
+    # it carries no permission for a permission to narrow (DR-089).
     assert (
         api.client.get(
-            "/apps/settlement/detection", headers=api.auth_header(token)
+            "/apps/settlement/rollups", headers=api.auth_header(token)
+        ).status_code
+        == 403
+    )
+    assert (
+        api.client.post(
+            "/apps/settlement/detection/evaluate",
+            json={},
+            headers=api.auth_header(token),
         ).status_code
         == 403
     )
@@ -147,7 +246,7 @@ async def test_an_operator_narrowed_to_one_application_is_refused_on_another(
 
     assert (
         api.client.get(
-            f"/apps/{APP_ID}/detection", headers=api.auth_header(token)
+            f"/apps/{APP_ID}/rollups", headers=api.auth_header(token)
         ).status_code
         == 403
     )

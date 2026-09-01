@@ -251,6 +251,14 @@ def test_the_war_room_and_the_pager_are_not_behind_a_role_group():
     for path in ('"/incidents"', '"/my"', '"/my/pages"'):
         assert path not in groups, f"{path} must not join a role group"
     assert "must never join a role group" in middleware
+    # `/apps` is matched exactly, so the app-detail screen - which is where the
+    # proposal sheet and its Declare buttons live - is reachable by the incident
+    # commander, who never holds manage_apps (DR-089). Only the wizard beneath
+    # it is administration.
+    exact = middleware.split("ORG_GROUP_EXACT = ")[1].split("]")[0]
+    assert '"/apps"' in exact and '"/apps"' not in groups
+    suffixes = middleware.split("ORG_GROUP_SUFFIXES = ")[1].split("]")[0]
+    assert '"/onboard"' in suffixes
 
 
 @pytest.mark.req("REQ-007")
@@ -316,3 +324,68 @@ def test_the_cockpits_types_match_the_apis_response_models():
                 f"{model.__name__}.{field} is served by the API and has no type "
                 "in the cockpit - run through features/*/api.ts"
             )
+
+
+@pytest.mark.req("REQ-033", "REQ-045")
+def test_the_cockpit_opens_the_socket_with_a_ticket_and_never_with_a_session_token():
+    """The S3 gap S4 carried, closed - and closed without weakening the control
+    that caused it. The browser never reads the session cookie; it asks its own
+    origin for a short-lived ticket and spends that on the handshake."""
+    store = code("lib", "ws", "store.ts")
+    assert "/api/proxy/auth/ws-ticket" in store, (
+        "the ticket is fetched through the cookie proxy, server-side"
+    )
+    assert '"ticket"' in store or "TICKET_SUBPROTOCOL" in store
+    # A ticket in a query string is a ticket in every access log on the path.
+    assert "?ticket=" not in store and "?token=" not in store
+    # And the store must not try to read the session out of the browser.
+    for forbidden in ("document.cookie", "sf_access", "localStorage"):
+        assert forbidden not in store, (
+            f"the socket store must not touch {forbidden}: the session token is "
+            "httpOnly on purpose"
+        )
+
+
+@pytest.mark.req("REQ-007", "REQ-033")
+def test_there_is_exactly_one_websocket_in_the_cockpit():
+    """CLAUDE.md's web rule: one WebSocket store. Six open panels is one socket."""
+    import re as _re
+
+    offenders = []
+    for path in WEB.rglob("*.ts*"):
+        if any(part in ("node_modules", ".next") for part in path.parts):
+            continue
+        if path.match("lib/ws/store.ts"):
+            continue
+        if _re.search(r"new WebSocket\(", path.read_text(encoding="utf-8")):
+            offenders.append(str(path.relative_to(WEB)))
+    assert not offenders, f"a second WebSocket outside the store: {offenders}"
+
+
+@pytest.mark.req("REQ-033", "REQ-045")
+def test_the_socket_only_ever_triggers_a_re_read_and_never_carries_the_data():
+    """The nudge design, asserted on the client half: a `room.changed` frame
+    causes the hook to call the reload it was given, and the screen's data still
+    arrives over the authorised HTTP route."""
+    hook = read("features", "warroom", "hooks", "useLiveRoom.ts")
+    assert "room.changed" in hook
+    assert "latest.current()" in hook, "a nudge re-reads; it is not rendered"
+    assert "setState" not in hook, (
+        "the live hook must not hold screen data - the typed client is the only "
+        "path anything reaches a screen by"
+    )
+
+
+@pytest.mark.req("REQ-033", "REQ-045")
+def test_the_screens_keep_polling_when_the_socket_is_not_available():
+    """Degradation, stated in code rather than hoped for. A cockpit whose socket
+    is down is the S4 cockpit, not a broken one."""
+    hook = read("features", "warroom", "hooks", "useWarRoom.ts")
+    assert "ROOM_POLL_MS" in hook and "ROOM_LIVE_POLL_MS" in hook
+    assert "connected ? ROOM_LIVE_POLL_MS : ROOM_POLL_MS" in hook
+    assert "connected ? PAGER_LIVE_POLL_MS : PAGER_POLL_MS" in hook
+    # And the reader is told which mode they are in.
+    badge = read("features", "warroom", "components", "LiveBadge.tsx")
+    assert "Polling every" in badge and "Live" in badge
+    for component in ("WarRoomShell.tsx", "MobilePaging.tsx"):
+        assert "LiveBadge" in read("features", "warroom", "components", component)

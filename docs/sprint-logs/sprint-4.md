@@ -86,27 +86,117 @@ Goal: steady state to a declared P0 with progressive escalation, all human-gated
   rather than assumed. `npm run build` green with 21 routes (15 before); `tsc --noEmit`
   clean.
 
+## Built after the sprint: the S4 carry-over pass (2026-09-01)
+
+Four gaps this log recorded honestly were closed in a follow-up session, plus one the
+closure itself uncovered. Nothing below relaxed a control; one guard moved, deliberately
+and with its reasoning recorded.
+
+- **[S4-C01][REQ-033, REQ-045] The cockpit's socket, and the credential that made it
+  possible.** DR-087 named the two ways out of the polling gap and rejected the cheap
+  one; this is the other one. `POST /auth/ws-ticket` mints a 30-second, single-use JWT
+  typed `ws_ticket`, bound to the caller's tenant, user *and session*, and the browser
+  spends it as the `ticket, <value>` subprotocol on the `/ws` handshake - a header, never
+  a query parameter. The session token stays in its httpOnly cookie and browser
+  JavaScript still cannot read it, which was the whole point. The type is what makes it a
+  credential rather than a second session: `JWTAccessTokenService.verify` refuses a
+  ticket and `JWTSocketTicketService.redeem` refuses an access token, so the two are not
+  interchangeable in either direction; redeeming consumes the `jti`, so a captured
+  handshake replayed a second later is refused inside its own lifetime; and the ticket
+  resolves through the *same* session lookup a bearer token does, so a logout closes the
+  socket door as firmly as it closes the HTTP one (DR-091).
+  What arrives is deliberately thin. A `cockpit-socket` consumer group on the existing
+  bus turns `incident.*` and `warroom.*` into `{"type":"room.changed", incident_id,
+  topic, seq}` for the sockets watching that incident - **a nudge, not data**. The screen
+  re-reads through the authorised HTTP route it was already polling, so the socket never
+  becomes a second read path with its own authorisation to get wrong (DR-092). The poll
+  does not stop; it slows to thirty seconds while the socket is up, because the hub drops
+  a frame on purpose when one browser falls behind, and a screen that stopped reading
+  entirely would go stale without noticing. `LiveBadge` says which mode the screen is in,
+  because a responder who believes a screen is live when it is not is how somebody
+  concludes nobody is answering.
+  Verified: 18 REQ-tagged tests written failing-first - the six credential properties
+  (short-lived, single-use, typed both ways, session-bound, tenant-bound, authenticated
+  to obtain), the nudge's shape, its tenant scope asserted by watching the *right*
+  incident id from the *wrong* tenant, and the client half held by structural tests
+  including one that fails if a second `new WebSocket(` appears anywhere outside the
+  store.
+
+- **[S4-C02][REQ-041, REQ-046] A corroborated P0, produced legitimately.** This log
+  recorded that the live acceptance proposed P2/P3 rather than P0 because only one signal
+  family was anomalous, and called that the floor working. It was - but the acceptance
+  clause still went unmet, and the reason was the *drill*, not the gate. `drills/` now
+  holds `s4-acceptance.yaml`: the fault moves from `FIB-7` (region-b's route only) to
+  `CORE`, the one link both regions cross, and the second witness is SignalForge's own
+  synthetic probe rather than a second metric from the same reporter - two measurements
+  of two different things by two different parties, which is what "independent" has to
+  mean. `MIN_INDEPENDENT_FAMILIES`, the customer-facing requirement, the severity matrix
+  and the human-declaration floor are all untouched (DR-090).
+  Verified: `tests/reference/test_reference_acceptance.py` drives the **real JVM
+  harness** with its own traffic generator switched off, so the success ratio is
+  arithmetic over the payments the test placed rather than a sample of a seeded stream.
+  Twelve steady ticks (`steady`, health `healthy`, no proposal), the injection, then one
+  tick to `watch` with corroboration explicitly false, then two more to `proposed` with
+  families `{availability, business}`, P0, 2 of 2 regions, tier-1 journey, success rate
+  under 80 percent, `requires_human` true and `declared` false - and `GET /incidents`
+  still returning zero, because detection reached a P0 proposal and stopped. The org
+  owner who onboarded the application is refused the declaration (403, no
+  `declare_incident`); an incident commander makes it, and the record reads
+  `severity_source: proposed`, `overrode_detection: false`, `declared_by_human: true`.
+
+- **[S4-C03][REQ-014, REQ-032, REQ-045] The bridge's evidence excerpt is redacted.** The
+  ingest floor is *reused*, not reimplemented: `domain/ingest/redaction.mask` is applied
+  in `BridgeService` on the way out - so nothing unmasked reaches the collaboration tool
+  either - and on the way in, so a line typed on the far side or a scripted drill line is
+  masked before it can become a commitment's evidence. Two masking implementations drift,
+  and the weaker one would eventually decide what a data-protection incident looks like
+  (DR-093). The bridge event carries `redacted` and names the policy when something was
+  removed, the way an ingest envelope does.
+  Verified: written failing-first. A card number and an email address are typed onto a
+  real bridge through the shipped teams-sim adapter, the commitment still becomes a task,
+  and neither string appears in the war-room response, the transcript, the task board,
+  the join brief, the event stream, the audit chain or the scrape.
+
+- **[S4-C04] A browser drove the acceptance.** The qualification this log carried from S3
+  is gone. `scripts/drill_run.py` reads the drill file and sets a live cockpit up to the
+  moment before a declaration - onboard, invite, rotate, drive load, heal whatever the
+  last run left applied, inject, announce a deployment over the frozen ingest path with a
+  real HMAC - and then stops, because what happens next is a person pressing Declare.
+  `web/e2e/cockpit.spec.ts` is the journey, one test, against the live stack, using the
+  system browser (`channel: "msedge"`) so nothing downloads a browser bundle. It skips,
+  loudly, when there is no stack, the way the reference suite skips without a jar.
+  Recorded live: `/apps/payouts` steady; `/apps/checkout` showing the S6 watch banner
+  ("AI is checking - Something is being observed. Nothing has been decided, and no
+  incident exists.") naming the signals under observation; `/apps/payments` showing the
+  P0 proposal sheet with all five corroboration rows ticked and the change-window chip
+  lit; Declare pressed, landing in INC-000001's war room with its eleven panels, its
+  membership gaps stated, per-row countdowns, and the **Live** badge - the socket
+  connected, with two `POST /api/proxy/auth/ws-ticket` 201s in the network log; a second
+  session as the SME finding their own page on `/my/pages` and acknowledging it; and that
+  same session refused **403** on somebody else's page while holding no permissions at
+  all.
+
+- **[S4-C05][REQ-012, REQ-043] The clause the browser found: nobody could complete it.**
+  The walkthrough's first act failed. The S7 proposal sheet lives on `/apps/[appId]`,
+  which reads `/apps/{id}/lifecycle`, `/detection` and `/change-window` - all three
+  guarded by `manage_apps`, which the frozen roles matrix gives to the org owner alone.
+  The incident commander holds `declare_incident` and cannot open the screen; the org
+  owner can open it and cannot declare. **No single role could satisfy "IC declares in
+  the UI"**, which is one of this sprint's four acceptance clauses, and no API test could
+  have caught it because each half worked.
+  The three reads are now session-scoped tenant reads, which is what the incident reads
+  already are and for the same reason - `GET /incidents/{id}` already published the same
+  proposal snapshot, families, health score and evidence refs included, to any session in
+  the tenant, because the SME who answers a page holds nothing at all. Every write under
+  `/apps` still carries `manage_apps`: forcing an evaluation, the raw rollup series, the
+  mapping, the topology, the SLOs, deleting the application. The narrowing genuinely
+  given up is per-application on those three reads, and it is stated rather than glossed
+  (DR-089). Written failing-first, pinned as a literal three-route list in two security
+  files so a fourth cannot join quietly, and asserted from the responder's side: an
+  incident commander reads all three and is refused all four writes; an SME reads the
+  lifecycle and is refused the evaluate and the rollups.
+
 ## Not built / deferred
-
-- **No cockpit WebSocket client; the screens poll.** Carried over from S3, and now
-  understood rather than merely outstanding. The session token lives in an httpOnly
-  cookie that browser JavaScript cannot read, so a cross-origin WebSocket handshake has
-  nothing to authenticate with. The two ways out are handing the token to JavaScript -
-  which undoes the S1 control keeping it out of XSS reach, for a refresh interval - or
-  minting a short-lived socket ticket, which is a credential design in its own right and
-  not something to append to a screens task. Impact: the war room refreshes every five
-  seconds and the pager every ten. This is survivable *only* because nothing on those
-  screens is computed in the browser - the countdowns are the server's own numbers - so
-  the screen can be stale but never wrong. Plan: a socket ticket endpoint, designed as a
-  credential, in S5 or S6 (DR-087).
-
-- **No browser session drove the acceptance.** Every clause was driven live over HTTP
-  against the running platform and the JVM harness (see the demoable checkpoint), and the
-  screens build green and are held by structural and contract-pinning tests - but nobody
-  clicked. Impact: the UI half is evidenced by build plus tests plus an identically-driven
-  API, not by a recorded session. Plan: the walkthrough is written out step by step below
-  and is the first thing to run at the S5 demo. This is the same qualification S3 carried
-  and it has not improved.
 
 - **The four agent panels are placeholders.** Next Best Action, AI Copilot, Warning and
   Guidance and Team Chat render with their real titles and one sentence saying what fills
@@ -204,9 +294,36 @@ Goal: steady state to a declared P0 with progressive escalation, all human-gated
   rather than by a test: the cockpit typed a `chip` field on the change window that the
   API never served, so the chip would never have lit; the pinning test now covers
   `ChangeWindowOut` and `ChangeWindowItemOut` as well.
-- suite result: 874 passed, 0 failed, 0 skipped (792 at the end of S4-T02, 686 at the end
-  of S3). Full breakdown by module and by requirement in docs/21-test-report.md; the
-  requirement join is in docs/20-RTM.md.
+- suite result at the end of the sprint: 874 passed, 0 failed, 0 skipped (792 at the end
+  of S4-T02, 686 at the end of S3). Full breakdown by module and by requirement in
+  docs/21-test-report.md; the requirement join is in docs/20-RTM.md.
+- **the S4 carry-over pass added 25 tests** and changed four existing ones. New:
+  `tests/security/test_socket_ticket.py` (14 - the socket credential, every property in
+  the direction that would hurt), `tests/warroom/test_socket_push.py` (4 - the nudge, its
+  shape and its tenant scope), `tests/reference/test_reference_acceptance.py` (1 - the
+  corroborated P0 against the real JVM harness), one redaction regression in
+  `tests/security/test_warroom_boundary.py`, four cockpit-socket structure tests in
+  `test_web_warroom.py`, and one more guard test in
+  `tests/security/test_detection_boundary.py`.
+  **Written failing-first**, all of the security-shaped ones: the ticket suite before the
+  ticket existed, the bridge redaction before the mask was applied, and the responder-read
+  guard tests before the three routes moved - so the guard change was a decision taken in
+  a test file rather than a permission quietly disappearing. Changed rather than added:
+  `test_every_detection_route_is_behind_manage_apps` became
+  `test_detection_writes_stay_operator_work_and_the_reads_are_responder_work`, the
+  per-application narrowing assertion moved from the detection *read* to the rollups read
+  and the evaluate write, `test_every_onboarding_route_is_manage_apps` now pins the three
+  responder reads as a literal exemption list, and the SME's incident-boundary test now
+  asserts they may read the lifecycle and still may not force an evaluation.
+  **Two defects the live run found that the tests did not.** S4-C05 is the first: both
+  halves of the authorisation worked, and only the journey through them was impossible.
+  The second is smaller and more instructive - `signalforge_socket_nudges_total` was never
+  declared in the registry, so every nudge the `cockpit-socket` consumer delivered *then*
+  raised a `KeyError` and dead-lettered. Every assertion in `test_socket_push.py` still
+  passed, because the frame is sent before the metric is counted; the DLQ on the running
+  install is where it showed. The metric is declared, and the tests now read the
+  dispatcher's own report and refuse a pass with a dead letter in it - calibrated by
+  renaming the metric and watching the assertion fire.
 
 ## Artifacts updated
 
@@ -221,21 +338,67 @@ Goal: steady state to a declared P0 with progressive escalation, all human-gated
   war_room_members, incident_pages, incident_tasks)
 - 11 api spec (docs/11-api-spec.md): the detection section, the incidents and
   change-window section, the war-room section, and twenty-one new event rows
-- 11 api spec, machine-readable half (docs/11-openapi.json): 77 paths, generated
+- 11 api spec, machine-readable half (docs/11-openapi.json): 78 paths after the
+  carry-over pass added `POST /auth/ws-ticket`, generated
 - 14 functional tests: signalforge/tests/detection/, tests/incidents/, tests/warroom/,
-  test_web_warroom.py
-- 18 security tests: tests/security/test_incident_boundary.py, test_warroom_boundary.py
+  test_web_warroom.py; plus tests/warroom/test_socket_push.py and
+  tests/reference/test_reference_acceptance.py from the carry-over pass
+- 18 security tests: tests/security/test_incident_boundary.py, test_warroom_boundary.py;
+  plus tests/security/test_socket_ticket.py from the carry-over pass
 - 20 RTM regenerated: 52 requirements, all seven S4 requirements green with tests joined
-- 21 test execution report regenerated: 874 tests, by module and by requirement
-- decision-record.md: DR-060 through DR-088
+- 21 test execution report regenerated, by module and by requirement
+- decision-record.md: DR-060 through DR-088 in the sprint, DR-089 through DR-094 in the
+  carry-over pass
+- drills/: `s4-acceptance.yaml`, the first drill file - the acceptance scenario as data,
+  read by the acceptance test and by `scripts/drill_run.py`. Deleting it leaves a working
+  product; the test skips and says why (CLAUDE.md rule 7)
+- web/: `e2e/cockpit.spec.ts` and `playwright.config.ts`, the browser journey; the system
+  browser is used by channel so nothing downloads a browser bundle
 
 ## Security notes
 
-- **New surfaces**: three detection routes under /apps/{app_id} (all manage_apps), nine
-  lifecycle routes, and eleven war-room routes. Every HTTP route that can name a tenant
-  sits behind the RBAC dependency and is covered by the router-coverage walk, which reads
-  the *permission* out of each route's own dependency closure - so a route guarded by the
-  wrong permission fails the build, not only an unguarded one.
+- **New surfaces**: three detection routes under /apps/{app_id}, nine lifecycle routes,
+  and eleven war-room routes. Every HTTP route that can name a tenant sits behind the RBAC
+  dependency and is covered by the router-coverage walk, which reads the *permission* out
+  of each route's own dependency closure - so a route guarded by the wrong permission
+  fails the build, not only an unguarded one.
+- **The carry-over pass added one route and moved three guards.**
+  `POST /auth/ws-ticket` is the new surface: a session write with no permission, and the
+  sixth entry in `SESSION_ONLY_WRITES`. It takes no parameter at all - the ticket is cut
+  from the principal the request already resolved - so there is nothing in the request for
+  a permission to protect, and a permission would disconnect the SME's pager for the same
+  reason the war room's four writes carry none. Its response shape joins `SHOWN_ONCE`, and
+  `ws_ticket` joins the credential-property census, so the API-surface test now refuses any
+  *other* response model that returns one. The field is named `ws_ticket` rather than
+  `ticket` on purpose: an incident carries an ITSM `ticket`, which is a reference and not a
+  secret, and a census that cannot tell them apart is not a census.
+  The three moved guards are `GET /apps/{id}/detection`, `/lifecycle` and `/change-window`
+  (S4-C05, DR-089). This is the pass's one security-shaped decision and the only one worth
+  arguing about, so it is stated plainly rather than folded into a feature note: three
+  reads that were `manage_apps` are now session-scoped tenant reads. What that buys is the
+  sprint's own acceptance clause - before it, no single role could declare in the UI. What
+  it costs is per-application read narrowing inside a tenant: an operator bound to one
+  application can now read another's stance, though not its telemetry, and nothing they can
+  act on. What it does *not* cost is a new disclosure class, because `GET /incidents/{id}`
+  already published the same proposal snapshot to any session in the tenant. Every write
+  under `/apps` is unchanged, the exemption is pinned as a literal three-route list in two
+  security files, and the guard tests were written failing-first.
+- **The socket credential is a credential, and is treated as one.** A ticket is typed
+  (`ws_ticket`), so the access-token verifier refuses it and it reaches no HTTP route;
+  single-use, so a captured handshake replayed inside its own lifetime is refused;
+  session-bound, so a logout kills it; thirty seconds long, and not configurable. It is
+  presented as a subprotocol rather than a query parameter, so it stays out of access logs
+  and proxy history - the same rule `/ws` already applied to bearer tokens. A refusal says
+  nothing about which of the five ways it failed. The replay set is per node, which is the
+  whole deployment today and is recorded as a known issue rather than as a property.
+- **The socket carries nudges, not data** (DR-092), so it introduces no second read path
+  and no second authorisation to get wrong. Watching an incident is not authorised because
+  it discloses nothing: the re-read is, and a socket in the wrong tenant receives nothing
+  at all - asserted by watching the *right* incident id from the *wrong* tenant.
+- **The bridge now meets the ingest redaction floor** (S4-C03), on the way out as well as
+  in. The residual risk this log recorded - a responder pasting a card number onto the
+  bridge and finding it on the task board - is closed, and the customer's data no longer
+  reaches the collaboration vendor either.
 - **The one deliberate loosening, and why it is a tightening.** Four session writes carry
   no permission (DR-077). The frozen matrix gives `Role.SME` nothing, and the SME is the
   person a page exists to reach; a permission on the acknowledge path would have locked
@@ -281,24 +444,38 @@ Goal: steady state to a declared P0 with progressive escalation, all human-gated
 - **Residual risks, accepted and stated**: an unassigned incident task is completable by
   anybody in the tenant, which is deliberate (somebody has to be able to close out work
   that was done) and bounded by the task being incident-scoped and every completion
-  audited; the commitment harvester reads bridge text that may contain anything an author
-  typed, and it stores an evidence excerpt - the ingest redaction floor does not apply to
-  a message this platform posted itself, so a responder who types a card number onto the
-  bridge puts it on the task board; the escalation sweep's cross-tenant work list means
-  one slow tenant's pages can delay another's escalation on a shared node, bounded by the
-  100-row limit; and the cockpit polls, so a page is visible up to ten seconds after it
-  was raised.
+  audited; the escalation sweep's cross-tenant work list means one slow tenant's pages
+  can delay another's escalation on a shared node, bounded by the 100-row limit; and a
+  cockpit whose socket is unavailable falls back to polling, so a page can be visible up
+  to ten seconds after it was raised - the screen says which mode it is in rather than
+  leaving a responder to assume. The bridge-redaction risk this list carried is closed
+  (S4-C03). One risk is *new* and is the carry-over pass's own: three reads under
+  `/apps/{id}` no longer narrow per application within a tenant (DR-089, S4-C05).
 
 ## Known issues and technical debt
 
-- The cockpit has no /ws client and therefore polls (see Not built). This is the one S3
-  gap that S4 did not close, and it is now understood well enough to be scheduled rather
-  than merely carried.
-- The bridge's evidence excerpt is not redacted. The ingest redaction floor applies at
-  write time to messages arriving *through* ingest; a message this platform posts on
-  behalf of a signed-in user does not pass through it. A responder pasting a card number
-  onto the bridge would have it stored on the task's `evidence_ref`. The fix is to apply
-  the same floor in `BridgeService.post`, and it is small.
+- ~~The cockpit has no /ws client and therefore polls.~~ Closed by the carry-over pass
+  (S4-C01): the cockpit connects with a socket ticket and re-reads on a nudge, and the
+  poll remains underneath at a slower cadence as the degraded path.
+- ~~The bridge's evidence excerpt is not redacted.~~ Closed by the carry-over pass
+  (S4-C03): the ingest floor is applied in `BridgeService` on the way out and on the way
+  in, reusing `domain/ingest/redaction.mask` rather than adding a second policy.
+- **A consumer that raises after it has already had its effect passes its own tests.** The
+  `cockpit-socket` metric defect above is the general shape: a handler whose side effect
+  lands before its bookkeeping looks correct from the outside and dead-letters every
+  event. The tests now assert `DispatchReport.dead_lettered == 0`, which is the only place
+  the difference is visible, and every future consumer group should be tested the same
+  way.
+- **Adding a consumer group replays the log.** `cockpit-socket` starts at offset zero, so
+  the first boot after this change walks every event already in the outbox - observed at
+  9,820 events on the development database, drained in about thirty seconds with
+  `/health` reading `degraded` (`lag`) until it caught up. Correct behaviour and
+  self-healing, but it is what an operator will see once, and it is worth knowing before
+  they see it.
+- **The socket's replay guard is per node.** A redeemed ticket's `jti` is remembered in
+  process. That is the whole deployment today (one machine, no Docker) and the ticket's
+  thirty-second life bounds the window regardless, but a multi-node install needs a
+  shared store before the single-use property is install-wide rather than node-wide.
 - `_notification_bindings` and `_escalation_for` re-read every binding, rotation and
   policy on every page. Right at this scale and obviously bounded; a cache keyed on the
   binding's `updated_at` is the change if an install ever pages continuously.
@@ -389,12 +566,26 @@ sprint; step 13 is the browser walkthrough nobody performed.
 14. `bash scripts/check_clean.sh` green; `gen_rtm`, `gen_test_report`, `gen_stories`,
     `gen_erd` re-run and `gen_openapi.py --check` reporting "up to date";
     `.venv/Scripts/python.exe -m pytest -q` - 874 passed.
-15. **What was not recorded**: the browser walkthrough. Open `/apps/payments` to see the
-    stance, the golden tiles, the change-window chip and the Grafana toggle with its
-    fallback; watch the S6 banner appear at `watch`; declare from the S7 sheet; open
-    `/incidents/{id}` for the S9 shell and its eleven panels; open `/my/pages` on a phone
-    to acknowledge. Every route behind those screens was driven live in steps 3 to 13, and
-    `npm run build` is green with 21 routes, but nobody clicked in this unattended run.
+15. **The browser walkthrough, recorded (S4 carry-over).** `bash run.sh`, then
+    `python scripts/drill_run.py drills/s4-acceptance.yaml`, then a browser. Observed
+    live, in order: `/apps/payouts` reading **steady**, health `healthy`, score 100, no
+    banner - and the proposal sheet saying plainly that the matrix is not proposing a
+    severity while a person may still declare one. `/apps/checkout` at **watch** with the
+    S6 banner - *"AI is checking. Something is being observed. Nothing has been decided,
+    and no incident exists."* - naming what it is watching. `/apps/payments` at
+    **proposed** with the S7 sheet: **P0**, rule *tier-1 journey below 80% in every
+    region*, all five corroboration rows ticked (`availability, business`; customer-facing;
+    2 of 2 regions; not a storm), four evidence refs, and the **Change window open** chip
+    beside it. **Declare P0 as proposed** pressed, landing on `/incidents/{id}`:
+    INC-000001, P0, active, the eleven S9 panels, two membership gaps stated
+    (`comms_lead`, `executive`), four pages with per-row countdowns, an **Acknowledge**
+    button on the commander's own row and none on anybody else's, and the **Live** badge -
+    the socket connected, with `POST /api/proxy/auth/ws-ticket` returning 201 in the
+    network log. Then a second session as the SME: `/my/pages` showing exactly one page -
+    their own - which they acknowledged; and, from that same session, a direct attempt on
+    somebody else's page refused **403** while holding no permissions at all.
+    The walkthrough found one defect, and it is recorded as S4-C05: the incident commander
+    could not open the screen the Declare button is on. That is what a browser run is for.
 
 ## Coverage checklist ticks
 
@@ -410,32 +601,45 @@ sprint; step 13 is the browser walkthrough nobody performed.
   tasks with owner and due
 - S4 Severity proposed from observed impact and never declared by a machine
 - S4 Screens S5, S6, S7, S8, S9 (ten panels plus Who is in the room) and S22
-- Not ticked: the cockpit notification socket, which remains the one S3 capability with no
-  screen behind it (see Not built). "All 23 artifacts present per 00-INDEX map" stays
-  unticked for the same reasons as S3: 08 is a stub, 09/15/19/22/23 are scope stubs owned
-  by S5/S7, and 16 and 17 do not exist yet.
+- S4 carry-over: the cockpit notification socket now has a screen behind it - the war
+  room and the pager both connect over /ws with a socket ticket and say which mode they
+  are in. This was the one S3 capability with no screen; it is ticked.
+- S4 carry-over: a browser session drove the acceptance journey end to end, and the
+  journey is kept as `web/e2e/cockpit.spec.ts`.
+- Not ticked: "All 23 artifacts present per 00-INDEX map" stays unticked for the same
+  reasons as S3: 08 is a stub, 09/15/19/22/23 are scope stubs owned by S5/S7, and 16 and
+  17 do not exist yet.
 
 ## Entry criteria for next sprint: met
 
-- **Sprint 4's acceptance is met on all four clauses, with one qualification on the
-  third.** *Chaos on the harness produces Watch, then a corroborated P0 proposal with
-  evidence refs*: driven live - the stance moved steady → watch under a real injected
-  fault, and once the breach was sustained the proposal carried
-  `signal rollup:success/region-b` with region-a healthy beside it. The qualification is
-  honest and worth stating: the matrix proposed **P2, then P3** rather than P0, because
-  only one signal family was anomalous and the corroboration gate correctly refused to
-  call one family two. The IC declared P0 as an override and the record kept both. That is
-  the floor working, not a shortfall - a P0 proposal needs two independent families, and
-  producing one would have meant a drill that broke two things.
-  *IC declares in the UI*: declared live through the API the UI calls; the screens build
-  green and are held by tests, but nobody clicked (see Not built).
+- **Sprint 4's acceptance is met on all four clauses, without qualification, after the
+  carry-over pass.** *Chaos on the harness produces Watch, then a corroborated P0 proposal
+  with evidence refs*: the sprint itself reached Watch and then **P2/P3**, because its
+  drill broke one link on region-b's route and only one signal family became anomalous -
+  the corroboration gate correctly refusing to call one witness two, which was the floor
+  working rather than a shortfall. The clause was still unmet, and the fix was the drill,
+  not the gate (S4-C02, DR-090). With `drills/s4-acceptance.yaml` the same platform, the
+  same matrix and the same gate reach **steady → watch → proposed P0**, corroborated
+  across `availability` and `business`, 2 of 2 regions, tier-1 journey, worst success rate
+  23.33%, carrying four evidence refs - `rollup:payments-success/region-a`,
+  `rollup:payments-success/region-b`, `journey:upi/-` and
+  `slo:payments-availability/fast/region-b` - with `requires_human: true` and
+  `declared: false`, and `GET /incidents` still empty. Driven both ways: live against the
+  running platform and the JVM harness, and deterministically in
+  `tests/reference/test_reference_acceptance.py` against the real harness with its traffic
+  generator switched off.
+  *IC declares in the UI*: **clicked**, by an incident commander, on the S7 proposal sheet
+  - after the walkthrough found that no single role could do it and the three reads behind
+  that screen were corrected (S4-C05, DR-089).
   *A second browser session (SME) receives the page, non-ack escalates on the visible
   countdown*: driven live as a second authenticated session - the page appeared on that
   person's own pager, a third party and the commander were both refused with 403, and the
   unanswered page escalated to the next rotation member with a fresh countdown.
-  *The change-window chip appears from a real deploy hook call*: `deploy.sh` announced a
-  start over the frozen ingest path with a real HMAC, and `GET /apps/payments/change-window`
-  read `open: true` with the change in flight.
+  *The change-window chip appears from a real deploy hook call*: announced over the frozen
+  ingest path with a real HMAC - by the reference config repository's own deploy script
+  during the sprint, and by `scripts/drill_run.py` in the carry-over pass -
+  `GET /apps/payments/change-window` reading `open: true` with the change in flight, and
+  the chip **Change window open** rendered on the app-detail screen in a browser.
 - **Exit criteria** (CLAUDE.md's definition of done, applied to the sprint): code plus
   REQ-tagged tests passing - 874 passed, 0 failed, 0 skipped; artifacts touched - 03, 04,
   05, 10, 11 (both halves), 14, 18, 20 and 21, which covers all four the sprint named (04,
@@ -452,5 +656,10 @@ sprint; step 13 is the browser walkthrough nobody performed.
   Next Best Action somewhere to put a proposal; kb-index is waiting for the one assignment
   in `deps.Container` that gives it embeddings; and the policy floor - high-risk actions
   can never auto-execute - is already enforced in the domain, so an agent cannot reach
-  past it however it is prompted. The one gap S5 inherits is the same one S4 inherited and
-  did not close: the cockpit's socket, now with a designed reason and a plan.
+  past it however it is prompted. **The gap S5 was going to inherit - the cockpit's socket
+  - is closed** (S4-C01), so S5 starts with a live cockpit rather than a polled one, and
+  with a socket protocol whose frames carry no data, which is the shape an agent panel
+  wants: the panel asks the authorised route, the socket only says when to ask.
+  What S5 still owns, unchanged: the model-written join brief, the four agent panels, the
+  model-based commitment harvester, the Incident Brain, the Copilot, Warning and Guidance,
+  and topology reasoning. None of them was touched by the carry-over pass, deliberately.

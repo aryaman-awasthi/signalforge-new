@@ -9,7 +9,8 @@ import {
   formatCountdown,
   useCountdown,
 } from "@/features/warroom/hooks/useCountdown";
-import { useMyPages } from "@/features/warroom/hooks/useWarRoom";
+import { LiveBadge } from "@/features/warroom/components/LiveBadge";
+import { PAGER_POLL_MS, useMyPages } from "@/features/warroom/hooks/useWarRoom";
 
 /**
  * Screen 22 - the mobile paging page: acknowledge, and read the join brief.
@@ -32,7 +33,7 @@ import { useMyPages } from "@/features/warroom/hooks/useWarRoom";
  *   SME, who by the frozen roles matrix holds none.
  */
 export function MobilePaging() {
-  const { state, reload } = useMyPages(true);
+  const { state, reload, connected } = useMyPages(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [brief, setBrief] = useState<{ pageId: string; brief: Brief } | null>(null);
@@ -80,6 +81,7 @@ export function MobilePaging() {
       <header className="flex items-center gap-2">
         <h1 className="text-xl font-semibold">Your pages</h1>
         <span className="flex-1" />
+        <LiveBadge connected={connected} pollSeconds={PAGER_POLL_MS / 1000} />
         <span className="text-xs text-ink-muted">{pages.length} open</span>
       </header>
 

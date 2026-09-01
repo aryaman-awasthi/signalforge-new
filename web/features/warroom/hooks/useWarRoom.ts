@@ -14,8 +14,17 @@ import {
   myPages,
 } from "@/features/warroom/api";
 
+import { useLivePages, useLiveRoom } from "@/features/warroom/hooks/useLiveRoom";
+
 export const ROOM_POLL_MS = 5000;
 export const PAGER_POLL_MS = 10000;
+
+/** The poll when the socket is up. Not zero: the socket is an accelerator, and
+ * a screen that stopped reading entirely would go stale without noticing if a
+ * nudge were ever dropped - which the hub does deliberately when one browser
+ * falls behind. Thirty seconds is a safety net rather than a refresh rate. */
+export const ROOM_LIVE_POLL_MS = 30000;
+export const PAGER_LIVE_POLL_MS = 30000;
 
 export type RoomState =
   | { kind: "loading" }
@@ -25,18 +34,19 @@ export type RoomState =
 /**
  * S9's war-room shell (REQ-045).
  *
- * Polled rather than pushed, and that is an honest limitation rather than a
- * choice: the cockpit's session token lives in an httpOnly cookie that browser
- * JavaScript cannot read, so a cross-origin WebSocket handshake has nothing to
- * authenticate with. Giving JavaScript the token to fix that would weaken the
- * S1 control that keeps it out of XSS reach, and it is not a trade worth making
- * for a refresh interval. A socket ticket endpoint is the real answer and is a
- * credential design in its own right.
+ * Pushed *and* polled, in that order of preference, and both matter.
  *
- * Polling is adequate here because nothing on this screen is computed in the
- * browser: countdowns are the server's own numbers (see `useCountdown`), so a
- * five-second refresh lags reality by at most five seconds and never disagrees
- * with it.
+ * The push is the socket (`useLiveRoom`): the server nudges when something in
+ * this room moves and the screen re-reads immediately. The nudge carries no
+ * data - the re-read below is still the only way anything reaches this screen,
+ * so the authorised route is still the only read path.
+ *
+ * The poll never stops; it slows down. A cockpit whose socket is down, whose
+ * ticket endpoint is unreachable or whose browser dropped a frame under back
+ * pressure falls back to exactly the behaviour S4 shipped, without a broken
+ * screen and without anybody noticing at the wrong moment. Nothing here is
+ * computed in the browser - countdowns are the server's own numbers, see
+ * `useCountdown` - so a stale screen is late and never wrong.
  *
  * The brief and the bridge are read beside the room and each survives its own
  * failure. A room with no collaboration connector has no bridge at all, and the
@@ -65,17 +75,22 @@ export function useWarRoom(incidentId: string) {
     }
   }, [incidentId]);
 
+  const { connected } = useLiveRoom(incidentId, reload);
+
   useEffect(() => {
     live.current = true;
     void reload();
-    const handle = setInterval(() => void reload(), ROOM_POLL_MS);
+    const handle = setInterval(
+      () => void reload(),
+      connected ? ROOM_LIVE_POLL_MS : ROOM_POLL_MS,
+    );
     return () => {
       live.current = false;
       clearInterval(handle);
     };
-  }, [reload]);
+  }, [reload, connected]);
 
-  return { state, reload };
+  return { state, reload, connected };
 }
 
 export type PagerState =
@@ -90,6 +105,11 @@ export type PagerState =
  * so this hook cannot be pointed at anybody else even by mistake. That is what
  * lets the route carry no permission, and it is why the pager is safe to leave
  * open on a phone.
+ *
+ * This is the screen the socket was worth building for: a page raised at 03:00
+ * used to take up to ten seconds to appear. Now it arrives on the notification
+ * frame the platform was already sending, and the ten-second poll remains as
+ * the floor under it - a phone that slept through the socket still catches up.
  */
 export function useMyPages(openOnly = true) {
   const [state, setState] = useState<PagerState>({ kind: "loading" });
@@ -109,15 +129,20 @@ export function useMyPages(openOnly = true) {
     }
   }, [openOnly]);
 
+  const { connected } = useLivePages(reload);
+
   useEffect(() => {
     live.current = true;
     void reload();
-    const handle = setInterval(() => void reload(), PAGER_POLL_MS);
+    const handle = setInterval(
+      () => void reload(),
+      connected ? PAGER_LIVE_POLL_MS : PAGER_POLL_MS,
+    );
     return () => {
       live.current = false;
       clearInterval(handle);
     };
-  }, [reload]);
+  }, [reload, connected]);
 
-  return { state, reload };
+  return { state, reload, connected };
 }

@@ -1,0 +1,186 @@
+# Sprint 4 acceptance drill: steady state to a corroborated P0 proposal.
+#
+# WHY THIS FILE EXISTS
+#
+# Sprint 4's acceptance clause asks for "chaos on the harness produces Watch,
+# then a corroborated P0 proposal with evidence refs". The sprint's live run
+# produced Watch and then a P2/P3 proposal, because the drill it used broke one
+# thing in one region and only one signal family ever became anomalous. The
+# corroboration gate correctly refused to call one family two, and the IC
+# declared P0 by hand.
+#
+# That was the floor working, and nothing about the floor is changed here. What
+# was wrong was the *drill*: a scenario that breaches one family in one region
+# cannot legitimately produce a P0, and asking the product to produce one anyway
+# would have meant weakening the rule that makes a P0 proposal worth reading.
+#
+# So the scenario is fixed instead. It breaks something that genuinely reaches
+# both regions and produces two genuinely independent witnesses.
+#
+# WHAT MAKES THE EVIDENCE INDEPENDENT
+#
+#   1. `business` - the application's own payment success ratio, per region,
+#      reported by the application about itself.
+#   2. `availability` - SignalForge's own synthetic probe, issued by the
+#      platform against the public payment path and watched to fail.
+#
+# Those are two different measurements of two different things by two different
+# parties, which is what "independent" has to mean for a corroboration rule to
+# be worth having. One of them (both, in fact) is customer-facing.
+#
+# WHY THE FAULT IS ON *CORE*
+#
+# The harness's fabric gives region-a and region-b separate gateways and
+# aggregators, and exactly two shared links: CORE and RAIL. A fault on FIB-7 -
+# what the sprint's live run used - is on region-b's primary route only, which
+# is why one region stayed healthy beside it. CORE is crossed by both regions,
+# so loss there is a genuinely two-region customer-facing event. RAIL is the
+# wrong choice for a different reason: a payment lost at the rail is UNKNOWN
+# rather than FAILED, which is a reconciliation problem rather than a clean
+# availability one.
+#
+# NOTHING HERE IS A SHORTCUT
+#
+# The severity is still proposed by the application's own matrix from measured
+# impact; corroboration still needs two independent families with one
+# customer-facing; the proposal still carries `requires_human: true` and
+# `declared: false`; and an incident still exists only because a person pressed
+# Declare. This file changes what is broken, not what the platform concludes
+# about it.
+#
+# Read by signalforge/tests/reference/test_reference_acceptance.py. Deleting it
+# leaves a working product (CLAUDE.md rule 7); the acceptance test skips and
+# says why.
+
+drill_id: s4-acceptance
+name: Corroborated P0 on a shared fabric link
+sprint: 4
+scope: drill:s4-acceptance
+
+application:
+  app_id: payments
+  tier: tier_1
+  # The harness is started by the test on an ephemeral port; base_url is filled
+  # in at run time. A drill never hardcodes where an application lives.
+  base_url: null
+
+# `targets_the_application` says whether this connector talks to the harness
+# over HTTP and therefore needs its base URL. The notification channels do not:
+# they deliver to people, and pointing them at the application would be a
+# category error the adapter manifest refuses outright.
+connectors:
+  - adapter_id: http-observe-metrics
+    credential_scope: read_only
+    credential: ps-ro-4f1c8a2b6d9e
+    targets_the_application: true
+  - adapter_id: http-observe-health
+    credential_scope: read_only
+    credential: ps-ro-4f1c8a2b6d9e
+    targets_the_application: true
+  - adapter_id: http-observe-chaos
+    credential_scope: drill
+    credential: ps-drill-2c9f6b1a7e35
+    targets_the_application: true
+  # The pager channels a P0 rings. Their scope is `remediation`: sending a
+  # notification acts on the world, so it is not a read-only credential.
+  # No credential either: the in-app channel delivers over this platform's own
+  # socket and the simulated pager writes a transcript, so there is nothing to
+  # present to anybody. A drill that invented one would be describing a
+  # different install.
+  - adapter_id: notify-in-app
+    credential_scope: remediation
+    credential: null
+    targets_the_application: false
+  - adapter_id: page-sim
+    credential_scope: remediation
+    credential: null
+    targets_the_application: false
+
+mapping:
+  region_label: region
+  regions: [region-a, region-b]
+  signals:
+    # Witness one: the business counter, per region. Customer-facing.
+    - key: payments-success
+      signal: business
+      selector: payment_success_ratio
+      direction: lower_is_worse
+      unit: ratio
+      business_counter: true
+  journeys:
+    - journey_id: upi
+      name: UPI payment
+      tier: 1
+  probes:
+    # Witness two: the platform's own synthetic probe, one per region. Declared
+    # per region explicitly rather than with per_region, because the region is a
+    # query parameter of the application's public path rather than something the
+    # probe template can substitute.
+    - probe_id: upi-region-a
+      path: /api/payments/probe/upi?region=region-a
+      journey_id: upi
+      expected_status: 200
+      per_region: false
+    - probe_id: upi-region-b
+      path: /api/payments/probe/upi?region=region-b
+      journey_id: upi
+      expected_status: 200
+      per_region: false
+
+slos:
+  - slo_id: payments-availability
+    name: Payments availability
+    objective_pct: 99.0
+    window_days: 30
+    journey_id: upi
+    indicator: payments-success
+
+# The load the drill drives itself, so the numbers are exact rather than
+# typical. The harness's own traffic generator is switched off for this drill
+# (PAYSPHERE_TRAFFICGEN=false) - a seeded background stream is right for a demo
+# and wrong for an acceptance assertion.
+traffic:
+  journey: upi
+  warmup_ticks: 12
+  payments_per_region_per_tick: 5
+  fault_ticks: 3
+  fault_payments_per_region_per_tick: 20
+
+chaos:
+  scenario_id: fabric-link-loss
+  params:
+    link: CORE
+    loss_ratio: 1.0
+  idempotency_key: s4-acceptance-core-loss
+  # How this drill returns its own fault to normal. Applied before the steady
+  # phase so a re-run starts from a healthy application rather than from
+  # whatever the last run left behind - the harness expires an injection on its
+  # own after max_duration_s, but a drill should not depend on waiting.
+  heal_params:
+    link: CORE
+    loss_ratio: 0.0
+
+# A deployment announced as started and never announced as completed - the chip
+# beside the health score. Announced over the frozen ingest path with a real
+# HMAC by the drill runner, which is what a pipeline's deploy hook does; the
+# reference config repository's own deploy.sh speaks the same contract.
+change_window:
+  change_id: deploy-v14
+  change_type: deployment
+  service: payments
+  version: v14
+  actor: pipeline
+  announce_completion: false
+
+# What the platform is expected to conclude. Asserted, not described.
+expected:
+  stance_after_first_fault_tick: watch
+  stance_after_sustained_breach: proposed
+  corroborated: true
+  families: [availability, business]
+  severity: P0
+  regions_affected: 2
+  journey_tier: 1
+  requires_human: true
+  declared: false
+  evidence_kinds: [signal, probe]

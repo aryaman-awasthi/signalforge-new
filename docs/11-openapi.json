@@ -9144,6 +9144,36 @@
         "title": "WarRoomOut",
         "type": "object"
       },
+      "WsTicketOut": {
+        "description": "A shown-once credential, like a token pair or an ingest key.\n\nIt is deliberately *not* a token, and the field says so: `ws_ticket` buys one\nWebSocket handshake within its lifetime and nothing else. The access-token\nverifier refuses it, so it cannot be presented to any HTTP route, and\nredeeming it consumes it. The name is distinct from `ticket` on purpose -\nan incident carries an ITSM `ticket`, which is a reference, not a secret,\nand the credential census has to be able to tell the two apart.",
+        "properties": {
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
+          },
+          "subprotocol": {
+            "const": "ticket",
+            "default": "ticket",
+            "title": "Subprotocol",
+            "type": "string"
+          },
+          "url_path": {
+            "default": "/ws",
+            "title": "Url Path",
+            "type": "string"
+          },
+          "ws_ticket": {
+            "title": "Ws Ticket",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ws_ticket",
+          "expires_in"
+        ],
+        "title": "WsTicketOut",
+        "type": "object"
+      },
       "signalforge__api__schemas__identity__PolicyIn": {
         "additionalProperties": false,
         "properties": {
@@ -10314,9 +10344,7 @@
         "tags": [
           "incidents"
         ],
-        "x-signalforge-app-scope": "path",
-        "x-signalforge-auth": "session",
-        "x-signalforge-permission": "manage_apps"
+        "x-signalforge-auth": "session"
       }
     },
     "/apps/{app_id}/connection-tests": {
@@ -10385,7 +10413,7 @@
     },
     "/apps/{app_id}/detection": {
       "get": {
-        "description": "The current stance, every signal against its baseline, the health score\nper region, SLO burn, corroboration and the severity the matrix would\npropose. Reading it changes nothing.",
+        "description": "The current stance, every signal against its baseline, the health score\nper region, SLO burn, corroboration and the severity the matrix would\npropose. Reading it changes nothing.\n\nNo permission, and tenant-scoped in the service rather than here: an\napplication this tenant does not have answers the way a read of nothing\ndoes. See the module docstring for why a permission would be the wrong\ncontrol on this particular read.",
         "operationId": "get_detection_apps__app_id__detection_get",
         "parameters": [
           {
@@ -10429,9 +10457,7 @@
         "tags": [
           "detection"
         ],
-        "x-signalforge-app-scope": "path",
-        "x-signalforge-auth": "session",
-        "x-signalforge-permission": "manage_apps"
+        "x-signalforge-auth": "session"
       }
     },
     "/apps/{app_id}/detection/evaluate": {
@@ -10653,9 +10679,7 @@
         "tags": [
           "incidents"
         ],
-        "x-signalforge-app-scope": "path",
-        "x-signalforge-auth": "session",
-        "x-signalforge-permission": "manage_apps"
+        "x-signalforge-auth": "session"
       }
     },
     "/apps/{app_id}/mapping": {
@@ -11251,6 +11275,34 @@
           "auth"
         ],
         "x-signalforge-auth": "none"
+      }
+    },
+    "/auth/ws-ticket": {
+      "post": {
+        "description": "One handshake's worth of credential for the caller's own session (REQ-033).\n\nA write with no permission, and the third of its kind after logout and the\nwar room's four. It carries none for the same reason: the frozen roles matrix\ngives `Role.SME` nothing, and the SME is the person whose pager this socket\nfeeds - a permission here would disconnect exactly the people an incident\nexists to reach. The control that replaces it is that the route has no\nparameter at all: the ticket is cut from the principal the request already\nresolved, so a caller cannot ask for one naming anybody else's session, user\nor tenant.\n\nIt is a write rather than a read because redeeming it consumes it, so issuing\none changes server state - and because a GET returning a credential is a\ncredential in a browser history.",
+        "operationId": "ws_ticket_auth_ws_ticket_post",
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WsTicketOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Ws Ticket",
+        "tags": [
+          "auth"
+        ],
+        "x-signalforge-auth": "session"
       }
     },
     "/connectors": {

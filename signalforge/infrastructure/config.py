@@ -32,6 +32,15 @@ VERSION = "0.2.0"
 
 ACCESS_TTL_CAP_S = 900  # 15-minute JWT access tokens (REQ-010); config may only shorten
 
+SOCKET_TICKET_TTL_S = 30
+"""How long a WebSocket ticket lives (REQ-033).
+
+Thirty seconds, and it is not configurable. A ticket exists to cross the gap
+between "this session asked for one" and "this socket connected"; anything
+longer is a second session credential with a longer half-life than the problem
+it solves. A cockpit whose handshake takes longer than half a minute asks for
+another one, which costs one authenticated request."""
+
 # Push ingestion (REQ-032). The body cap is a ceiling on what one POST may make
 # this process hold in memory while it hashes it; MAX_BATCH_ITEMS items of a few
 # hundred bytes each fit inside it with room to spare, so the cap bites on abuse

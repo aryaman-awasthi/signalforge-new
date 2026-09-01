@@ -40,3 +40,11 @@ reference-app/*/logs/
 
 # TypeScript incremental build cache: a local artifact, not source.
 web/tsconfig.tsbuildinfo
+
+# Browser acceptance artefacts. The spec and its config are committed; traces,
+# screenshots and console dumps from a run are not.
+web/test-results/
+web/playwright-report/
+.playwright-mcp/
+# The API's own log directory when it is started from the repository root.
+/logs/

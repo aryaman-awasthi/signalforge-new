@@ -18,6 +18,7 @@ from signalforge.api.schemas.identity import (
     RefreshRequest,
     SignupRequest,
     TokenPairOut,
+    WsTicketOut,
     auth_response,
     binding_out,
     token_pair_out,
@@ -71,6 +72,34 @@ async def logout(
     container: deps.Container = Depends(deps.get_container),
 ):
     await container.auth.logout(principal)
+
+
+@router.post("/ws-ticket", response_model=WsTicketOut, status_code=201)
+async def ws_ticket(
+    principal: Principal = Depends(deps.get_principal),
+    container: deps.Container = Depends(deps.get_container),
+):
+    """One handshake's worth of credential for the caller's own session (REQ-033).
+
+    A write with no permission, and the third of its kind after logout and the
+    war room's four. It carries none for the same reason: the frozen roles matrix
+    gives `Role.SME` nothing, and the SME is the person whose pager this socket
+    feeds - a permission here would disconnect exactly the people an incident
+    exists to reach. The control that replaces it is that the route has no
+    parameter at all: the ticket is cut from the principal the request already
+    resolved, so a caller cannot ask for one naming anybody else's session, user
+    or tenant.
+
+    It is a write rather than a read because redeeming it consumes it, so issuing
+    one changes server state - and because a GET returning a credential is a
+    credential in a browser history.
+    """
+    issued = container.auth.issue_socket_ticket(principal)
+    return WsTicketOut(
+        ws_ticket=issued.ticket,
+        expires_in=issued.expires_in_s,
+        url_path=issued.url_path,
+    )
 
 
 @router.get("/me", response_model=MeOut)

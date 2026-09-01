@@ -6,6 +6,93 @@ graph" section at the bottom is the authored pre-build decision record
 (signalforge-memory-graph.md, provided and imported 2026-09-01) - every N-line there
 is treated as already decided.
 
+## DR-094 (2026-09-01, S4 carry-over) A consumer group is tested through the dispatcher's report
+`test_socket_push.py` asserts `DispatchReport.dead_lettered == 0` on every pass, not only that a
+frame arrived. Why: found the hard way. `signalforge_socket_nudges_total` was never declared, so
+the cockpit consumer delivered its nudge and *then* raised on the metric - the frame arrived, every
+assertion passed, and every event dead-lettered. It showed on the running install's DLQ, not in the
+suite. Any handler whose side effect lands before its bookkeeping has this shape, so the rule is
+general rather than specific to this consumer: a test that only checks the effect cannot tell a
+handler that succeeded from one that succeeded and then failed. Consequence: one more assertion per
+dispatcher-driven test, calibrated by renaming the metric and watching it fire; and one metric
+declared, whose only label is a topic - a closed vocabulary that names no tenant, incident or
+person, like every other label on the scrape.
+
+## DR-093 (2026-09-01, S4 carry-over) The bridge reuses the ingest redaction floor, not a second one
+`BridgeService` applies `domain/ingest/redaction.mask` on the way out (before the text reaches the
+collaboration tool) and on the way in (before a transcript line becomes a commitment's evidence
+excerpt). Why: S4 recorded the gap honestly - a responder pasting a card number onto the bridge
+would have it stored on a task's `evidence_ref`, in the event stream and in the audit chain,
+because the ingest floor only applies to text arriving *through* ingest. The fix had two candidate
+shapes and only one of them is safe: a redaction policy specific to the bridge would have been a
+second implementation of the same idea, and two masking implementations drift, which means the
+weaker one eventually decides what a data-protection incident looks like. Consequence: one policy
+id (`ingest-default`), one pattern list, one place to strengthen it; the bridge event says
+`redacted: true` and names the policy when something was removed, so evidence can cite it the way
+an ingest envelope does. Masking on the way *out* also means the customer's data never reaches the
+collaboration vendor, which is a stronger property than the gap report asked for.
+
+## DR-092 (2026-09-01, S4 carry-over) A socket nudge carries no data, so the socket needs no authorisation
+The `cockpit-socket` consumer group turns `incident.*` and `warroom.*` events into
+`{"type":"room.changed", incident_id, topic, seq}` frames for sockets that asked to watch that
+incident. The frame carries no payload; the screen re-reads through the same authorised HTTP route
+it was already polling. Why: the alternative - pushing the room down the socket - would have made
+the socket a second read path with its own authorisation to get wrong, in a product whose whole
+security story is that every read is tenant-scoped at the repository. A nudge cannot leak anything,
+so "may this session watch this incident id?" does not have to be answered: watching an incident
+this session cannot read produces a 403 on the re-read. Consequence: one extra HTTP round trip per
+change, which is the cost of never having two answers to "may I see this"; the fan-out is still
+tenant-scoped, because a missing predicate in a fan-out is exactly how cross-tenant leaks happen,
+and that is asserted by a test that watches the right id from the wrong tenant.
+
+## DR-091 (2026-09-01, S4 carry-over) The cockpit's socket credential is a ticket, not the session token
+`POST /auth/ws-ticket` mints a 30-second, single-use JWT typed `ws_ticket`, bound to the caller's
+tenant, user and session; the browser spends it as the `ticket, <value>` subprotocol on the
+handshake. Why: DR-087 named the two ways out of the polling gap and rejected the cheap one. The
+session token lives in an httpOnly cookie precisely so an XSS cannot read it, and handing it to
+JavaScript to buy a refresh interval would have traded a permanent control for a latency
+improvement. A ticket is the other way, and every property is part of the credential rather than a
+detail: typed, so `JWTAccessTokenService.verify` refuses it and it can reach no HTTP route;
+single-use, so a captured handshake replayed a second later is refused; session-bound, so a logout
+kills it; thirty seconds, because it exists to survive one handshake and not a session.
+Consequence: the httpOnly control is untouched and a leaked ticket is worth almost nothing; the
+cost is one authenticated request per connect, and the in-process replay set is per node - correct
+for this deployment (one machine, no Docker), and stated rather than hidden, with the ticket's own
+lifetime bounding the window even without it.
+
+## DR-090 (2026-09-01, S4 carry-over) The acceptance drill was wrong, so the drill changed and the gate did not
+S4's acceptance clause asks for a corroborated P0 proposal; the sprint's live run produced P2/P3
+because its drill broke one link on region-b's route and only one signal family ever became
+anomalous. `drills/s4-acceptance.yaml` moves the fault to `CORE` - the one link both regions cross
+- and takes its second witness from SignalForge's own synthetic probe rather than a second metric
+from the same reporter. Why: the alternative was to make the product produce a P0 from one witness,
+which would have meant deleting the rule that makes a P0 proposal worth reading. A drill that
+cannot legitimately produce the outcome it claims to demonstrate is a broken drill, not evidence of
+a broken gate. Consequence: `MIN_INDEPENDENT_FAMILIES`, the customer-facing requirement, the
+severity matrix and the human-declaration floor are all untouched; the drill produces P0 on its own
+arithmetic - tier-1 journey, 2 of 2 regions, worst success rate under 80 percent - and a
+deterministic test drives it against the real JVM harness with the harness's own traffic generator
+switched off, so the success ratio is the payments the test placed rather than a sample.
+
+## DR-089 (2026-09-01, S4 carry-over) The proposal sheet's three reads are responder work, not operator work
+`GET /apps/{id}/detection`, `/lifecycle` and `/change-window` drop `manage_apps` and become
+session-scoped tenant reads. Why: found by the S4 browser walkthrough, which is exactly the class of
+defect an HTTP-driven acceptance cannot find because each half worked. The frozen roles matrix gives
+`manage_apps` to the org owner alone; the only roles that may declare are incident commander and
+tech lead, and neither holds it. So the guard was not narrowing *who may read a proposal* - it was
+deciding that nobody who may declare can see one, while the only person who could see one was not
+allowed to declare. No single role could complete "the IC declares in the UI", which is a sprint
+acceptance clause. This is not a new disclosure: `GET /incidents/{id}` already publishes the same
+proposal snapshot - families, health score, evidence refs - to any session in the tenant, because
+the SME who answers a page holds nothing at all. Consequence: reading what the platform believes is
+now like reading an incident, and every write under `/apps` still carries `manage_apps` - forcing an
+evaluation, the raw rollup series, the mapping, the topology, the SLOs, deleting the application.
+The narrowing that is genuinely lost is per-application: an operator bound to one application can
+now read another's *stance* in the same tenant, though not its telemetry and nothing they can act
+on. Pinned as a literal three-route list in two security tests, so a fourth cannot join them
+quietly. The web middleware follows: `/apps` is matched exactly and the wizard by suffix, so the
+app-detail screen is reachable by the people an incident exists to reach.
+
 ## DR-088 (2026-09-01, S4) The unbuilt agent panels ship with their titles and a reason
 Next Best Action, AI Copilot, Warning and Guidance and Team Chat render in the S9 shell now,
 each with one sentence saying what Sprint 5 will put in it. Why: the ten panel titles are a

@@ -20,6 +20,16 @@ Three properties hold the harvest together:
   label. Guessing a user id from a first name is how the wrong person gets
   paged, and on a bridge at 03:00 an unowned task on the board is recoverable
   while a wrongly-owned one is not.
+- **Redacted at the boundary, at write time.** A bridge message is free text a
+  human typed under pressure, and the harvester stores an excerpt of it on a
+  task's `evidence_ref` - so a card number pasted onto the bridge would land on
+  the task board, in the event stream and in the audit chain. S3-T02's ingest
+  floor is the same policy for the same reason, so it is *reused* rather than
+  reimplemented: `domain/ingest/redaction.mask` is the only masking code in the
+  platform, and the two paths cannot drift apart. It is applied on the way out
+  (so nothing unmasked reaches the collaboration tool either) and on the way in
+  (so a line typed on the far side, or a scripted drill line, is masked before
+  it can become evidence).
 """
 
 from __future__ import annotations
@@ -43,6 +53,8 @@ from signalforge.application.warroom.common import (
 from signalforge.contracts.canonical import CollabMessage
 from signalforge.contracts.errors import AdapterError
 from signalforge.domain.identity.ports import Clock
+from signalforge.domain.ingest.redaction import POLICY_ID as REDACTION_POLICY_ID
+from signalforge.domain.ingest.redaction import mask
 from signalforge.domain.shared.errors import DomainError
 from signalforge.domain.warroom.commitments import Commitment, harvest
 from signalforge.domain.warroom.entities import (
@@ -163,9 +175,14 @@ class BridgeService:
                 "no collaboration connector is bound to this application, so this "
                 "war room has no bridge to post to"
             )
-        body = str(text or "").strip()
-        if not body:
+        typed = str(text or "").strip()
+        if not typed:
             raise WarRoomNotFoundError("a bridge message needs text")
+        # The floor, before anything else sees the text: the collaboration tool,
+        # the transcript, the harvester's evidence excerpt and the event payload
+        # all read `body`, and none of them is a place to discover a card number.
+        body = mask(typed)
+        redacted = body != typed
 
         posted: CollabMessage = await self._invoker.invoke(
             principal.tenant_id,
@@ -189,6 +206,10 @@ class BridgeService:
                     "channel": room.bridge_channel,
                     "adapter_id": room.bridge_adapter_id,
                     "chars": len(body),
+                    # "something was removed from this message", not "a policy
+                    # exists" - the same distinction the ingest envelope draws.
+                    "redacted": redacted,
+                    "redaction_policy": REDACTION_POLICY_ID if redacted else "",
                 },
             )
             await uow.commit()
@@ -284,7 +305,10 @@ class BridgeService:
                 {
                     "message_id": message.message_id,
                     "author": _author_id(message),
-                    "text": message.text,
+                    # Masked before the harvester sees it, because what the
+                    # harvester keeps is an evidence excerpt on a durable row.
+                    # A line typed on the far side never passed the ingest floor.
+                    "text": mask(message.text),
                     "at": message.sent_at,
                 }
                 for message in messages
@@ -316,7 +340,10 @@ class BridgeService:
                     {
                         "message_id": message.message_id,
                         "author": said_by,
-                        "text": message.text,
+                        # Already masked at post time; masked again because this
+                        # is the text that becomes durable evidence and the cost
+                        # of applying an idempotent floor twice is nothing.
+                        "text": mask(message.text),
                         "at": message.sent_at,
                     }
                 ],
@@ -504,11 +531,18 @@ def _author_id(message: CollabMessage) -> str:
 
 
 def _as_message(message: CollabMessage) -> BridgeMessage:
+    """One transcript line, masked.
+
+    The S9 panel renders whatever the collaboration tool holds, and that includes
+    lines this platform did not write - a scripted drill line, somebody typing in
+    Teams. Masking here rather than only at post time means the floor covers the
+    transcript by origin-independent construction.
+    """
     return BridgeMessage(
         message_id=message.message_id,
         author=_author_id(message),
         author_display=(message.author.display or "") if message.author else "",
-        text=message.text,
+        text=mask(message.text),
         at=message.sent_at,
         simulated=message.simulated,
         thread_id=message.thread_id,

@@ -164,8 +164,27 @@ async def test_an_sme_can_read_the_incident_they_will_be_paged_to_and_write_noth
     set_severity(api, token, incident["id"], "P2", expect=403)
     close_incident(api, token, incident["id"], expect=403)
     declare(api, token, expect=403)
-    # The operator view stays operator work.
-    lifecycle(api, token, expect=403)
+    # The application's own view is a read, so the SME gets it: they were paged
+    # to this application and the first question anybody asks is "what is it
+    # doing". Reading is not deciding, and there is nothing here to decide with
+    # (DR-089).
+    reading = lifecycle(api, token)
+    assert reading["app_id"] == APP_ID
+    assert reading["declare_requires_human"] is True
+    # The operator half of the same screen stays operator work: an SME cannot
+    # force an evaluation or read the raw buckets.
+    assert (
+        api.client.post(
+            f"/apps/{APP_ID}/detection/evaluate", json={}, headers=api.auth_header(token)
+        ).status_code
+        == 403
+    )
+    assert (
+        api.client.get(
+            f"/apps/{APP_ID}/rollups", headers=api.auth_header(token)
+        ).status_code
+        == 403
+    )
 
 
 @pytest.mark.req("REQ-025", "REQ-043")

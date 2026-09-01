@@ -1664,17 +1664,43 @@ for this screen to show anybody else's pages, which is what lets the route carry
 no permission - and the person holding the phone is usually an SME, who by the
 frozen roles matrix holds none.
 
-### 10.7 What the cockpit does not have yet
+### 10.7 How the cockpit stays current
 
-**A WebSocket client.** These screens poll through the typed cookie proxy - five
-seconds for the war room, ten for the pager - and that is an honest limitation
-rather than a design choice. The session token lives in an httpOnly cookie that
-browser JavaScript cannot read, so a cross-origin WebSocket handshake has nothing
-to authenticate with. Handing JavaScript the token to fix that would weaken the
-S1 control keeping it out of XSS reach, and that is not a trade worth making for
-a refresh interval. A short-lived socket ticket is the real answer and is a
-credential design in its own right.
+**The socket, and the credential that made it possible.** The screens were
+polled through the typed cookie proxy for one honest reason: the session token
+lives in an httpOnly cookie that browser JavaScript cannot read, so a
+cross-origin WebSocket handshake had nothing to authenticate with, and handing
+JavaScript the token to fix that would have traded a permanent control for a
+refresh interval.
 
-Polling is adequate here precisely because nothing on these screens is computed
-in the browser: the countdowns are the server's own numbers, so a five-second
-refresh lags reality by at most five seconds and never disagrees with it.
+The other way out is a credential of its own, and that is what the cockpit uses.
+An authenticated session asks its own origin for a **socket ticket** (`POST
+/auth/ws-ticket`, through the same cookie proxy every other call uses) and spends
+it on the handshake as the `ticket, <value>` subprotocol - a header, never a
+query parameter, so it never reaches an access log. The ticket lives thirty
+seconds, is single-use, is bound to the tenant, the user and the session it came
+from, and is *typed*, so the access-token verifier refuses it and it can reach no
+HTTP route at all. A ticket that leaks is worth one handshake for half a minute.
+The httpOnly cookie is untouched.
+
+**What arrives is a nudge, not data.** A change in a war room becomes
+`{"type": "room.changed", incident_id, topic, seq}` - the incident, what moved,
+and the sequence number, and nothing else. The screen reacts by re-reading
+through the authorised HTTP route it was already using. That is deliberate: a
+socket carrying room contents would be a second read path with its own
+authorisation to get wrong, in a product whose whole security story is that every
+read is tenant-scoped at the repository. Because a nudge discloses nothing,
+watching an incident needs no permission - a socket watching a room its session
+may not read simply gets a 403 when it re-reads.
+
+**The poll never stops; it slows down.** Thirty seconds while the socket is up,
+five and ten when it is not. Three things can silently cost a screen a frame -
+the ticket endpoint being unreachable, the socket dropping, or the hub skipping a
+frame on purpose when one browser falls behind - and in every one of them the
+screen must degrade to *late* rather than to *wrong*. It says which mode it is
+in, because a responder who believes a screen is live when it is not is exactly
+how somebody concludes that nobody is answering their page.
+
+Nothing on these screens is computed in the browser either way: the countdowns
+are the server's own numbers, so a stale screen lags reality and never disagrees
+with it.

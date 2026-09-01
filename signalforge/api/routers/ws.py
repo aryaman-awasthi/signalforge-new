@@ -10,19 +10,33 @@ notifications. There is no parameter through which a caller could ask for
 somebody else's.
 
 Browsers cannot set an Authorization header on a WebSocket handshake, so the
-token may also arrive as the `bearer, <token>` subprotocol pair - a standard
-pattern, and specifically not a query parameter, which would put a session token
-into every access log and proxy history on the path.
+credential arrives as a subprotocol pair - a standard pattern, and specifically
+not a query parameter, which would put credential material into every access log
+and proxy history on the path. The cockpit presents `ticket, <socket ticket>`:
+a short-lived, single-use credential it obtained over its own authenticated
+origin (POST /auth/ws-ticket), because the session token itself lives in an
+httpOnly cookie that browser JavaScript is not allowed to read and this design
+does not weaken that. Server-side callers still present `bearer, <token>` or an
+Authorization header; see `deps.websocket_credential`.
 
 Frames the client may send:
 
     {"type": "hello", "channels": ["in_app", "browser_push"]}
+    {"type": "watch", "incident_ids": ["..."]}
     {"type": "ack",   "notification_id": "..."}
     {"type": "ping"}
 
 Frames the server sends: `ready`, one `notification` per open item on connect
-(marked `replay`), then live `notification` frames, plus `ack.ok`, `pong` and
-`error`.
+(marked `replay`), then live `notification` frames, plus `watching`,
+`room.changed`, `ack.ok`, `pong` and `error`.
+
+`room.changed` is a **nudge, not data**: it names an incident, the topic that
+moved and the sequence number, and the screen re-reads through the authorised
+HTTP route it was already polling. The socket therefore never becomes a second
+read path with its own authorisation to get wrong, and watching an incident this
+session may not read produces a 403 on the re-read rather than a leak. Watching
+is not authorised here for the same reason it does not need to be: an incident
+id is not a secret, and nothing about the incident travels down the socket.
 """
 
 from __future__ import annotations
@@ -42,7 +56,13 @@ logger = logging.getLogger("signalforge.notifications")
 
 router = APIRouter(tags=["notifications"])
 
-BEARER_SUBPROTOCOL = "bearer"
+BEARER_SUBPROTOCOL = deps.BEARER_SUBPROTOCOL
+TICKET_SUBPROTOCOL = deps.TICKET_SUBPROTOCOL
+
+MAX_WATCHED_ROOMS = 20
+"""How many incidents one socket may watch. A cockpit watches the room it is
+showing; twenty is far past any screen and stops a client turning a nudge fan-out
+into an unbounded per-socket filter."""
 
 
 @router.websocket("/ws")
@@ -51,10 +71,14 @@ async def notification_socket(
     principal: Principal = Depends(deps.get_ws_principal),
     container: deps.Container = Depends(deps.get_container),
 ):
-    subprotocol = (
-        BEARER_SUBPROTOCOL
-        if BEARER_SUBPROTOCOL in (websocket.scope.get("subprotocols") or [])
-        else None
+    offered = websocket.scope.get("subprotocols") or []
+    subprotocol = next(
+        (
+            candidate
+            for candidate in (TICKET_SUBPROTOCOL, BEARER_SUBPROTOCOL)
+            if candidate in offered
+        ),
+        None,
     )
     await websocket.accept(subprotocol=subprotocol)
 
@@ -145,6 +169,12 @@ async def _handle(
         # Channels may have widened; catch up on the newly visible ones.
         await _replay_open(websocket, container, principal, subscription)
         return
+    if kind == "watch":
+        subscription.watching = _watched(frame.get("incident_ids"))
+        await websocket.send_json(
+            {"type": "watching", "incident_ids": sorted(subscription.watching)}
+        )
+        return
     if kind == "ack":
         notification_id = str(frame.get("notification_id") or "")
         try:
@@ -171,6 +201,23 @@ async def _handle(
         )
         return
     await websocket.send_json({"type": "error", "detail": f"unknown frame type {kind!r}"})
+
+
+def _watched(raw) -> set[str]:
+    """The incident ids this socket wants nudges for, bounded.
+
+    A malformed frame subscribes to nothing rather than to everything: a client
+    that meant to watch one room and typed the field wrong should see its screen
+    fall back to polling, not start receiving every room's nudges.
+    """
+    if not isinstance(raw, list):
+        return set()
+    ids = {
+        str(value).strip()
+        for value in raw
+        if isinstance(value, str) and str(value).strip()
+    }
+    return set(sorted(ids)[:MAX_WATCHED_ROOMS])
 
 
 def _channels(raw) -> set[NotificationChannel]:

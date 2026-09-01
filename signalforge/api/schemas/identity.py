@@ -52,6 +52,23 @@ class TokenPairOut(BaseModel):
     expires_in: int
 
 
+class WsTicketOut(BaseModel):
+    """A shown-once credential, like a token pair or an ingest key.
+
+    It is deliberately *not* a token, and the field says so: `ws_ticket` buys one
+    WebSocket handshake within its lifetime and nothing else. The access-token
+    verifier refuses it, so it cannot be presented to any HTTP route, and
+    redeeming it consumes it. The name is distinct from `ticket` on purpose -
+    an incident carries an ITSM `ticket`, which is a reference, not a secret,
+    and the credential census has to be able to tell the two apart.
+    """
+
+    ws_ticket: str
+    expires_in: int
+    url_path: str = "/ws"
+    subprotocol: Literal["ticket"] = "ticket"
+
+
 class RoleBindingOut(BaseModel):
     role: Role
     app_id: Optional[str] = None

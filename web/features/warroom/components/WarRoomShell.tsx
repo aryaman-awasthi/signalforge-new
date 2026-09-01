@@ -6,11 +6,12 @@ import { useEffect, useState } from "react";
 import { ApiError } from "@/lib/api/client";
 import { fetchMe } from "@/features/auth/api";
 import { AckBoard } from "@/features/warroom/components/AckBoard";
+import { LiveBadge } from "@/features/warroom/components/LiveBadge";
 import { BridgePanel } from "@/features/warroom/components/BridgePanel";
 import { Panel } from "@/features/warroom/components/Panel";
 import { TaskBoard } from "@/features/warroom/components/TaskBoard";
 import { joinWarRoom } from "@/features/warroom/api";
-import { useWarRoom } from "@/features/warroom/hooks/useWarRoom";
+import { ROOM_POLL_MS, useWarRoom } from "@/features/warroom/hooks/useWarRoom";
 import { getIncident, IncidentDetail } from "@/features/incidents/api";
 
 /**
@@ -32,7 +33,7 @@ import { getIncident, IncidentDetail } from "@/features/incidents/api";
  * that difference is the whole reason a commander looks at it.
  */
 export function WarRoomShell({ incidentId }: { incidentId: string }) {
-  const { state, reload } = useWarRoom(incidentId);
+  const { state, reload, connected } = useWarRoom(incidentId);
   const [me, setMe] = useState<{ user_id: string; permissions: string[] } | null>(
     null,
   );
@@ -100,6 +101,7 @@ export function WarRoomShell({ incidentId }: { incidentId: string }) {
           {room.app_id}
         </Link>
         <span className="flex-1" />
+        <LiveBadge connected={connected} pollSeconds={ROOM_POLL_MS / 1000} />
         <span className="text-xs text-ink-muted">
           {room.present_count} in the room · {room.members.length} in the radius
         </span>

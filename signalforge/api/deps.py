@@ -48,7 +48,13 @@ from signalforge.application.onboarding.testing import (
 )
 from signalforge.application.onboarding.wizard import OnboardingService
 from signalforge.application.events.bus import EventBus
-from signalforge.application.events.consumers import BUS_METRICS_GROUP, BusMetricsConsumer
+from signalforge.application.events.consumers import (
+    BUS_METRICS_GROUP,
+    COCKPIT_SOCKET_GROUP,
+    COCKPIT_TOPIC_PATTERNS,
+    BusMetricsConsumer,
+    CockpitSocketConsumer,
+)
 from signalforge.application.events.dead_letters import DeadLetterService
 from signalforge.application.events.dispatcher import Dispatcher
 from signalforge.application.events.replay import ReplayService
@@ -109,7 +115,10 @@ from signalforge.workers.runner import PlatformWorker, ScheduledJob
 from signalforge.infrastructure.security.hmac_verify import IngestHmacVerifier
 from signalforge.infrastructure.security.passwords import Argon2PasswordHasher
 from signalforge.infrastructure.security.ratelimit import SlidingWindowRateLimiter
-from signalforge.infrastructure.security.tokens import JWTAccessTokenService
+from signalforge.infrastructure.security.tokens import (
+    JWTAccessTokenService,
+    JWTSocketTicketService,
+)
 
 
 class Container:
@@ -137,6 +146,14 @@ class Container:
             clock=self.wall_clock,
             ttl_s=self.settings.access_ttl_s,
         )
+        # The socket credential (REQ-033). Signed with the same secret and typed
+        # differently, so a ticket cannot be presented as a bearer token and a
+        # bearer token cannot be redeemed as a ticket. Wall time, like every
+        # other credential: a drill clock must not be able to age one out or
+        # keep one alive.
+        self.socket_tickets = JWTSocketTicketService(
+            secret=self.settings.jwt_secret, clock=self.wall_clock
+        )
         self.rate_limiter = SlidingWindowRateLimiter(
             limit=self.settings.login_rate_limit,
             window_s=self.settings.login_rate_window_s,
@@ -152,6 +169,7 @@ class Container:
             self.rate_limiter, self.clock,
             access_ttl_s=self.settings.access_ttl_s,
             refresh_ttl_s=self.settings.refresh_ttl_s,
+            socket_tickets=self.socket_tickets,
         )
         self.org = OrgService(
             self.uow_factory, self.hasher, self.auth, self.clock,
@@ -201,6 +219,15 @@ class Container:
         # its own: an adapter must be able to store a ticket or a receipt
         # without holding a transaction that also contains identity state.
         self.notification_hub = InProcessNotificationHub()
+        # The cockpit's push half (S4 carry-over, REQ-033/REQ-045). A consumer
+        # group rather than a call from the war-room services, so the arrow keeps
+        # pointing inward and a node with no cockpit open pays nothing: it nudges
+        # nobody and advances its offset.
+        self.dispatcher.register(
+            COCKPIT_SOCKET_GROUP,
+            CockpitSocketConsumer(self.notification_hub, metrics=self.metrics),
+            topics=COCKPIT_TOPIC_PATTERNS,
+        )
         self.integration_uow_factory = lambda: SqlIntegrationUnitOfWork(
             self.session_factory
         )
@@ -553,24 +580,39 @@ async def get_principal(
 
 
 BEARER_SUBPROTOCOL = "bearer"
+TICKET_SUBPROTOCOL = "ticket"
 
 
-def websocket_token(websocket: WebSocket) -> Optional[str]:
-    """A session token from the handshake.
+def websocket_credential(websocket: WebSocket) -> tuple[Optional[str], Optional[str]]:
+    """The (kind, value) a handshake presented, or (None, None).
 
-    Two places, both of which keep the token out of URLs. A browser cannot set
-    an Authorization header on a WebSocket handshake, so it offers the token as
-    the `bearer, <token>` subprotocol pair; server-side callers and tests use the
-    header. A `?token=` query parameter is deliberately not accepted: it would
-    put a live session token into every access log and proxy history on the path.
+    Three places, none of them a URL. A `?token=` query parameter is deliberately
+    not accepted for either credential: it would put live credential material
+    into every access log and proxy history on the path.
+
+    | Where | Who uses it |
+    |---|---|
+    | `Authorization: Bearer <access token>` | server-side callers and tests |
+    | `bearer, <access token>` subprotocol | a caller that holds a token in JavaScript |
+    | `ticket, <socket ticket>` subprotocol | **the cockpit** |
+
+    The cockpit uses the third and can use no other, and that is the point. Its
+    session token lives in an httpOnly cookie that browser JavaScript cannot
+    read, and a cross-origin WebSocket handshake sends no cookie - so the browser
+    asks its own origin for a short-lived, single-use ticket and spends it here.
+    The httpOnly control is untouched, and a ticket captured off the wire is
+    worth one handshake for thirty seconds and nothing on the HTTP API.
     """
     header = websocket.headers.get("authorization", "")
     if header.startswith("Bearer "):
-        return header[len("Bearer "):]
+        return BEARER_SUBPROTOCOL, header[len("Bearer "):]
     subprotocols = list(websocket.scope.get("subprotocols") or [])
-    if len(subprotocols) >= 2 and subprotocols[0] == BEARER_SUBPROTOCOL:
-        return subprotocols[1]
-    return None
+    if len(subprotocols) >= 2 and subprotocols[0] in (
+        BEARER_SUBPROTOCOL,
+        TICKET_SUBPROTOCOL,
+    ):
+        return subprotocols[0], subprotocols[1]
+    return None, None
 
 
 async def get_ws_principal(
@@ -581,13 +623,22 @@ async def get_ws_principal(
     A failure closes the handshake with 1008 (policy violation) rather than
     raising into the HTTP error handlers, which never see a socket. The security
     suite's router walk treats this and get_principal as equivalent: both resolve
-    a real session before any handler runs.
+    a real session before any handler runs - and a ticket resolves through the
+    *same* session lookup a bearer token does, so a revoked session closes the
+    socket door as firmly as it closes the HTTP one.
+
+    The refusal says nothing about why. An expired ticket, a replayed one, one
+    signed for a session that has since been revoked and one that was never
+    valid all close with the same reason, because telling a caller which of
+    those it was is telling them how to get closer.
     """
-    token = websocket_token(websocket)
-    if not token:
-        raise WebSocketException(code=1008, reason="missing bearer token")
+    kind, credential = websocket_credential(websocket)
+    if not credential:
+        raise WebSocketException(code=1008, reason="missing socket credential")
     try:
-        return await container.auth.authenticate(token)
+        if kind == TICKET_SUBPROTOCOL:
+            return await container.auth.authenticate_socket_ticket(credential)
+        return await container.auth.authenticate(credential)
     except AuthenticationError as exc:
         raise WebSocketException(code=1008, reason="authentication failed") from exc
 

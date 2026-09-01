@@ -19,9 +19,15 @@ existing `deps.require` factory evaluates a per-application role binding against
 it; the incident-scoped writes read the application off the incident through
 `deps.require_incident`.
 
-The two `/apps/{app_id}` reads are operator work - the app-detail screen's health
-panel and its change-window chip - and sit behind `manage_apps` like every other
-`/apps` route.
+The two `/apps/{app_id}` reads are the app-detail screen's stance and its
+change-window chip, and they follow the same rule as the incident reads rather
+than the `/apps` rule: session-scoped to the caller's tenant, no permission. The
+S4 browser walkthrough is what settled it (DR-089). `manage_apps` belongs only
+to the org owner in the frozen matrix, and the incident commander - the one role
+that may declare - never holds it, so guarding these two with it meant the only
+person allowed to declare could not open the screen the Declare button is on,
+while the only person who could open it was not allowed to declare. Every write
+under `/apps` still carries `manage_apps`.
 """
 
 from __future__ import annotations
@@ -185,7 +191,7 @@ async def resync_ticket(
 @apps_router.get("/{app_id}/lifecycle", response_model=LifecycleOut)
 async def get_lifecycle(
     app_id: str,
-    principal: Principal = Depends(deps.require_app(Permission.MANAGE_APPS)),
+    principal: Principal = Depends(deps.get_principal),
     container: deps.Container = Depends(deps.get_container),
 ):
     """Where this application sits: a detection stance, or an incident somebody
@@ -196,7 +202,7 @@ async def get_lifecycle(
 @apps_router.get("/{app_id}/change-window", response_model=ChangeWindowOut)
 async def get_change_window(
     app_id: str,
-    principal: Principal = Depends(deps.require_app(Permission.MANAGE_APPS)),
+    principal: Principal = Depends(deps.get_principal),
     container: deps.Container = Depends(deps.get_container),
 ):
     """Changes announced as started and never announced as completed - the chip

@@ -9,11 +9,24 @@ tests - the domain consumers that arrive in later sprints join the same loop.
 
 from __future__ import annotations
 
+from typing import Optional, Protocol
+
 from signalforge.application.events.uow import EventUnitOfWork
 from signalforge.contracts.envelope import EventEnvelope
 from signalforge.domain.events.ports import EventHandler
 
 BUS_METRICS_GROUP = "bus-metrics"
+
+COCKPIT_SOCKET_GROUP = "cockpit-socket"
+
+COCKPIT_TOPIC_PATTERNS: tuple[str, ...] = (
+    "incident.*",
+    "warroom.*",
+)
+"""What a war-room screen is refreshed by. Deliberately not `detection.*`: the
+app-detail screen reads a stance that is recomputed every five seconds anyway,
+and nudging on every evaluation would turn a five-second poll into a five-second
+push with more moving parts and no more truth."""
 
 
 class BusMetricsConsumer(EventHandler):
@@ -28,3 +41,55 @@ class BusMetricsConsumer(EventHandler):
         )
         if envelope.seq is not None:
             self._metrics.set_gauge("signalforge_event_seq", envelope.seq)
+
+
+class SocketNudgeSink(Protocol):
+    """What the cockpit consumer needs from the socket fan-out, and no more."""
+
+    def nudge(self, tenant_id: str, incident_id: str, frame: dict) -> int: ...
+
+
+class CockpitSocketConsumer(EventHandler):
+    """Turns incident and war-room events into "something moved" frames (REQ-045).
+
+    This is the push half of the cockpit, and its most important property is
+    what it does *not* send. The frame names the incident, the topic and the
+    sequence number; it carries no payload at all. The screen re-reads through
+    the same authorised HTTP route it was already polling, so the socket never
+    becomes a second read path with its own authorisation to get wrong, and a
+    nudge for a room the reader may not read produces a 403 on the re-read
+    rather than a leak.
+
+    It is a consumer group like any other, which is what makes it recoverable:
+    a node whose socket fan-out was down does not lose the events, it lags, and
+    the offset catches up. And a nudge that never arrives costs nothing but
+    latency, because every screen that listens is still polling underneath.
+    """
+
+    name = COCKPIT_SOCKET_GROUP
+
+    def __init__(self, hub: SocketNudgeSink, metrics=None):
+        self._hub = hub
+        self._metrics = metrics
+
+    async def handle(self, envelope: EventEnvelope, uow: EventUnitOfWork) -> None:
+        incident_id: Optional[str] = envelope.incident_id
+        if not incident_id:
+            # An incident event that names no incident is a lifecycle event about
+            # an application (a change window folding, say). Nothing is watching
+            # an incident id for it, so there is nobody to nudge.
+            return
+        delivered = self._hub.nudge(
+            envelope.tenant_id,
+            incident_id,
+            {
+                "type": "room.changed",
+                "incident_id": incident_id,
+                "topic": envelope.topic,
+                "seq": envelope.seq,
+            },
+        )
+        if self._metrics is not None and delivered:
+            self._metrics.increment(
+                "signalforge_socket_nudges_total", {"topic": envelope.topic}
+            )

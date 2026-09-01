@@ -51,6 +51,13 @@ class Subscription:
     the adapters directly - has to be handed over rather than pushed, because
     waking an asyncio.Queue from the wrong loop does not wake anybody."""
     channels: set[NotificationChannel] = field(default_factory=lambda: set(DEFAULT_CHANNELS))
+    watching: set[str] = field(default_factory=set)
+    """Incident ids this socket wants change nudges for (REQ-045).
+
+    A nudge is not data: it names the incident and the topic and nothing else,
+    and the screen re-reads through the authorised HTTP route it already uses.
+    That keeps the socket out of the authorisation path entirely - a nudge for a
+    room the reader may not read produces a 403 on the re-read, not a leak."""
     lagged: int = 0
 
     def accepts(self, channel: NotificationChannel) -> bool:
@@ -114,14 +121,42 @@ class InProcessNotificationHub(NotificationSink):
                 delivered += 1
         return delivered
 
+    def nudge(self, tenant_id: str, incident_id: str, frame: dict) -> int:
+        """Tell every socket watching this incident that something moved.
+
+        Tenant-scoped like `deliver`, and for the same reason: a fan-out is
+        exactly the kind of component where a missing predicate becomes a
+        cross-tenant leak. Delivered on the same queue as notifications so one
+        slow browser is back-pressured once rather than twice, and skipped
+        rather than blocking when that queue is full - a dropped nudge costs a
+        screen its early refresh and nothing more, because the poll is still
+        running underneath (the socket is an accelerator, not the source of
+        truth).
+        """
+        delivered = 0
+        for subscription in list(self._subscriptions.values()):
+            if subscription.tenant_id != tenant_id:
+                continue
+            if incident_id not in subscription.watching:
+                continue
+            if self._offer(subscription, dict(frame), None):
+                delivered += 1
+        return delivered
+
     def _offer(
-        self, subscription: Subscription, message: dict, channel: NotificationChannel
+        self,
+        subscription: Subscription,
+        message: dict,
+        channel: Optional[NotificationChannel],
     ) -> bool:
         if subscription.queue.full():
             subscription.lagged += 1
             logger.warning(
                 "notification socket is not keeping up; frame skipped",
-                extra={"channel": channel.value, "lagged": subscription.lagged},
+                extra={
+                    "channel": channel.value if channel is not None else "nudge",
+                    "lagged": subscription.lagged,
+                },
             )
             return False
         try:

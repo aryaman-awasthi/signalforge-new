@@ -66,8 +66,14 @@ NO_CREDENTIAL = {
 # asserted in both directions in tests/security/test_warroom_boundary.py, which
 # also pins this same list, so an entry added here without a self-scoping test
 # fails that file instead of passing quietly here.
+#
+# The sixth is `POST /auth/ws-ticket` (S4 carry-over): it mints a socket ticket
+# for the caller's *own* session and takes no parameter at all, so there is
+# nothing in the request for a permission to protect - and a permission would
+# disconnect the SME's pager, which is the same reason the four below carry none.
 SESSION_ONLY_WRITES = {
     ("post", "/auth/logout"),
+    ("post", "/auth/ws-ticket"),
     ("post", "/incidents/{incident_id}/pages/{page_id}/ack"),
     ("post", "/incidents/{incident_id}/war-room/join"),
     ("post", "/incidents/{incident_id}/bridge"),
@@ -78,11 +84,16 @@ WRITE_METHODS = {"post", "put", "patch", "delete"}
 
 CREDENTIAL_PROPERTIES = {
     "token", "secret", "password", "access_token", "refresh_token", "credentials",
+    # A socket ticket is credential material even though it is worth one
+    # handshake for thirty seconds. Named `ws_ticket` rather than `ticket` so
+    # the census can tell it from an incident's ITSM reference (S4 carry-over).
+    "ws_ticket",
 }
 
-# The three response shapes that carry credential material, each of them a
-# "shown once" body: a new session's tokens, an invite, and an ingest key.
-SHOWN_ONCE = {"TokenPairOut", "InviteCreatedOut", "IssuedKeyOut"}
+# The four response shapes that carry credential material, each of them a
+# "shown once" body: a new session's tokens, a socket ticket, an invite, and an
+# ingest key.
+SHOWN_ONCE = {"TokenPairOut", "WsTicketOut", "InviteCreatedOut", "IssuedKeyOut"}
 
 
 def published() -> dict:

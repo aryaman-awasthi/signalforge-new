@@ -107,7 +107,7 @@ catalogue below and its frame protocol is written out later in this document.
 
 <!-- BEGIN GENERATED ROUTE CATALOGUE (scripts/gen_openapi.py) -->
 
-98 routes: 87 need a human session, 5 a sending application's ingest key, and 6 no credential at all - and that last number is the one the security suite pins to a closed list.
+99 routes: 88 need a human session, 5 a sending application's ingest key, and 6 no credential at all - and that last number is the one the security suite pins to a closed list.
 
 The permission column is read from each route's own RBAC dependency, so a route guarded by the wrong permission is documented as guarded by the wrong permission. It also says where a per-application role binding is evaluated from: `?app_id=`, the optional query parameter every route guarded by `deps.require` accepts, or `path`, the application named in the URL on the wizard's own routes.
 
@@ -123,6 +123,7 @@ Session bootstrap: signup, login, refresh, invite acceptance, logout and the cal
 | GET | `/auth/me` | session | (session only) | Me |
 | POST | `/auth/refresh` | **none** | - | Refresh |
 | POST | `/auth/signup` | **none** | - | Signup |
+| POST | `/auth/ws-ticket` | session | (session only) | One handshake's worth of credential for the caller's own session (REQ-033). |
 
 ### `orgs`
 
@@ -241,7 +242,7 @@ What the platform currently believes about an application: every mapped signal a
 
 | Method | Path | Credential | Permission | Purpose |
 |---|---|---|---|---|
-| GET | `/apps/{app_id}/detection` | session | `manage_apps` (path) | The current stance, every signal against its baseline, the health score per region, SLO burn, corroboration and the severity the matrix would propose. |
+| GET | `/apps/{app_id}/detection` | session | (session only) | The current stance, every signal against its baseline, the health score per region, SLO burn, corroboration and the severity the matrix would propose. |
 | POST | `/apps/{app_id}/detection/evaluate` | session | `manage_apps` (path) | Run an evaluation now instead of waiting for the next tick. |
 | GET | `/apps/{app_id}/rollups` | session | `manage_apps` (path) | The five-second buckets a verdict was derived from, so a proposal can be checked against the measurements rather than believed. |
 
@@ -251,8 +252,8 @@ The incident lifecycle: steady, watch and proposed are detection's stances; acti
 
 | Method | Path | Credential | Permission | Purpose |
 |---|---|---|---|---|
-| GET | `/apps/{app_id}/change-window` | session | `manage_apps` (path) | Changes announced as started and never announced as completed - the chip beside the health score, sourced from real deploy-hook calls. |
-| GET | `/apps/{app_id}/lifecycle` | session | `manage_apps` (path) | Where this application sits: a detection stance, or an incident somebody declared - and the response says which of the two it is reading. |
+| GET | `/apps/{app_id}/change-window` | session | (session only) | Changes announced as started and never announced as completed - the chip beside the health score, sourced from real deploy-hook calls. |
+| GET | `/apps/{app_id}/lifecycle` | session | (session only) | Where this application sits: a detection stance, or an incident somebody declared - and the response says which of the two it is reading. |
 | GET | `/incidents` | session | (session only) | The tenant's incidents. |
 | POST | `/incidents` | session | `declare_incident` (`?app_id=`) | Declare an incident. |
 | GET | `/incidents/{incident_id}` | session | (session only) | One incident with its whole transition history: who moved it, when, and what they said. |

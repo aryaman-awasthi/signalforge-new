@@ -149,6 +149,42 @@ class AccessTokenService(ABC):
         """Returns the claims or raises AuthenticationError."""
 
 
+class SocketTicketService(ABC):
+    """A short-lived, single-use credential for one WebSocket handshake.
+
+    It exists because of a control this platform will not weaken: the cockpit's
+    session token lives in an httpOnly cookie, so browser JavaScript cannot read
+    it, and a cross-origin WebSocket handshake carries no cookie and cannot set
+    an Authorization header. Handing the token to JavaScript to fix that would
+    undo the S1 control that keeps it out of XSS reach.
+
+    So a ticket is issued instead, and every property below is part of the
+    credential rather than an implementation detail:
+
+    - **short-lived**, in seconds rather than minutes: it exists to survive one
+      handshake, not a session;
+    - **bound** to the tenant, the user and the *session* it was issued from, so
+      revoking the session revokes every ticket cut from it;
+    - **not a bearer token**: it is typed, and the access-token verifier refuses
+      it, so a ticket leaked from a URL, a log or an extension cannot be
+      presented to the HTTP API;
+    - **single-use**: redeeming consumes it, so a replay of a captured handshake
+      is refused even inside its lifetime.
+    """
+
+    @property
+    @abstractmethod
+    def ttl_s(self) -> int: ...
+
+    @abstractmethod
+    def issue(self, *, user_id: str, tenant_id: str, session_id: str) -> str: ...
+
+    @abstractmethod
+    def redeem(self, ticket: str) -> dict[str, Any]:
+        """Claims, exactly once. Raises AuthenticationError on anything else -
+        a bad signature, the wrong type, an expired ticket or a second use."""
+
+
 class SecretStore(ABC):
     """Tenant-scoped encrypted secret storage (REQ-015). Values are encrypted
     at rest and never logged; list operations return names only."""

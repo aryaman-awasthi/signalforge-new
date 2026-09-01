@@ -42,6 +42,7 @@ from signalforge.tests.warroom.conftest import (
     page_for,
     patch_task,
     raise_page,
+    read_bridge,
     responder,
     say,
     tasks,
@@ -354,3 +355,63 @@ async def test_nothing_the_war_room_writes_carries_a_connector_credential(api):
     for surface in surfaces:
         assert "s3cr3t-metrics-token" not in surface
         assert "app-token" not in surface
+
+
+@pytest.mark.req("REQ-014", "REQ-032", "REQ-045")
+async def test_the_bridge_applies_the_same_redaction_floor_as_ingest(api):
+    """Written failing-first (S4 carry-over).
+
+    S3-T02 established that free text is masked *at the boundary, at write time*,
+    so a later reader of the row cannot bypass it. A message a responder types on
+    the bridge did not arrive through ingest and so did not pass the floor - and
+    the commitment harvester stores an excerpt of that text on a task's
+    `evidence_ref`, which is how a card number typed at 03:00 ends up on the task
+    board, in the event stream and in the audit chain.
+
+    The fix is the same policy applied at the bridge boundary, not a second one:
+    `domain/ingest/redaction.mask` is the only implementation, so the two paths
+    cannot drift.
+    """
+    owner_token, tenant_id = owner(api)
+    onboard(api, owner_token)
+    wire_paging(api, owner_token)
+    wire_bridge(api, owner_token)
+    ic = commander(api, owner_token)
+    token = ic["tokens"]["access_token"]
+    responder(api, owner_token, email="sme@acme.io")
+    incident = declare(api, token, severity="P0")
+
+    card = "4111 1111 1111 1111"
+    email = "customer.private@bank.example"
+    posted = say(
+        api,
+        token,
+        incident["id"],
+        f"I'll refund card {card} for {email} in 10 minutes",
+    )
+    # Masked at the moment it is written, so what comes back already is.
+    echoed = posted["messages"][0]["text"]
+    assert card not in echoed
+    assert email not in echoed
+    assert "***" in echoed
+    # And the commitment it produced is still a commitment: the floor removes
+    # the customer's data, not the work.
+    board = tasks(api, token, incident["id"])
+    assert board["tasks"], "the commitment must still become a task"
+
+    surfaces = {
+        "war room": json.dumps(war_room(api, token, incident["id"])),
+        "bridge transcript": json.dumps(read_bridge(api, token, incident["id"])),
+        "task board": json.dumps(board),
+        "join brief": json.dumps(brief(api, token, incident["id"])),
+        "events": api.client.get(
+            "/events?limit=400", headers=api.auth_header(owner_token)
+        ).text,
+        "audit chain": json.dumps(api.audit_rows(tenant_id)),
+        "scrape": api.client.get("/metrics").text,
+    }
+    for name, surface in surfaces.items():
+        for secret in (card, "4111111111111111", email):
+            assert secret not in surface, (
+                f"the bridge's redaction floor did not reach the {name}"
+            )

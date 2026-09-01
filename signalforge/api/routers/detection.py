@@ -1,8 +1,24 @@
 """/apps/{app_id}/detection: what the platform currently believes (S4-T01).
 
-Three routes, all `manage_apps` with the application named in the path, so a
-per-application role binding is evaluated against the application being read -
-the same rule every other `/apps` route follows.
+Three routes, guarded in two ways, and the split is the S4 browser walkthrough's
+one finding (DR-089).
+
+`GET .../detection` is what the **proposal sheet** is made of - the stance, the
+corroboration checklist, the severity the matrix proposes and the evidence
+behind it - and the person who reads it is the person who presses Declare. By
+the frozen roles matrix that person is an incident commander or a tech lead, and
+neither of them ever holds `manage_apps`; only the org owner does. So a
+`manage_apps` guard here does not narrow who may read a proposal, it decides
+that *nobody who may declare* can see one. It is session-scoped to the caller's
+own tenant instead, exactly as the incident reads are and for the same reason -
+and it discloses nothing new, because `GET /incidents/{id}` already publishes
+the same proposal snapshot, families, health score and evidence refs included,
+to any session in the tenant.
+
+The other two stay operator work with the application named in the path, so a
+per-application role binding is evaluated against the application being acted
+on: `POST .../detection/evaluate` forces a scrape, and `GET .../rollups` is the
+raw telemetry rather than a conclusion about it.
 
 The distinction between the two POSTs that are not here matters more than the
 routes that are. There is no route that declares an incident, changes a severity
@@ -39,12 +55,17 @@ router = APIRouter(prefix="/apps", tags=["detection"])
 @router.get("/{app_id}/detection", response_model=DetectionOut)
 async def get_detection(
     app_id: str,
-    principal: Principal = Depends(deps.require_app(Permission.MANAGE_APPS)),
+    principal: Principal = Depends(deps.get_principal),
     container: deps.Container = Depends(deps.get_container),
 ):
     """The current stance, every signal against its baseline, the health score
     per region, SLO burn, corroboration and the severity the matrix would
-    propose. Reading it changes nothing."""
+    propose. Reading it changes nothing.
+
+    No permission, and tenant-scoped in the service rather than here: an
+    application this tenant does not have answers the way a read of nothing
+    does. See the module docstring for why a permission would be the wrong
+    control on this particular read."""
     return detection_out(await container.detection.snapshot(principal, app_id))
 
 
