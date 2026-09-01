@@ -510,6 +510,16 @@ def _link(spec: HypothesisSpec, node: GraphNode) -> Optional[WeightedEvidence]:
             # failing weakens a hypothesis that rests on that component - and
             # strengthens the case that somebody is looking at the wrong thing.
             stance = Stance.REFUTES
+        if kind is EvidenceKind.HUMAN_STATEMENT and detail.get("claims_healthy"):
+            # Somebody has looked and says the component is fine. That argues
+            # against a hypothesis that it is the fault. Without this, a room
+            # that had just cleared a suspect would watch its confidence keep
+            # rising, which is the fastest way to make people stop reading it.
+            stance = Stance.REFUTES
+        if kind is EvidenceKind.CORROBORATION and not detail.get("corroborated", True):
+            # One family is not two. A saturation hypothesis that rests on a
+            # single signal is weaker for it, and the number should say so.
+            stance = Stance.REFUTES
         if wanted and subject and wanted not in subject and subject not in wanted:
             if kind in (EvidenceKind.TELEMETRY_ANOMALY, EvidenceKind.TOPOLOGY_PATH):
                 return None

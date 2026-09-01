@@ -53,6 +53,8 @@ from signalforge.domain.brain.nodes import (
     derived_key,
 )
 from signalforge.domain.brain.statements import (
+    HEALTHY_CLAIM,
+    UNHEALTHY_CLAIM,
     MachineFact,
     STATEMENT_SCHEMA,
     Statement,
@@ -370,6 +372,14 @@ class ConversationAgent(ModelBackedAgent):
                 "classifier": statement.classifier,
                 "evidence_kind": "human_statement",
                 "strength": 1.0 if statement.kind is StatementKind.FACT else 0.6,
+                # Which way the sentence points. A person saying a component is
+                # fine argues *against* a hypothesis that it is the fault, and a
+                # person saying it is failing argues for one. Without this the
+                # confidence policy would count both the same way, and a room
+                # that had just cleared a suspect would watch its confidence keep
+                # rising.
+                "claims_healthy": bool(HEALTHY_CLAIM.search(statement.text)),
+                "claims_unhealthy": bool(UNHEALTHY_CLAIM.search(statement.text)),
             },
             tags=(statement.kind.value, statement.classifier),
         )

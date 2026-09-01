@@ -232,13 +232,37 @@ def test_an_unassigned_task_says_it_is_unassigned_rather_than_naming_a_guess():
 @pytest.mark.req("REQ-045")
 def test_the_unbuilt_agent_panels_are_rendered_with_their_reason():
     """A panel that quietly does not exist is indistinguishable from one that is
-    broken, and the layout an incident commander learns must not move under them
-    when Sprint 5 lands."""
+    broken, and the layout an incident commander learns must not move under it
+    when the feature lands.
+
+    Updated in S5-T05: three of the four panels Sprint 4 reserved are now filled,
+    which is what the placeholders were for. The two that remain still say which
+    sprint fills them, and both now name Sprint 6 - the sprint that actually
+    does, rather than the one that has just passed.
+    """
     shell = read("features", "warroom", "components", "WarRoomShell.tsx")
-    for title in ("Next Best Action", "AI Copilot", "Warning and Guidance", "Team Chat"):
+    for title in ("Next Best Action", "Team Chat"):
         block = shell.split(f'title="{title}"')[1][:400]
         assert "pending=" in block, f"{title} must say what will fill it"
-        assert "Sprint 5" in block
+        assert "Sprint 6" in block, f"{title} must name the sprint that fills it"
+
+
+@pytest.mark.req("REQ-050", "REQ-053", "REQ-055")
+def test_the_sprint_five_panels_are_filled_in_the_places_sprint_four_reserved():
+    """The layout did not move: the titles are unchanged and the placeholders
+    became components in place."""
+    shell = read("features", "warroom", "components", "WarRoomShell.tsx")
+    for title, component in (
+        ("AI Incident Brain", "<BrainPanel"),
+        ("Affected Services", "<TopologyPanel"),
+        ("Warning and Guidance", "<GuidancePanel"),
+        ("AI Copilot", "<CopilotPanel"),
+    ):
+        # Up to the next panel, so a neighbour's `pending=` cannot be read as
+        # this one's.
+        block = shell.split(f'title="{title}"')[1].split("<Panel")[0]
+        assert "pending=" not in block, f"{title} is built; it must not be pending"
+        assert component in block, f"{title} must render {component}"
 
 
 @pytest.mark.req("REQ-012")

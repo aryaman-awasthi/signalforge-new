@@ -154,8 +154,14 @@ class IncidentBrainService:
             incident = await uow.incidents.get(tenant_id, incident_id)
             if incident is None:
                 raise BrainNotFoundError(f"incident {incident_id} not found")
+            # Superseded and retracted rows are returned as well as current
+            # ones. Nothing is deleted, and a client that only ever showed the
+            # current view would hide the half a post-incident review reads -
+            # the belief that was held for forty minutes and then withdrawn.
             nodes = tuple(
-                await uow.incident_graph.list(tenant_id, incident_id, limit=1_000)
+                await uow.incident_graph.list(
+                    tenant_id, incident_id, current_only=False, limit=1_000
+                )
             )
             edges = tuple(await uow.incident_graph.edges(tenant_id, incident_id))
             counts = await uow.incident_graph.count_by_type(tenant_id, incident_id)
@@ -168,7 +174,10 @@ class IncidentBrainService:
             cards = []
             by_id = {node.id: node for node in nodes}
             for node in nodes:
-                if node.node_type is not NodeType.HYPOTHESIS:
+                # One card per *current* hypothesis. The superseded versions are
+                # in `nodes` for the ledger's history view; a card each would put
+                # the same hypothesis on the screen three times.
+                if node.node_type is not NodeType.HYPOTHESIS or not node.current:
                     continue
                 history = tuple(
                     await uow.confidence_history.list(

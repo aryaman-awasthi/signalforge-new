@@ -100,6 +100,13 @@ class TelemetryAgent(Agent):
                     "score": health.score,
                     "band": health.band.value,
                     "worst_region": health.worst_region or "",
+                    # The health score is evidence, not only a headline number.
+                    # Without a kind it never reaches the confidence policy, and
+                    # the strongest thing the detector says about an application
+                    # would count for nothing.
+                    "evidence_kind": "health_score",
+                    "strength": _health_strength(health.score),
+                    "subject": health.worst_region or "",
                 },
             )
         )
@@ -125,6 +132,12 @@ class TelemetryAgent(Agent):
                     "corroborated": corroboration.corroborated,
                     "families": list(corroboration.families),
                     "regions": list(corroboration.regions),
+                    # Corroboration across independent families is the strongest
+                    # statement this platform makes on its own, and a *lack* of
+                    # it argues against the hypotheses that need it. Both
+                    # directions are read by the confidence policy.
+                    "evidence_kind": "corroboration",
+                    "strength": 1.0 if corroboration.corroborated else 0.5,
                 },
             )
         )
@@ -243,6 +256,14 @@ class TelemetryAgent(Agent):
             )
 
         return AgentOutcome(nodes=tuple(nodes), edges=tuple(edges))
+
+
+def _health_strength(score) -> float:
+    """How hard a health score argues. A score of 100 says nothing is wrong and
+    is weak evidence for any hypothesis; a score of 20 is a loud one."""
+    if score is None:
+        return 0.3
+    return round(max(0.2, min(1.5, (100.0 - float(score)) / 60.0)), 3)
 
 
 def confirmed_services(context: IncidentContext) -> dict[str, str]:
