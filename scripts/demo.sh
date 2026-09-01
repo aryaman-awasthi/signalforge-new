@@ -17,6 +17,11 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Same .env load as run.sh: the drill runner signs requests and may ask the
+# platform for model-backed surfaces, so it needs the same configuration.
+if [ -f "$ROOT/.env" ]; then set -a; . "$ROOT/.env"; set +a; fi
+
 PY="$ROOT/.venv/Scripts/python.exe"
 [ -x "$PY" ] || PY="$ROOT/.venv/bin/python"
 [ -x "$PY" ] || PY="python"

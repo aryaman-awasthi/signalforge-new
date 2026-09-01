@@ -13,6 +13,10 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Same .env load as run.sh: reset touches paths that config.py resolves, so it
+# has to resolve them the same way the platform will.
+if [ -f "$ROOT/.env" ]; then set -a; . "$ROOT/.env"; set +a; fi
+
 for marker in "signalforge/api/main.py" "specs/requirements.yaml" "CLAUDE.md"; do
   [ -e "$ROOT/$marker" ] || {
     echo "[reset] refusing: $ROOT does not look like a SignalForge checkout ($marker missing)" >&2

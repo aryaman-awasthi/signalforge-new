@@ -16,6 +16,15 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Configuration is read from the process environment (signalforge/config.py reads
+# os.environ and nothing else) and nothing was ever loading .env, so a machine
+# with a perfectly good gateway key still ran every AI surface in degraded mode.
+# The file the operator is told to write in docs/09 is now the file the platform
+# sees. .env wins over an ambient value; to override one for a single boot,
+# comment it out of .env rather than exporting it.
+if [ -f "$ROOT/.env" ]; then set -a; . "$ROOT/.env"; set +a; fi
+
 PY="$ROOT/.venv/Scripts/python.exe"
 [ -x "$PY" ] || PY="$ROOT/.venv/bin/python"
 [ -x "$PY" ] || PY="python"

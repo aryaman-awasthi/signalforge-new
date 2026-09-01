@@ -47,7 +47,13 @@ Logs land in `var/run/`.
 ## 4. Configuration
 
 Everything is environment, and nothing is hardcoded. `.env.example` is the
-complete list; the ones that matter for a deployment:
+complete list; copy it to `.env` and fill it in. `run.sh`, `reset.sh`,
+`scripts/demo.sh` and `make llm-smoke` each source `$ROOT/.env` before they do
+anything, so the file the operator writes is the environment the platform reads.
+A value in `.env` wins over one already exported in the shell; comment it out
+rather than exporting around it. Nothing else loads the file — a process started
+by hand (`uvicorn ...`) sees only what its own shell exports. These are the
+variables that matter for a deployment:
 
 | Variable | Default | Notes |
 |---|---|---|
@@ -60,8 +66,17 @@ complete list; the ones that matter for a deployment:
 | `SIGNALFORGE_ADAPTERS_DIR` | `signalforge/infrastructure/adapters` | where adapter manifests are mounted |
 | `GENAILAB_BASE_URL` | `https://genailab.tcs.in` | the only outbound AI destination |
 | `GENAILAB_API_KEY` | unset | **absent is a supported mode** - deterministic, badged |
-| `LLM_MODEL_GENERAL` / `_REASONING` / `_EMBEDDINGS` | gpt-4.1 / gpt-5.1 / text-embedding-3-large | swappable by config to any approved model |
+| `LLM_MODEL_GENERAL` / `_REASONING` / `_EMBEDDINGS` | gpt-4.1 / sonnet-4.6 / text-embedding-3-large | swappable by config to any approved model that accepts `temperature=0` |
 | `LLM_TIMEOUT_S`, `LLM_CACHE` | 20, true | |
+| `LLM_CA_BUNDLE` | unset | a PEM to trust *in addition* to the system roots, for a network that intercepts TLS. There is no variable that turns verification off. |
+
+SignalForge asks every model for a deterministic, schema-constrained answer
+(`temperature=0`), because an incident record that paraphrases itself between two
+reads of the same evidence is not evidence. A model id that refuses
+`temperature=0` therefore degrades every AI surface rather than merely varying
+it. `make llm-smoke` is the one command that proves the path end to end — TLS,
+credential, catalogue membership, a real chat call and a real embedding — and it
+names the model and the reason when it fails.
 
 Two keys are generated on first boot and persisted under `var/keys/` so that a
 restart does not invalidate every session. `reset.sh` deletes them, which is

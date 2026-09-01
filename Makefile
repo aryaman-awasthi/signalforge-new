@@ -46,8 +46,10 @@ evidence:
 	else echo "make evidence: scripts/evidence.py not implemented yet"; exit 1; fi
 
 # The only target that talks to a live model. Never part of `make test`.
+# Loads .env the same way run.sh does, so the smoke test and the running
+# platform are asking the same gateway with the same credential.
 llm-smoke:
-	@$(PY) scripts/llm_smoke.py $(ARGS)
+	@if [ -f .env ]; then set -a; . ./.env; set +a; fi; $(PY) scripts/llm_smoke.py $(ARGS)
 
 clean-check:
 	@bash scripts/check_clean.sh
