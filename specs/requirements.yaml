@@ -314,7 +314,7 @@ requirements:
     area: detection-lifecycle
     sprint: S4
     priority: must
-    status: planned
+    status: built
     acceptance: >
       5-second rollups, rolling baselines, anomaly requires a breach sustained across
       three evaluations.
@@ -324,7 +324,7 @@ requirements:
     area: detection-lifecycle
     sprint: S4
     priority: must
-    status: planned
+    status: built
     acceptance: >
       Fast burn proposes, slow burn opens Watch; corroboration needs two independent
       signal families with one customer-facing.
@@ -334,7 +334,7 @@ requirements:
     area: detection-lifecycle
     sprint: S4
     priority: must
-    status: planned
+    status: built
     acceptance: >
       Weighted score (availability 30, errors 25, business 20, latency 15, saturation 10),
       worst region wins; storms cluster by time and topology with suppressed counts.
@@ -369,6 +369,19 @@ requirements:
       War room on declare; membership by blast radius; paging with ack; per-row
       countdowns escalate to next-in-rotation; join brief; bridge commitments become
       tasks with owner and due time.
+
+  - id: REQ-046
+    title: Severity proposed from observed impact, never declared
+    area: detection-lifecycle
+    sprint: S4
+    priority: must
+    status: built
+    acceptance: >
+      The application's own severity matrix classifies measured impact - journey
+      tier, regions affected, worst success rate, customer impact - into P0/P1/P2
+      deterministically, naming the rule that matched and carrying evidence refs
+      that point at the rollups, SLO windows and probe runs it was drawn from; the
+      proposal always requires a human and can never declare.
 
   # --- incident brain (S5) ---------------------------------------------------
   - id: REQ-050

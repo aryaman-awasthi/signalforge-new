@@ -21,6 +21,7 @@ from signalforge.api.openapi import build_openapi
 from signalforge.api.routers import (
     adapters,
     auth,
+    detection,
     escalation,
     events,
     health,
@@ -51,6 +52,10 @@ async def lifespan(application: FastAPI):
     # Again here: the server installs its own plain-text handlers between import
     # and startup, so this is where one log format finally wins.
     configure_logging(container.settings.log_level)
+    # The rollup database is derived and rebuildable, so it is created from its
+    # models here rather than migrated (S4-T01). Doing it before the worker
+    # starts means the first five-second tick has somewhere to write.
+    await container.prepare_rollup_store()
     if container.settings.worker_enabled:
         await container.worker.start()
     try:
@@ -94,6 +99,7 @@ app.include_router(escalation.router)
 app.include_router(events.router)
 app.include_router(adapters.router)
 app.include_router(onboarding.router)
+app.include_router(detection.router)
 app.include_router(ingest_keys.router)
 app.include_router(ingest.router)
 app.include_router(platform.router)

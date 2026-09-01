@@ -104,7 +104,7 @@ catalogue below and its frame protocol is written out later in this document.
 
 <!-- BEGIN GENERATED ROUTE CATALOGUE (scripts/gen_openapi.py) -->
 
-72 routes: 61 need a human session, 5 a sending application's ingest key, and 6 no credential at all - and that last number is the one the security suite pins to a closed list.
+75 routes: 64 need a human session, 5 a sending application's ingest key, and 6 no credential at all - and that last number is the one the security suite pins to a closed list.
 
 The permission column is read from each route's own RBAC dependency, so a route guarded by the wrong permission is documented as guarded by the wrong permission. It also says where a per-application role binding is evaluated from: `?app_id=`, the optional query parameter every route guarded by `deps.require` accepts, or `path`, the application named in the URL on the wizard's own routes.
 
@@ -231,6 +231,16 @@ The seven wizard steps: basics, connect and discover, map, topology, SLOs and po
 | POST | `/apps/{app_id}/test` | session | `manage_apps` (path) | Everything at once: every connector tested in its own direction, every journey probe run in every declared region, and the readiness score... |
 | GET | `/apps/{app_id}/topology` | session | `manage_apps` (path) | Get topology |
 | PUT | `/apps/{app_id}/topology` | session | `manage_apps` (path) | Upload topology |
+
+### `detection`
+
+What the platform currently believes about an application: every mapped signal against its rolling baseline, the weighted health score per region, SLO burn rates, corroboration and the severity the application's own matrix would propose. Detection proposes; only a human declares.
+
+| Method | Path | Credential | Permission | Purpose |
+|---|---|---|---|---|
+| GET | `/apps/{app_id}/detection` | session | `manage_apps` (path) | The current stance, every signal against its baseline, the health score per region, SLO burn, corroboration and the severity the matrix would propose. |
+| POST | `/apps/{app_id}/detection/evaluate` | session | `manage_apps` (path) | Run an evaluation now instead of waiting for the next tick. |
+| GET | `/apps/{app_id}/rollups` | session | `manage_apps` (path) | The five-second buckets a verdict was derived from, so a proposal can be checked against the measurements rather than believed. |
 
 ### `ingest`
 
@@ -496,6 +506,50 @@ Status codes worth naming:
 SignalForge was asked to call is broken" is told apart from "SignalForge is broken". No adapter
 error message carries a credential - the transport that raises them redacts its own repr.
 
+## Detection: `/apps/{app_id}/detection` (REQ-040, REQ-041, REQ-042, REQ-046)
+
+Three routes, all `manage_apps` with the application named in the path. They read what the
+platform currently believes; **none of them declares anything**, and there is no route in this
+API that does. Declaring, changing a severity and closing are human acts (REQ-043) and land in
+S4-T02's lifecycle.
+
+| Route | What it does |
+|---|---|
+| `GET /apps/{app_id}/detection` | the stance, every mapped signal against its baseline, the health score per region, SLO burn, corroboration, the storm clusters and the severity the application's own matrix would propose |
+| `POST /apps/{app_id}/detection/evaluate` | run an evaluation now instead of waiting for the next five-second tick. A human override of the cadence, audited as one |
+| `GET /apps/{app_id}/rollups` | the five-second buckets a verdict was derived from: `signal_key`, `region` and `window_s` (max 86400) |
+
+`GET .../detection` **advances nothing**. It summarises the signal states already stored rather
+than running an evaluation, because a read that aged a breach into an anomaly would make every
+proposal depend on how often somebody refreshed a screen. `POST .../detection/evaluate` is the
+one that moves the streaks, and it writes an audit entry naming who asked.
+
+The stance is the field to read first:
+
+| Stance | When | What it means to a person |
+|---|---|---|
+| `steady` | nothing is breaching | nobody is being told anything |
+| `watch` | a breach is being observed, a slow burn is running, or a journey probe is failing | a quiet "AI is checking" banner, no page |
+| `proposed` | corroboration holds **and** a fast burn crossed, a customer-facing family is anomalous, or a journey failed three probe runs | a proposal sheet with evidence, and a Declare button a human presses |
+
+Every conclusion carries what it was drawn from. `severity.evidence[]` and
+`corroboration.evidence[]` hold refs of the form `rollup:<signal>/<region>@<bucket>`,
+`slo:<slo_id>/<window>/<region>`, `journey:<journey>/<region>` and
+`alert-cluster:<cluster_id>` - each of them re-readable, the first through
+`GET /apps/{app_id}/rollups`. A signal state names its `basis` (`level` or `rate`, decided
+from the shape of the window rather than configured), its `threshold`, its `baseline_source`
+(`rolling`, `onboarding` or `frozen` - held while the signal is breaching so a long incident
+cannot be averaged into normality) and its `streak` out of three.
+
+Two response fields are constants rather than state: `severity.requires_human` is always true
+and `severity.declared` is always false. They are published so that a client cannot render a
+proposal as though it were an incident.
+
+| Code | When |
+|---|---|
+| 404 | the application is not in this tenant - identical body whether it belongs to another tenant or to nobody |
+| 422 | `window_s` outside 0..86400, or a signal key that is not mapped |
+
 ## Ingest keys (REQ-032)
 
 All `manage_apps`. An ingest key is the credential a *sending application* holds: a bearer
@@ -626,6 +680,21 @@ fix the payload and resend with the same one.
 | `topology.updated` | signal | owning tenant | a topology upload that produced a new version |
 | `system.app.baseline.learned` | signal | owning tenant | a baseline run: what was learned and what was missed, with reasons |
 | `system.app.tested` | signal | owning tenant | the wizard's test page: connector and probe outcomes |
+| `detection.stance.changed` | signal | owning tenant | Steady <-> Watch <-> Proposed. Carries the reasons, the health score and the corroboration verdict |
+| `detection.anomaly.opened` / `.cleared` | signal | owning tenant | a breach reached three sustained evaluations, or recovered. Carries the value, the threshold, the baseline and its source |
+| `detection.signal.stale` | signal | owning tenant | a mapped signal stopped reporting. Stale is not healthy |
+| `detection.slo.burn` | signal | owning tenant | the worst SLO's burn verdict changed. Fast burn proposes, slow burn opens Watch |
+| `detection.health.changed` | signal | owning tenant | the weighted health score crossed a band. Worst region wins |
+| `detection.alert.storm` | signal | owning tenant | alerts clustered by time and topology, with the root and the suppressed count |
+| `detection.severity.proposed` | signal | owning tenant | a corroborated proposal, with `requires_human: true`, `declared: false` and the evidence refs it was drawn from |
+| `detection.evaluation.forced` | signal | owning tenant | a **human** ran an evaluation off-cadence. The one detection topic with a human actor, and an audit entry |
+| `system.detection.poll.degraded` / `.recovered` | signal | owning tenant | a metrics scrape started or stopped failing. Written **once** per outage, not once per five-second tick |
+
+Every `detection.*` event except `detection.evaluation.forced` carries an `actor.type` of
+`system` and a `source.authority` of `observed`: the platform measured this, it is not the
+system of record for it, and an evidence chain that cannot tell those apart is one an auditor
+cannot use. All of them are on the **signal** plane and carry no `incident_id`, because
+detection proposes and only a human declares (REQ-043).
 
 Audit topics `audit.ingest.rejected` and `audit.ingest.duplicate` carry the same facts into the
 hash chain, one entry per batch rather than one per item. Every onboarding topic above is also an

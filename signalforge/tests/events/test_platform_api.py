@@ -98,9 +98,12 @@ async def test_platform_status_is_operator_work(api):
     body = allowed.json()
     assert body["clock"]["source"] in ("wall", "virtual")
     assert body["bus"]["head_seq"] >= 0
-    assert {j["name"] for j in body["worker"]["jobs"]} == {
-        "dispatcher", "connector-health", "retention"
-    }
+    # The S2 backbone jobs, plus whatever later sprints scheduled beside them.
+    # Asserted as a subset with the detection loops named explicitly (S4-T01),
+    # so a job silently disappearing still fails while adding one does not.
+    jobs = {j["name"] for j in body["worker"]["jobs"]}
+    assert {"dispatcher", "connector-health", "retention"} <= jobs
+    assert {"metric-rollups", "detection", "probes", "rollup-retention"} <= jobs
     assert body["retention"] == []
 
 

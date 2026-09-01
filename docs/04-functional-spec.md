@@ -934,3 +934,219 @@ seals are the history of what happened while the application was watched, and no
 onboarding path can delete an event - the only code that removes a recorded event is the
 retention sweep, it works on the signal plane only, and it refuses to cross a seal. Offboarding
 therefore stops the watching and keeps the evidence, which is the correct way round.
+
+## 7. Detection: steady state to a proposal (REQ-040, REQ-041, REQ-042, REQ-046)
+
+Onboarding ends with an application whose golden signals, journeys, probe templates, SLO targets
+and severity matrix are all stored. Detection is what reads them. It runs continuously, it
+concludes in public, and it stops one step short of the decision: **it proposes, and a human
+declares** (REQ-043). There is no code path in this chapter that creates an incident.
+
+### 7.1 The loop, and why it is four jobs
+
+    metric-rollups    every 5s    one scrape, folded into five-second buckets
+    detection         every 5s    evaluate the buckets and announce what changed
+    probes            every 30s   run each journey probe in each declared region
+    rollup-retention  every 1h    age out rollups and probe results
+
+One scrape per tick answers every mapped signal, because `/observe/metrics` is a point-in-time
+exposition: reading it once and selecting locally costs one HTTP call instead of one per signal,
+and every signal in the result is then measured at the same instant - which is what makes
+"errors rose while the business counter fell" a statement about one moment rather than two.
+
+Polling and evaluating are two jobs rather than one so that each owns its failures: an
+application whose profile will not evaluate must not be able to stop the scrape that feeds every
+other application's baseline. The probe cadence is deliberately six times slower than the metric
+one, because a synthetic probe is real traffic against somebody's production system and
+detection that floods the application it is watching is not detection.
+
+### 7.2 A bucket is one observation
+
+Rollups live in a second database, `rollups.db`, keyed on
+`(tenant, app, signal, region, bucket_start)`. That key is the idempotency the whole detector
+rests on. The poller is a loop on a timer, so a slow tick that overlaps the next, a restart
+mid-sweep, or an operator forcing an evaluation can all land two polls inside one five-second
+bucket - and two polls must not become two samples, because a duplicate that moved a baseline
+would be a duplicate that hid an incident. The second write is counted as a duplicate and
+changes nothing.
+
+The database is separate for three reasons, all about failure: a five-second write loop has no
+business sharing a transaction with the audit hash chain; everything in it is derived and can be
+rebuilt by letting the poller run, so pruning it hourly is safe; and its rows age out in hours
+while the incident plane is kept and sealed, and two lifetimes in one file is how the wrong
+thing eventually gets deleted.
+
+### 7.3 What normal is, and what stops it moving
+
+A baseline is **rolling**: an application at two percent errors on a Tuesday afternoon is not the
+same application at two percent during a release freeze, so the comparison is against its own
+recent past. Three rules keep it honest.
+
+- The bucket being judged is never in its own baseline, and the reference window stops four
+  buckets short of it. An anomaly has to last three evaluations, and a baseline that had already
+  absorbed the first two would have widened its standard deviation by exactly the size of the
+  event it is meant to notice.
+- While a signal is breaching the baseline is **held**. Without that, a breach that lasts long
+  enough teaches the window that it is normal, and after a minute the detector reports that
+  everything is fine while the application is still on fire. An anomaly ends when the signal
+  recovers, not when the detector gets used to it.
+- Until there is a window to roll over, the onboarding-time baseline is used and says so
+  (`baseline_source: onboarding`). A number learned in five scrapes during a wizard step is
+  usable and should not pretend to be more.
+
+Whether a series is a **level** or a **counter** is derived rather than configured: Prometheus
+text exposition does not say whether a number accumulates, and the profile records which
+direction is bad rather than which shape the number has. A window that never decreases and
+increases in at least half its buckets is a counter and is evaluated as a per-second rate;
+anything else - including a gauge that made one large step - is a level. `errors_total` rising
+forever is not an anomaly; `errors_total` rising four times faster than it was is.
+
+### 7.4 Anomaly: a breach sustained across three evaluations
+
+One evaluation past a threshold is a garbage-collection pause, a redeploy, a slow disk or a
+neighbour's backup job. An anomaly is a breach that is still there on the third consecutive
+evaluation - fifteen seconds at the five-second cadence.
+
+| Seen | Streak | Status |
+|---|---|---|
+| nothing comparable | reset to 0 | `stale`, or `unknown` if never measured |
+| inside the threshold | reset to 0 | `healthy` |
+| past the threshold, streak < 3 | +1 | `breaching` |
+| past the threshold, streak >= 3 | +1 | `anomalous` |
+
+One clean evaluation clears the streak outright - not a decay, because a streak that survived
+recovery would eventually fire on three unrelated blips an hour apart. Missing data neither
+advances a streak nor clears one: it lands `stale`, which is **not** healthy. A detector that
+reads silence as health is worse than no detector, because it is confidently wrong at exactly the
+moment the thing it was watching stopped answering. The streak is durable, so a restart during a
+developing incident resumes counting rather than adding fifteen seconds to the detection time.
+
+### 7.5 SLO burn: fast proposes, slow opens Watch
+
+    burn = observed error ratio / (1 - objective)
+
+At 1x the budget lasts exactly the window it was sized for. Two windows, both using the
+application's own multipliers from the SLO step:
+
+| Window | Default multiplier | Effect |
+|---|---|---|
+| 5 minutes | 14.4x | **proposes** an incident |
+| 30 minutes | 6.0x | opens **Watch** |
+
+The indicator is the mapped signal the SLO names, and it must be a ratio: a request *count* says
+nothing about what fraction of requests failed. A signal that is not a ratio produces a burn
+observation saying exactly that and no verdict, because a burn rate that is silently wrong is
+worse than one that is missing. A success ratio is inverted into an error ratio and an error
+ratio is read as it stands - which of the two an operator mapped is what `direction` records, so
+a budget can be read off a signal called `payment_success_ratio` with no naming convention. The
+**worst region** burns, not the average of every region: a two-region deployment exists so one
+region can fail while the other keeps serving, and averaging is how a total failure in one reads
+as half a problem.
+
+### 7.6 Corroboration: the gate a proposal has to pass
+
+One family of signals going wrong is a story with one witness. Latency alone is a slow disk, an
+error counter alone is a noisy client retrying, saturation alone is a backup job. A proposal
+needs **two independent signal families, at least one of them customer-facing** - availability,
+business or errors, or a failing synthetic probe, which is the platform's own first-hand evidence
+that a journey does not work.
+
+Independence is by *family*, not by signal. Two error metrics on two services are one family and
+corroborate nothing: they are the same measurement taken twice, and counting them as two
+witnesses is how alert storms turn into incidents nobody declared. Corroboration counts
+`anomalous`, never `breaching`, so the sustained rule cannot be bypassed by having two noisy
+families at once.
+
+Every conclusion carries its evidence refs - `rollup:<signal>/<region>@<bucket>`,
+`slo:<slo>/<window>/<region>`, `journey:<journey>/<region>`, `alert-cluster:<id>` - each of them
+re-readable. A proposal an operator cannot drill into is an assertion, and the whole design of
+this product is that a human decides.
+
+### 7.7 Health score: weighted, renormalised, worst region wins
+
+| Family | Weight | Why it is worth that much |
+|---|---|---|
+| availability | 30 | not being there is the worst thing that can happen |
+| errors | 25 | being there and failing is the second worst |
+| business | 20 | payments not settling is what the business actually notices |
+| latency | 15 | slow is bad, but slow is still working |
+| saturation | 10 | a leading indicator, not an outcome |
+
+Traffic carries **no** weight. It is context, not health: traffic falling can be an outage or a
+Sunday, and a score that could not tell those apart would drift every weekend. It is still
+mapped, still rolled up and still available as corroborating evidence - it just does not score.
+
+Only families that are mapped *and measured* count, and the score is renormalised over the weight
+actually covered, so an application with no saturation metric is not permanently capped at 90 for
+a signal it does not emit; `covered_weight` is reported beside the score so a 100 out of 45
+cannot be mistaken for a 100 out of 100. A stale family scores as unmeasured rather than as
+healthy and drops out of the covered weight. Within a family the **worst** signal speaks, because
+averaging would let four healthy error metrics bury the one that is on fire. Across regions the
+**worst region wins**: an application at 100 in one region and 20 in another is a 20.
+
+### 7.8 Alert storms: clustered by time and topology, suppressed with a count
+
+One fault produces many alerts - on the database, on every service that calls it, on the queue
+backing up behind them, and on the synthetic checks in front of all of it. Clustering is
+deliberately mechanical, because a responder has to be able to disagree with it: two alerts join
+when they are within two minutes of each other **and** the topology nodes they name are within
+two hops in the application's own map. An alert whose labels name no node clusters only with
+alerts of the same *name* inside the window - it would be easy to sweep the unmapped ones into
+whatever cluster is nearby, and that is how a second, unrelated fault gets suppressed during an
+incident.
+
+The **root** is the alert on the most depended-upon node in the cluster: `A depends_on B` means a
+failure of B explains A, so the node the largest number of cluster-mates point at is the one
+worth reading first. Ties break by earliest start then by alert id, so the same storm always
+names the same root and a screen that re-renders every five seconds does not flicker between
+explanations. Children are suppressed **with a visible count** and nothing is deleted: the
+cluster carries every member id.
+
+### 7.9 Severity: proposed from measured impact, declared by a person
+
+The matrix is the application's own, shipped configured with the P0/P1/P2 defaults and editable
+in the SLO step. Detection supplies the four numbers it reasons in:
+
+| Matrix input | Where it comes from |
+|---|---|
+| journey tier | the most important journey with a failing probe, or with a breached SLO |
+| regions affected | regions holding an anomalous customer-facing signal or a failing probe |
+| success rate | the worst measured journey success rate, else the worst customer-facing ratio signal |
+| customer impacting | any anomalous customer-facing family, or any failing probe |
+
+Each is a measurement and each is reported beside the proposal, so "P0" is visibly the
+consequence of "tier-1 journey below 80 percent in both regions" rather than of a model. A probe
+that could not be *run* is `unknown` and contributes to none of them: "we could not check" and
+"the journey is broken" lead to opposite next actions.
+
+The proposal carries `requires_human: true` and `declared: false`, and the value object refuses
+to be constructed any other way. Nothing in this chapter can declare.
+
+### 7.10 The stance, and what it means to a person
+
+| Stance | When | What a person sees |
+|---|---|---|
+| Steady | nothing is breaching | nothing |
+| Watch | a breach is being observed, a slow burn is running, or a journey probe is failing | a quiet "AI is checking" banner |
+| Proposed | corroboration holds **and** a fast burn crossed, a customer-facing family is anomalous, or a journey failed three probe runs | a proposal sheet with evidence and a Declare button |
+
+Watch opens on a *breach*, not on a sustained anomaly, because the first evaluation past the
+threshold is exactly when a quiet "we are looking at this" is useful - and it is fifteen seconds
+before anything could be proposed. Proposed requires corroboration, so a single noisy family can
+reach Watch and can never reach a proposal, however long it lasts.
+
+### 7.11 Where every detection failure lands
+
+| Failure | Where it lands | Held by |
+|---|---|---|
+| **Timeout** | a timed-out scrape writes no rollup, is announced **once** per outage rather than once per tick, and the signals it fed go `stale` - never healthy | `test_rollups.py` |
+| **Uncertain external state** | a probe the platform could not run is `unknown`, never `failed`, and contributes to no success rate and no severity proposal | `test_probes.py` |
+| **Partial completion** | a scrape where two of five selectors match nothing writes the three and names the two with their selectors and what they matched | `test_rollups.py` |
+| **Duplicates** | two polls inside one five-second bucket are one observation; two probe sweeps at one instant are one measurement | `test_rollups.py`, `test_probes.py` |
+| **Model / adapter failure** | a signal with no window and no onboarding baseline reports `learning: n of 6 reference samples` rather than inventing a threshold; an SLO whose indicator is not a ratio reports that instead of a number | `test_anomaly.py`, `test_burn.py` |
+| **Human override** | forcing an evaluation is a human act with an audit entry, and it proposes exactly what the loop would have proposed; reading the view advances nothing | `test_detection_flow.py`, `test_anomaly.py` |
+| **Permission change mid-flow** | a connector disabled between the sweep's work list and the call yields `unknown`, not a failed journey; an operator narrowed to one application is refused on another and everything already measured survives | `test_probes.py`, `test_detection_boundary.py` |
+
+Removing an application removes what the detector believes about it - the signal states and the
+snapshot - after the removal commits and never inside it, because a derived store that failed to
+clean up must not roll back the removal the operator asked for.

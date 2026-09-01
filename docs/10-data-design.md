@@ -5,8 +5,13 @@ SQLAlchemy models Alembic also autogenerates migrations from, so this document
 cannot drift from the schema. The design notes below are authored; the ERD and
 the column tables are not.
 
-Generated: 2026-09-01T04:36:46+00:00
-Tables: 27
+Two databases. `signalforge.db` holds identity, the event backbone, the
+integrations and onboarding, and is the one Alembic migrates. `rollups.db`
+holds derived detection telemetry, is created from its models at startup, and
+can be deleted without losing any record of anything that happened.
+
+Generated: 2026-09-01T05:32:15+00:00
+Tables: 27 in signalforge.db, 4 in rollups.db
 
 ## 1. Entity relationship diagram
 
@@ -420,6 +425,80 @@ erDiagram
         json detail
     }
     agent_runs ||--o{ agent_run_steps : "run_id"
+```
+
+### Detection (S4) - second database, `rollups.db`
+
+Everything here is derived: rollups are re-read from the integrated system, signal states are recomputed from rollups, probe results are re-run. It is a separate database because a five-second write loop has no business sharing a transaction with the audit hash chain, and because these tables age out in hours while the incident plane is kept and sealed. Deleting the file costs the detector its recent history and costs the incident record nothing.
+
+```mermaid
+erDiagram
+    metric_rollups {
+        integer id "PK"
+        string tenant_id
+        string app_id
+        string signal_key
+        string region
+        string family
+        datetime bucket_start
+        integer samples
+        float mean
+        float minimum
+        float maximum
+        float last
+        integer series_count
+    }
+    signal_states {
+        string tenant_id "PK"
+        string app_id "PK"
+        string signal_key "PK"
+        string region "PK"
+        string family
+        string status
+        integer streak
+        float value
+        string basis
+        float baseline_mean
+        float baseline_stddev
+        string baseline_source
+        float threshold
+        float deviation
+        integer samples
+        datetime first_breach_at
+        datetime anomalous_since
+        datetime last_value_at
+        datetime evaluated_at
+        text detail
+    }
+    probe_results {
+        integer id "PK"
+        string tenant_id
+        string app_id
+        string probe_id
+        string journey_id
+        string region
+        string verdict
+        integer status_code
+        float latency_ms
+        datetime at
+        text detail
+        boolean synthetic
+    }
+    detection_snapshots {
+        string tenant_id "PK"
+        string app_id "PK"
+        string stance
+        string severity
+        float health_score
+        string health_band
+        boolean corroborated
+        string burn_verdict
+        string storm_fingerprint
+        integer suppressed
+        integer anomalous_signals
+        datetime evaluated_at
+        text detail
+    }
 ```
 
 ## 2. Tables
@@ -952,6 +1031,98 @@ Indexes: `ix_agent_runs_incident`, `ix_agent_runs_tenant_id`, `ix_agent_runs_ten
 Indexes: `ix_agent_run_steps_run`, `ix_agent_run_steps_run_id`
 
 
+### Detection (S4) - second database, `rollups.db`
+
+#### `metric_rollups`
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | integer | no | primary key |
+| `tenant_id` | string | no |  |
+| `app_id` | string | no |  |
+| `signal_key` | string | no |  |
+| `region` | string | no |  |
+| `family` | string | no |  |
+| `bucket_start` | datetime | no |  |
+| `samples` | integer | no |  |
+| `mean` | float | no |  |
+| `minimum` | float | no |  |
+| `maximum` | float | no |  |
+| `last` | float | no |  |
+| `series_count` | integer | no |  |
+
+Indexes: `ix_metric_rollups_age`, `ix_metric_rollups_app_time`, `ix_metric_rollups_series`  
+Constraints: unique (tenant_id, app_id, signal_key, region, bucket_start)
+
+
+#### `signal_states`
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `tenant_id` | string | no | primary key |
+| `app_id` | string | no | primary key |
+| `signal_key` | string | no | primary key |
+| `region` | string | no | primary key |
+| `family` | string | no |  |
+| `status` | string | no |  |
+| `streak` | integer | no |  |
+| `value` | float | yes |  |
+| `basis` | string | no |  |
+| `baseline_mean` | float | yes |  |
+| `baseline_stddev` | float | yes |  |
+| `baseline_source` | string | no |  |
+| `threshold` | float | yes |  |
+| `deviation` | float | no |  |
+| `samples` | integer | no |  |
+| `first_breach_at` | datetime | yes |  |
+| `anomalous_since` | datetime | yes |  |
+| `last_value_at` | datetime | yes |  |
+| `evaluated_at` | datetime | yes |  |
+| `detail` | text | no |  |
+
+Indexes: `ix_signal_states_app`, `ix_signal_states_status`
+
+
+#### `probe_results`
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | integer | no | primary key |
+| `tenant_id` | string | no |  |
+| `app_id` | string | no |  |
+| `probe_id` | string | no |  |
+| `journey_id` | string | yes |  |
+| `region` | string | no |  |
+| `verdict` | string | no |  |
+| `status_code` | integer | yes |  |
+| `latency_ms` | float | no |  |
+| `at` | datetime | no |  |
+| `detail` | text | no |  |
+| `synthetic` | boolean | no |  |
+
+Indexes: `ix_probe_results_age`, `ix_probe_results_app_time`  
+Constraints: unique (tenant_id, app_id, probe_id, region, at)
+
+
+#### `detection_snapshots`
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `tenant_id` | string | no | primary key |
+| `app_id` | string | no | primary key |
+| `stance` | string | no |  |
+| `severity` | string | yes |  |
+| `health_score` | float | yes |  |
+| `health_band` | string | no |  |
+| `corroborated` | boolean | no |  |
+| `burn_verdict` | string | no |  |
+| `storm_fingerprint` | string | no |  |
+| `suppressed` | integer | no |  |
+| `anomalous_signals` | integer | no |  |
+| `evaluated_at` | datetime | no |  |
+| `detail` | text | no |  |
+
+
 ## 3. Retention planes
 
 Two planes share one table and are told apart by the `plane` column.
@@ -1122,12 +1293,64 @@ the application exists; removing the application removes its maps, and removing
 the application is refused while any connector or active ingest key still points
 at it.
 
+## 6e. Detection: the second database
+
+`rollups.db` is a different file with a different lifetime, reached through
+`DetectionUnitOfWork` rather than the identity one. Three reasons, all of them
+about failure rather than tidiness:
+
+1. **Write rate.** The rollup loop writes every five seconds per application.
+   Appending to the audit hash chain reads the previous tip inside the same
+   transaction; putting a five-second telemetry loop on that transaction would
+   make the chain the contended resource in the system.
+2. **Recoverability.** Everything here is derived - rollups are re-read from the
+   integrated system, signal states are recomputed from rollups, probe results
+   are re-run. Deleting the file costs the detector its recent history and costs
+   the incident record nothing, which is what makes hourly pruning safe.
+3. **Retention.** These tables age out in hours (`ROLLUP_RETENTION_S`, six by
+   default). The incident plane is kept and sealed. Two lifetimes in one file is
+   how the wrong thing eventually gets deleted.
+
+There is no Alembic revision for it. Alembic's environment targets the incident
+database's metadata, and a migration for a store whose only honest recovery is
+"let the poller run again" would be ceremony rather than safety; the schema is
+created from the models at startup (`create_rollup_schema`, called from the API
+lifespan).
+
+`metric_rollups` is unique on **(tenant_id, app_id, signal_key, region,
+bucket_start)**. That constraint is the idempotency the whole detector rests on:
+a bucket is *one observation*, so a poller tick that overlaps the next, a restart
+mid-sweep, or an operator forcing an evaluation cannot turn one scrape into two
+samples and move the baseline the detector is about to compare against. The store
+counts the second write as a duplicate rather than raising. `probe_results` is
+unique the same way, on (tenant, app, probe, region, at).
+
+`signal_states` holds the breach streak durably, keyed on (tenant, app, signal,
+region). It is one row per signal rather than a time series because it is a
+*belief*, not a measurement - and it is durable so that a restart in the middle
+of a developing incident resumes counting instead of starting again at zero and
+adding three evaluations to the time-to-detection. `detection_snapshots` is one
+row per application holding the last verdict, and exists only so that a
+five-second loop can publish **transitions** rather than a heartbeat.
+
+Tenant isolation holds here exactly as it does next door: every table carries
+`tenant_id` and every read applies the predicate inside the repository. The one
+cross-tenant method is `prune`, which removes by age across the install and
+returns a count rather than rows.
+
 ## 7. Indexes
 
 Every index exists for a query the platform actually makes:
 
 | Index | Serves |
 |---|---|
+| `ix_metric_rollups_series` | the detector's per-(signal, region) window read, which is every evaluation |
+| `ix_metric_rollups_app_time` | the rollup API's whole-application window |
+| `ix_metric_rollups_age` | the retention sweep, which deletes by bucket age across tenants |
+| `ix_signal_states_app` | loading what the detector believes about one application |
+| `ix_signal_states_status` | counting anomalous signals per tenant |
+| `ix_probe_results_app_time` | journey success rates over the evaluation window |
+| `ix_probe_results_age` | the retention sweep for probe runs |
 | `ix_events_tenant_seq` | replay paging (`tenant_id`, `seq > after_seq`) |
 | `ix_events_chain` | chain verification and sealing per (tenant, plane) |
 | `ix_events_lane_seq` | the dispatcher's per-lane sweep |

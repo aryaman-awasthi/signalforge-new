@@ -16,6 +16,8 @@ from pathlib import Path
 from cryptography.fernet import Fernet
 
 from signalforge.contracts.ingest import REPLAY_WINDOW_S
+from signalforge.domain.detection.baselines import DEFAULT_BASELINE_WINDOW_S
+from signalforge.domain.detection.rollups import ROLLUP_INTERVAL_S, ROLLUP_RETENTION_S
 from signalforge.domain.events.retention import SIGNAL_RETENTION_DEFAULT_DAYS
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -70,6 +72,16 @@ class Settings:
     ingest_rate_limit: int
     ingest_rate_window_s: int
     ingest_max_body_bytes: int
+    # Detection (S4-T01). rollup_db_url is a *second* database: derived,
+    # high-frequency, pruned in hours, and deliberately not the one carrying the
+    # audit hash chain (see infrastructure/persistence/rollup_models.py).
+    rollup_db_url: str = f"sqlite+aiosqlite:///{ROOT / 'var' / 'rollups.db'}"
+    detection_enabled: bool = True
+    rollup_interval_s: float = float(ROLLUP_INTERVAL_S)
+    detection_interval_s: float = float(ROLLUP_INTERVAL_S)
+    probe_interval_s: float = 30.0
+    rollup_retention_s: float = float(ROLLUP_RETENTION_S)
+    detection_baseline_window_s: float = float(DEFAULT_BASELINE_WINDOW_S)
 
 
 def load_settings() -> Settings:
@@ -138,5 +150,39 @@ def load_settings() -> Settings:
                 )
             ),
             INGEST_MAX_BODY_BYTES_CAP,
+        ),
+        rollup_db_url=os.environ.get(
+            "SIGNALFORGE_ROLLUP_DB_URL",
+            f"sqlite+aiosqlite:///{ROOT / 'var' / 'rollups.db'}",
+        ),
+        detection_enabled=os.environ.get("SIGNALFORGE_DETECTION_ENABLED", "1") != "0",
+        # The cadence is a floor as well as a default: a poll interval wider than
+        # the bucket would leave holes a baseline has to interpolate across, and
+        # one narrower would put two polls in one bucket, where the second is a
+        # duplicate by design and therefore wasted work.
+        rollup_interval_s=max(
+            float(os.environ.get("SIGNALFORGE_ROLLUP_INTERVAL_S", ROLLUP_INTERVAL_S)),
+            1.0,
+        ),
+        detection_interval_s=max(
+            float(
+                os.environ.get("SIGNALFORGE_DETECTION_INTERVAL_S", ROLLUP_INTERVAL_S)
+            ),
+            1.0,
+        ),
+        probe_interval_s=max(
+            float(os.environ.get("SIGNALFORGE_PROBE_INTERVAL_S", 30)), 5.0
+        ),
+        rollup_retention_s=max(
+            float(os.environ.get("SIGNALFORGE_ROLLUP_RETENTION_S", ROLLUP_RETENTION_S)),
+            600.0,
+        ),
+        detection_baseline_window_s=max(
+            float(
+                os.environ.get(
+                    "SIGNALFORGE_DETECTION_BASELINE_WINDOW_S", DEFAULT_BASELINE_WINDOW_S
+                )
+            ),
+            60.0,
         ),
     )

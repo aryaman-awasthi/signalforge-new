@@ -847,6 +847,88 @@
         "title": "AgentRunStepOut",
         "type": "object"
       },
+      "AlertClusterOut": {
+        "properties": {
+          "alert_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Alert Ids",
+            "type": "array"
+          },
+          "cluster_id": {
+            "title": "Cluster Id",
+            "type": "string"
+          },
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "latest_at": {
+            "format": "date-time",
+            "title": "Latest At",
+            "type": "string"
+          },
+          "names": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Names",
+            "type": "array"
+          },
+          "node_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Node Ids",
+            "type": "array"
+          },
+          "root_alert_id": {
+            "title": "Root Alert Id",
+            "type": "string"
+          },
+          "root_node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Root Node Id"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "suppressed_count": {
+            "title": "Suppressed Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cluster_id",
+          "root_alert_id",
+          "severity",
+          "size",
+          "suppressed_count",
+          "started_at",
+          "latest_at"
+        ],
+        "title": "AlertClusterOut",
+        "type": "object"
+      },
       "AppTier": {
         "description": "How much the business cares. Tier drives the severity matrix, not the\nother way round: a tier-1 journey failing is what makes an incident a P0.",
         "enum": [
@@ -1343,6 +1425,76 @@
           "missed"
         ],
         "title": "BaselineRunOut",
+        "type": "object"
+      },
+      "BurnWindowOut": {
+        "properties": {
+          "breached": {
+            "title": "Breached",
+            "type": "boolean"
+          },
+          "budget_ratio": {
+            "title": "Budget Ratio",
+            "type": "number"
+          },
+          "burn_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Burn Rate"
+          },
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "error_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Ratio"
+          },
+          "multiplier": {
+            "title": "Multiplier",
+            "type": "number"
+          },
+          "region": {
+            "default": "",
+            "title": "Region",
+            "type": "string"
+          },
+          "samples": {
+            "title": "Samples",
+            "type": "integer"
+          },
+          "window": {
+            "title": "Window",
+            "type": "string"
+          },
+          "window_s": {
+            "title": "Window S",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "window",
+          "window_s",
+          "multiplier",
+          "samples",
+          "budget_ratio",
+          "breached"
+        ],
+        "title": "BurnWindowOut",
         "type": "object"
       },
       "BusStatusOut": {
@@ -2243,6 +2395,52 @@
         "title": "ConnectorPatchIn",
         "type": "object"
       },
+      "CorroborationOut": {
+        "properties": {
+          "corroborated": {
+            "title": "Corroborated",
+            "type": "boolean"
+          },
+          "customer_facing_families": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Customer Facing Families",
+            "type": "array"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRefOut"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "families": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Families",
+            "type": "array"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          },
+          "regions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Regions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "corroborated"
+        ],
+        "title": "CorroborationOut",
+        "type": "object"
+      },
       "CredentialScope": {
         "description": "Separate credentials for separate blast radii (architecture section 8).\n\nThey are separate bindings, not settings on one binding: the read-only key\nand the remediation key are different secrets held for different reasons,\nand losing one must not imply the other.",
         "enum": [
@@ -2366,6 +2564,80 @@
         ],
         "title": "DeadLetterState",
         "type": "string"
+      },
+      "DetectionOut": {
+        "properties": {
+          "app_id": {
+            "title": "App Id",
+            "type": "string"
+          },
+          "burns": {
+            "items": {
+              "$ref": "#/components/schemas/SloBurnOut"
+            },
+            "title": "Burns",
+            "type": "array"
+          },
+          "corroboration": {
+            "$ref": "#/components/schemas/CorroborationOut"
+          },
+          "evaluated_at": {
+            "format": "date-time",
+            "title": "Evaluated At",
+            "type": "string"
+          },
+          "health": {
+            "$ref": "#/components/schemas/HealthScoreOut"
+          },
+          "journeys": {
+            "items": {
+              "$ref": "#/components/schemas/JourneyHealthOut"
+            },
+            "title": "Journeys",
+            "type": "array"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "severity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SeverityProposalOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "signals": {
+            "items": {
+              "$ref": "#/components/schemas/SignalStateOut"
+            },
+            "title": "Signals",
+            "type": "array"
+          },
+          "stance": {
+            "title": "Stance",
+            "type": "string"
+          },
+          "storm": {
+            "$ref": "#/components/schemas/StormOut"
+          }
+        },
+        "required": [
+          "app_id",
+          "stance",
+          "evaluated_at",
+          "health",
+          "corroboration",
+          "storm"
+        ],
+        "title": "DetectionOut",
+        "type": "object"
       },
       "DiscoverIn": {
         "description": "No fields today; a body is required so the route is a POST that can grow\noptions (a different base URL to probe, a narrower target list) without\nbecoming a different route.",
@@ -2880,6 +3152,62 @@
         "title": "EventPageOut",
         "type": "object"
       },
+      "EvidenceRefOut": {
+        "properties": {
+          "at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At"
+          },
+          "customer_facing": {
+            "default": false,
+            "title": "Customer Facing",
+            "type": "boolean"
+          },
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "family": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Family"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          },
+          "region": {
+            "default": "",
+            "title": "Region",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "ref"
+        ],
+        "title": "EvidenceRefOut",
+        "type": "object"
+      },
       "ExecutionMode": {
         "description": "How far an action may go without a human.\n\nMANUAL is a human doing it. APPROVAL is the platform doing it after a named\nhuman approves. AUTO is the platform doing it on its own - and AUTO is\npermanently unavailable to the six high-risk classes.",
         "enum": [
@@ -2889,6 +3217,47 @@
         ],
         "title": "ExecutionMode",
         "type": "string"
+      },
+      "FamilyScoreOut": {
+        "properties": {
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "family": {
+            "title": "Family",
+            "type": "string"
+          },
+          "fraction": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fraction"
+          },
+          "signals": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Signals",
+            "type": "array"
+          },
+          "weight": {
+            "title": "Weight",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "family",
+          "weight"
+        ],
+        "title": "FamilyScoreOut",
+        "type": "object"
       },
       "GoldenSignal": {
         "description": "The six families detection reasons over. Business is a first-class family\nrather than a metric tag: a payments counter falling is the signal that\nmatters most and the one no infrastructure dashboard carries.",
@@ -2991,6 +3360,122 @@
           "time"
         ],
         "title": "HealthResponse",
+        "type": "object"
+      },
+      "HealthScoreOut": {
+        "properties": {
+          "band": {
+            "title": "Band",
+            "type": "string"
+          },
+          "covered_weight": {
+            "default": 0,
+            "title": "Covered Weight",
+            "type": "integer"
+          },
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "regions": {
+            "items": {
+              "$ref": "#/components/schemas/RegionHealthOut"
+            },
+            "title": "Regions",
+            "type": "array"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "worst_region": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worst Region"
+          }
+        },
+        "required": [
+          "band"
+        ],
+        "title": "HealthScoreOut",
+        "type": "object"
+      },
+      "ImpactOut": {
+        "properties": {
+          "affected_journeys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Affected Journeys",
+            "type": "array"
+          },
+          "affected_regions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Affected Regions",
+            "type": "array"
+          },
+          "customer_impacting": {
+            "title": "Customer Impacting",
+            "type": "boolean"
+          },
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "journey_tier": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journey Tier"
+          },
+          "regions_affected": {
+            "title": "Regions Affected",
+            "type": "integer"
+          },
+          "regions_total": {
+            "title": "Regions Total",
+            "type": "integer"
+          },
+          "success_rate_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Success Rate Pct"
+          }
+        },
+        "required": [
+          "regions_affected",
+          "regions_total",
+          "customer_impacting"
+        ],
+        "title": "ImpactOut",
         "type": "object"
       },
       "IngestAck": {
@@ -3605,6 +4090,85 @@
           "secret"
         ],
         "title": "IssuedKeyOut",
+        "type": "object"
+      },
+      "JourneyHealthOut": {
+        "properties": {
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "journey_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journey Id"
+          },
+          "last_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last At"
+          },
+          "last_detail": {
+            "default": "",
+            "title": "Last Detail",
+            "type": "string"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "integer"
+          },
+          "region": {
+            "title": "Region",
+            "type": "string"
+          },
+          "success_rate_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Success Rate Pct"
+          },
+          "tier": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tier"
+          },
+          "unknown": {
+            "description": "probe runs that could not be performed. Never counted as a failure: 'we could not check' and 'the journey is broken' lead to opposite next actions",
+            "title": "Unknown",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "region",
+          "passed",
+          "failed",
+          "unknown"
+        ],
+        "title": "JourneyHealthOut",
         "type": "object"
       },
       "JourneyIn": {
@@ -4467,6 +5031,47 @@
         "title": "RefreshRequest",
         "type": "object"
       },
+      "RegionHealthOut": {
+        "properties": {
+          "band": {
+            "title": "Band",
+            "type": "string"
+          },
+          "covered_weight": {
+            "title": "Covered Weight",
+            "type": "integer"
+          },
+          "families": {
+            "items": {
+              "$ref": "#/components/schemas/FamilyScoreOut"
+            },
+            "title": "Families",
+            "type": "array"
+          },
+          "region": {
+            "title": "Region",
+            "type": "string"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          }
+        },
+        "required": [
+          "region",
+          "band",
+          "covered_weight"
+        ],
+        "title": "RegionHealthOut",
+        "type": "object"
+      },
       "RegistryOut": {
         "properties": {
           "adapters": {
@@ -4726,6 +5331,100 @@
           "roles"
         ],
         "title": "RolesMatrixOut",
+        "type": "object"
+      },
+      "RollupOut": {
+        "properties": {
+          "bucket_start": {
+            "format": "date-time",
+            "title": "Bucket Start",
+            "type": "string"
+          },
+          "family": {
+            "title": "Family",
+            "type": "string"
+          },
+          "last": {
+            "title": "Last",
+            "type": "number"
+          },
+          "maximum": {
+            "title": "Maximum",
+            "type": "number"
+          },
+          "mean": {
+            "title": "Mean",
+            "type": "number"
+          },
+          "minimum": {
+            "title": "Minimum",
+            "type": "number"
+          },
+          "region": {
+            "title": "Region",
+            "type": "string"
+          },
+          "samples": {
+            "title": "Samples",
+            "type": "integer"
+          },
+          "series_count": {
+            "title": "Series Count",
+            "type": "integer"
+          },
+          "signal_key": {
+            "title": "Signal Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "signal_key",
+          "region",
+          "family",
+          "bucket_start",
+          "samples",
+          "mean",
+          "minimum",
+          "maximum",
+          "last",
+          "series_count"
+        ],
+        "title": "RollupOut",
+        "type": "object"
+      },
+      "RollupsOut": {
+        "properties": {
+          "app_id": {
+            "title": "App Id",
+            "type": "string"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "interval_s": {
+            "title": "Interval S",
+            "type": "integer"
+          },
+          "rollups": {
+            "items": {
+              "$ref": "#/components/schemas/RollupOut"
+            },
+            "title": "Rollups",
+            "type": "array"
+          },
+          "window_s": {
+            "title": "Window S",
+            "type": "number"
+          }
+        },
+        "required": [
+          "app_id",
+          "window_s",
+          "interval_s",
+          "count"
+        ],
+        "title": "RollupsOut",
         "type": "object"
       },
       "RotationIn": {
@@ -5030,6 +5729,63 @@
         "title": "SeverityMatrixOut",
         "type": "object"
       },
+      "SeverityProposalOut": {
+        "properties": {
+          "corroborated": {
+            "title": "Corroborated",
+            "type": "boolean"
+          },
+          "declared": {
+            "default": false,
+            "description": "Always false in this API. Detection proposes; it never declares.",
+            "title": "Declared",
+            "type": "boolean"
+          },
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRefOut"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "impact": {
+            "$ref": "#/components/schemas/ImpactOut"
+          },
+          "proposed_at": {
+            "format": "date-time",
+            "title": "Proposed At",
+            "type": "string"
+          },
+          "requires_human": {
+            "default": true,
+            "description": "Always true. Only a person declares an incident (REQ-043).",
+            "title": "Requires Human",
+            "type": "boolean"
+          },
+          "rule": {
+            "title": "Rule",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "severity",
+          "rule",
+          "corroborated",
+          "proposed_at",
+          "impact"
+        ],
+        "title": "SeverityProposalOut",
+        "type": "object"
+      },
       "SeverityRuleIn": {
         "properties": {
           "customer_impacting": {
@@ -5246,6 +6002,157 @@
         "title": "SignalOut",
         "type": "object"
       },
+      "SignalStateOut": {
+        "properties": {
+          "anomalous_since": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anomalous Since"
+          },
+          "baseline_mean": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Mean"
+          },
+          "baseline_samples": {
+            "default": 0,
+            "title": "Baseline Samples",
+            "type": "integer"
+          },
+          "baseline_source": {
+            "default": "",
+            "title": "Baseline Source",
+            "type": "string"
+          },
+          "baseline_stddev": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Stddev"
+          },
+          "basis": {
+            "description": "level or rate - whether the detector compared the value or its per-second change, decided from the shape of the window",
+            "title": "Basis",
+            "type": "string"
+          },
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "deviation": {
+            "default": 0.0,
+            "title": "Deviation",
+            "type": "number"
+          },
+          "evaluated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evaluated At"
+          },
+          "family": {
+            "title": "Family",
+            "type": "string"
+          },
+          "first_breach_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Breach At"
+          },
+          "last_value_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Value At"
+          },
+          "region": {
+            "title": "Region",
+            "type": "string"
+          },
+          "signal_key": {
+            "title": "Signal Key",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "streak": {
+            "title": "Streak",
+            "type": "integer"
+          },
+          "threshold": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Threshold"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "signal_key",
+          "region",
+          "family",
+          "status",
+          "streak",
+          "basis"
+        ],
+        "title": "SignalStateOut",
+        "type": "object"
+      },
       "SignupRequest": {
         "additionalProperties": false,
         "properties": {
@@ -5277,6 +6184,63 @@
           "display_name"
         ],
         "title": "SignupRequest",
+        "type": "object"
+      },
+      "SloBurnOut": {
+        "properties": {
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "fast": {
+            "$ref": "#/components/schemas/BurnWindowOut"
+          },
+          "indicator": {
+            "title": "Indicator",
+            "type": "string"
+          },
+          "journey_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journey Id"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "objective_pct": {
+            "title": "Objective Pct",
+            "type": "number"
+          },
+          "slo_id": {
+            "title": "Slo Id",
+            "type": "string"
+          },
+          "slow": {
+            "$ref": "#/components/schemas/BurnWindowOut"
+          },
+          "verdict": {
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slo_id",
+          "name",
+          "indicator",
+          "objective_pct",
+          "verdict",
+          "fast",
+          "slow"
+        ],
+        "title": "SloBurnOut",
         "type": "object"
       },
       "SloIn": {
@@ -5437,6 +6401,41 @@
           "system"
         ],
         "title": "Source",
+        "type": "object"
+      },
+      "StormOut": {
+        "properties": {
+          "alerts": {
+            "title": "Alerts",
+            "type": "integer"
+          },
+          "clusters": {
+            "items": {
+              "$ref": "#/components/schemas/AlertClusterOut"
+            },
+            "title": "Clusters",
+            "type": "array"
+          },
+          "storming": {
+            "title": "Storming",
+            "type": "boolean"
+          },
+          "suppressed": {
+            "title": "Suppressed",
+            "type": "integer"
+          },
+          "window_s": {
+            "title": "Window S",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "alerts",
+          "suppressed",
+          "window_s",
+          "storming"
+        ],
+        "title": "StormOut",
         "type": "object"
       },
       "TestFireOut": {
@@ -7181,6 +8180,108 @@
         "x-signalforge-permission": "manage_apps"
       }
     },
+    "/apps/{app_id}/detection": {
+      "get": {
+        "description": "The current stance, every signal against its baseline, the health score\nper region, SLO burn, corroboration and the severity the matrix would\npropose. Reading it changes nothing.",
+        "operationId": "get_detection_apps__app_id__detection_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "app_id",
+            "required": true,
+            "schema": {
+              "title": "App Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Get Detection",
+        "tags": [
+          "detection"
+        ],
+        "x-signalforge-app-scope": "path",
+        "x-signalforge-auth": "session",
+        "x-signalforge-permission": "manage_apps"
+      }
+    },
+    "/apps/{app_id}/detection/evaluate": {
+      "post": {
+        "description": "Run an evaluation now instead of waiting for the next tick.\n\nA human override of the cadence, audited as one. It proposes exactly what\nthe loop would have proposed and declares nothing.",
+        "operationId": "evaluate_now_apps__app_id__detection_evaluate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "app_id",
+            "required": true,
+            "schema": {
+              "title": "App Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Evaluate Now",
+        "tags": [
+          "detection"
+        ],
+        "x-signalforge-app-scope": "path",
+        "x-signalforge-auth": "session",
+        "x-signalforge-permission": "manage_apps"
+      }
+    },
     "/apps/{app_id}/discover": {
       "post": {
         "description": "Probe the application's base URL for the frozen observe contract, and the\nmachine's well-known monitoring ports, without a credential and without\nwriting a binding.",
@@ -7407,6 +8508,101 @@
         "summary": "Get Readiness",
         "tags": [
           "onboarding"
+        ],
+        "x-signalforge-app-scope": "path",
+        "x-signalforge-auth": "session",
+        "x-signalforge-permission": "manage_apps"
+      }
+    },
+    "/apps/{app_id}/rollups": {
+      "get": {
+        "description": "The five-second buckets a verdict was derived from, so a proposal can be\nchecked against the measurements rather than believed.",
+        "operationId": "get_rollups_apps__app_id__rollups_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "app_id",
+            "required": true,
+            "schema": {
+              "title": "App Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "signal_key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Signal Key"
+            }
+          },
+          {
+            "in": "query",
+            "name": "region",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Region"
+            }
+          },
+          {
+            "in": "query",
+            "name": "window_s",
+            "required": false,
+            "schema": {
+              "default": 900.0,
+              "exclusiveMinimum": 0,
+              "maximum": 86400,
+              "title": "Window S",
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RollupsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Get Rollups",
+        "tags": [
+          "detection"
         ],
         "x-signalforge-app-scope": "path",
         "x-signalforge-auth": "session",
@@ -10456,6 +11652,10 @@
     {
       "description": "The seven wizard steps: basics, connect and discover, map, topology, SLOs and policy, baseline, test - plus the readiness score.",
       "name": "onboarding"
+    },
+    {
+      "description": "What the platform currently believes about an application: every mapped signal against its rolling baseline, the weighted health score per region, SLO burn rates, corroboration and the severity the application's own matrix would propose. Detection proposes; only a human declares.",
+      "name": "detection"
     },
     {
       "description": "Ingest keys, and the five frozen push endpoints a sending application posts to.",

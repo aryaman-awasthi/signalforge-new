@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Sequence
+from typing import Any, Awaitable, Callable, Optional, Sequence
 
 from signalforge.application.events.bus import EventBus
 from signalforge.application.identity.principal import Principal
@@ -57,6 +57,12 @@ class ApplicationService:
         self._uow_factory = uow_factory
         self._bus = bus
         self._clock = clock
+        # Set by the composition root (S4-T01). Removing an application has to
+        # remove what the detector believes about it too, or the next sweep
+        # keeps evaluating signals for something that is gone - but onboarding
+        # must not import detection to know that, so the hook is a callback the
+        # container wires rather than a dependency this module holds.
+        self.on_removed: list[Callable[[str, str], Awaitable[Any]]] = []
 
     # -- reads -------------------------------------------------------------
 
@@ -211,6 +217,11 @@ class ApplicationService:
                 | {"topology_versions_removed": removed_versions},
             )
             await uow.commit()
+        # After the commit, never inside it: these hooks write to a different
+        # database (rollups.db), and a derived store that failed to clean up
+        # must not roll back the removal the operator asked for.
+        for hook in self.on_removed:
+            await hook(principal.tenant_id, app_id)
 
 
 def _payload(application: Application) -> dict[str, Any]:

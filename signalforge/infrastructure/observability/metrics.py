@@ -278,4 +278,30 @@ def build_registry() -> MetricsRegistry:
         "signalforge_ingest_refused_total", MetricType.COUNTER,
         "Ingest requests refused before their body was parsed", ("stream", "reason"),
     )
+    # Detection (S4-T01). None of these can name an application: an app_id is a
+    # tenant's own vocabulary - "checkout", "settlement" - and /metrics has no
+    # session. The counts are install-wide and the authenticated
+    # GET /apps/{app_id}/detection answers whose.
+    registry.declare(
+        "signalforge_detection_polls_total", MetricType.COUNTER,
+        "Metric poll attempts, by outcome", ("outcome",),
+    )
+    registry.declare(
+        "signalforge_detection_rollups_total", MetricType.COUNTER,
+        "Five-second rollups, written or refused as a duplicate bucket",
+        ("outcome",),
+    )
+    registry.declare(
+        "signalforge_detection_probes_total", MetricType.COUNTER,
+        "Synthetic probe runs, by verdict - unknown is not a failure",
+        ("verdict",),
+    )
+    registry.declare(
+        "signalforge_detection_signals", MetricType.GAUGE,
+        "Mapped signals currently in each detection status", ("status",),
+    )
+    registry.declare(
+        "signalforge_detection_stance", MetricType.GAUGE,
+        "Whether the last evaluated application is in this stance", ("stance",),
+    )
     return registry

@@ -6,6 +6,101 @@ graph" section at the bottom is the authored pre-build decision record
 (signalforge-memory-graph.md, provided and imported 2026-09-01) - every N-line there
 is treated as already decided.
 
+## DR-068 (2026-09-01, S4) Removing an application clears detection state through a callback
+`ApplicationService` holds a list of `on_removed` hooks that the composition root fills
+with `DetectionService.forget`, and they run *after* the removal commits. Why: onboarding
+must not import detection (the dependency would point outward), and the hooks write to a
+different database, so a derived store that failed to clean up must not roll back the
+removal an operator asked for. Consequence: an application that is removed stops being
+evaluated on the next sweep, and a failed cleanup leaves orphan rows in `rollups.db` that
+the retention sweep removes anyway.
+
+## DR-067 (2026-09-01, S4) Detection reads are `manage_apps`, and the proposal is not yet readable by an IC
+The three detection routes live under `/apps/{app_id}` behind `manage_apps`, like every
+other route in that tree. Why: they read an application's telemetry and one of them can be
+made to run a scrape, which is the same operator job onboarding is; and the boundary test
+that pins every `/apps` route to `manage_apps` is a control worth keeping unbroken.
+Consequence: the roles matrix gives `manage_apps` to the org owner alone, so an incident
+commander cannot yet read the proposal that will carry a Declare button. S4-T02's incident
+lifecycle is where a proposal becomes readable by the people who act on it, and it will
+have to answer the same question `/ws` answered in DR-031 - SMEs hold no permissions at all.
+
+## DR-066 (2026-09-01, S4) The severity proposal is a value object that cannot be constructed as a declaration
+`SeverityProposal.requires_human` defaults to true and `__post_init__` raises if anything
+sets it false. Why: "detection proposes, humans declare" was previously a property of which
+functions existed; making it a construction-time refusal means it survives serialisation,
+a future caller, and a well-meaning refactor. Consequence: the API publishes
+`requires_human: true` and `declared: false` as literal fields so a client cannot render a
+proposal as an incident, and the rule is held by a test that tries to build one the other
+way.
+
+## DR-065 (2026-09-01, S4) Traffic carries no weight in the health score
+The weights are availability 30, errors 25, business 20, latency 15, saturation 10, and
+traffic is deliberately absent. Why: traffic falling can be an outage or a Sunday, and a
+score that could not tell those apart would drift every weekend and be quietly discounted
+by everyone reading it. Consequence: traffic is still mapped, rolled up and usable as
+corroborating evidence, but it does not score; and because only mapped, measured families
+count and the score is renormalised over the weight actually covered, an application with
+no saturation metric is not permanently capped at 90 for a signal it does not emit -
+`covered_weight` is published beside the score so a 100 out of 45 cannot be misread.
+
+## DR-064 (2026-09-01, S4) Level or rate is derived from the window, not configured
+A series that never decreases and increases in at least half its buckets is treated as a
+counter and evaluated as a per-second rate; anything else is a level. Why: the frozen
+observe contract publishes Prometheus text exposition, which does not say whether a number
+accumulates, and the onboarding profile records which *direction* is bad rather than which
+shape the number has - so either the operator gains a field to get wrong or the detector
+reads the shape. Consequence: `errors_total` rising forever is not an anomaly while
+`errors_total` rising four times faster is; and the "half the buckets" half of the rule is
+load-bearing, because a *gauge* that sits flat and then steps once is also non-decreasing
+and also not flat, and reading that as a counter turns a fifty-fold jump in an error ratio
+into a single unremarkable rate.
+
+## DR-063 (2026-09-01, S4) A baseline is held while its signal is breaching
+The reference window stops four buckets short of the bucket being judged, and once a breach
+is under way the threshold that was in force when it began is reused rather than
+recomputed. Why: an anomaly has to last three evaluations, so a rolling baseline that kept
+learning would have absorbed the first two breaching samples by the third - widening its
+standard deviation by exactly the size of the event it exists to notice - and a long
+incident would eventually read as normal. Consequence: an anomaly ends when the signal
+recovers, not when the detector gets used to it; `baseline_source` reads `frozen` while
+that is happening, so a reader can see which threshold a verdict used.
+
+## DR-062 (2026-09-01, S4) Detection publishes transitions, not a heartbeat
+The evaluator runs every five seconds and writes state every time, but publishes only when
+something changed: a stance, an anomaly opening or clearing, a signal going stale, a health
+band, a burn verdict, a storm's membership, a new proposal. A degraded poll is announced
+once per outage rather than once per tick. Why: a five-second loop that published a verdict
+each time would put seventeen thousand events a day per application onto a timeline meant
+to be read by a person. Consequence: "changed since when" has to survive a restart, which
+is what `detection_snapshots` is for - one row per application holding the few fields a
+transition is decided from, and losing it costs one duplicate announcement.
+
+## DR-061 (2026-09-01, S4) A five-second bucket is one observation, so the write is insert-or-duplicate
+`metric_rollups` is unique on (tenant, app, signal, region, bucket_start) and a second
+write into an existing bucket is counted as a duplicate rather than merged. Why: the poller
+is a loop on a timer, so an overlapping tick, a restart mid-sweep or an operator forcing an
+evaluation can all land two polls in one bucket - and an upsert that averaged them would
+let a *retry* move the baseline the detector is about to compare against, which is a
+duplicate that hides an incident. Consequence: the poll report distinguishes `written` from
+`duplicates` so the behaviour is observable rather than silent, and the uniqueness is
+enforced twice (a lookup, then the constraint inside a savepoint) so a concurrent writer is
+counted rather than raising.
+
+## DR-060 (2026-09-01, S4) Rollups live in a second database, created from models rather than migrated
+`rollups.db` has its own `DeclarativeBase`, its own engine (with `NullPool`) and its own
+connection string, and its schema is created at startup by `create_rollup_schema` instead
+of by an Alembic revision. Why: appending to the audit hash chain reads the previous tip
+inside the same transaction, and putting a five-second telemetry loop on that transaction
+would make the chain the contended resource in the system; the contents are derived and
+rebuilt by letting the poller run, so pruning hourly is safe and a migration whose only
+honest recovery is "drop and refill" would be ceremony rather than safety; and the two
+stores have different lifetimes, which is how the wrong thing eventually gets deleted when
+they share a file. Consequence: `scripts/gen_erd.py` reads both metadata objects and
+docs/10 documents two databases; `NullPool` is used because an aiosqlite connection belongs
+to the loop that opened it and this store is written from the worker group, from a request
+handler and from tests.
+
 ## DR-059 (2026-09-01, S3) The route catalogue is spliced into docs/11, not kept beside it
 `scripts/gen_openapi.py` rewrites the region between two markers inside
 `docs/11-api-spec.md` rather than writing a second generated file the prose links to.

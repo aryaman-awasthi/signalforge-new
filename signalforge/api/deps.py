@@ -22,6 +22,9 @@ from signalforge.application.adapters.connector_service import ConnectorService
 from signalforge.application.adapters.health import ConnectorHealthSources
 from signalforge.application.adapters.invoker import ConnectorInvoker
 from signalforge.application.adapters.registry_service import AdapterRegistryService
+from signalforge.application.detection.poller import MetricRollupPoller
+from signalforge.application.detection.probes import ProbeRunner
+from signalforge.application.detection.service import DetectionService
 from signalforge.application.notifications.inbox import NotificationInbox
 from signalforge.application.onboarding.apps import ApplicationService
 from signalforge.application.onboarding.discovery import DiscoveryService
@@ -69,7 +72,12 @@ from signalforge.infrastructure.observability.sources import (
 )
 from signalforge.infrastructure.persistence.db import make_engine, make_session_factory
 from signalforge.infrastructure.persistence.event_uow import SqlEventUnitOfWork
+from signalforge.infrastructure.persistence.rollups import (
+    SqlDetectionUnitOfWork,
+    create_rollup_schema,
+)
 from signalforge.infrastructure.persistence.uow import SqlIdentityUnitOfWork
+from signalforge.workers.pollers import detection_jobs
 from signalforge.workers.runner import PlatformWorker, ScheduledJob
 from signalforge.infrastructure.security.hmac_verify import IngestHmacVerifier
 from signalforge.infrastructure.security.passwords import Argon2PasswordHasher
@@ -255,6 +263,44 @@ class Container:
             self.clock,
         )
 
+        # Detection (S4-T01). Its own engine and its own database: rollups are
+        # derived, written every five seconds and pruned in hours, and they have
+        # no business sharing a transaction with the audit hash chain.
+        self.rollup_engine = make_engine(self.settings.rollup_db_url, null_pool=True)
+        self.rollup_session_factory = make_session_factory(self.rollup_engine)
+        self.detection_uow_factory = lambda: SqlDetectionUnitOfWork(
+            self.rollup_session_factory
+        )
+        self.rollup_poller = MetricRollupPoller(
+            self.uow_factory,
+            self.detection_uow_factory,
+            self.adapter_registry,
+            self.invoker,
+            self.bus,
+            self.clock,
+            metrics=self.metrics,
+        )
+        self.probe_runner = ProbeRunner(
+            self.uow_factory,
+            self.detection_uow_factory,
+            self.adapter_registry,
+            self.invoker,
+            self.clock,
+            metrics=self.metrics,
+        )
+        self.detection = DetectionService(
+            self.uow_factory,
+            self.detection_uow_factory,
+            self.bus,
+            self.clock,
+            metrics=self.metrics,
+            baseline_window_s=self.settings.detection_baseline_window_s,
+        )
+        # Removing an application removes what the detector believes about it.
+        # Wired here rather than imported by onboarding, so the dependency still
+        # points inward.
+        self.applications.on_removed.append(self.detection.forget)
+
         # Self-observability (S2-T03).
         self.health = ConnectorHealthService(
             self.event_uow_factory, self.bus, clock=self.wall_clock, metrics=self.metrics
@@ -290,7 +336,7 @@ class Container:
     def _jobs(self) -> list[ScheduledJob]:
         """What runs beside the API. Consumers and pollers join this list as the
         sprints add them; each one owns its own failures."""
-        return [
+        jobs = [
             ScheduledJob(
                 name="dispatcher",
                 interval_s=self.settings.dispatch_interval_s,
@@ -307,6 +353,26 @@ class Container:
                 run=self.retention.sweep,
             ),
         ]
+        if self.settings.detection_enabled:
+            jobs += detection_jobs(
+                self.rollup_poller,
+                self.probe_runner,
+                self.detection,
+                rollup_interval_s=self.settings.rollup_interval_s,
+                detection_interval_s=self.settings.detection_interval_s,
+                probe_interval_s=self.settings.probe_interval_s,
+                retention_s=self.settings.rollup_retention_s,
+            )
+        return jobs
+
+    async def prepare_rollup_store(self) -> None:
+        """Create `rollups.db`'s tables if they are not there.
+
+        Called from the API lifespan rather than from a migration: this database
+        is derived and rebuildable, and Alembic's environment targets the
+        incident database's metadata (see rollup_models.py).
+        """
+        await create_rollup_schema(self.rollup_engine)
 
     async def refresh_platform_gauges(self) -> None:
         """Point-in-time gauges are computed when /metrics is scraped rather than

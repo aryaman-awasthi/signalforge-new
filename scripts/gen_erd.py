@@ -81,6 +81,20 @@ GROUPS: list[tuple[str, str, tuple[str, ...]]] = [
     ),
 ]
 
+ROLLUP_GROUPS: list[tuple[str, str, tuple[str, ...]]] = [
+    (
+        "Detection (S4) - second database, `rollups.db`",
+        "Everything here is derived: rollups are re-read from the integrated "
+        "system, signal states are recomputed from rollups, probe results are "
+        "re-run. It is a separate database because a five-second write loop has "
+        "no business sharing a transaction with the audit hash chain, and because "
+        "these tables age out in hours while the incident plane is kept and "
+        "sealed. Deleting the file costs the detector its recent history and "
+        "costs the incident record nothing.",
+        ("metric_rollups", "signal_states", "probe_results", "detection_snapshots"),
+    ),
+]
+
 DESIGN_NOTES = """
 ## 3. Retention planes
 
@@ -252,12 +266,64 @@ the application exists; removing the application removes its maps, and removing
 the application is refused while any connector or active ingest key still points
 at it.
 
+## 6e. Detection: the second database
+
+`rollups.db` is a different file with a different lifetime, reached through
+`DetectionUnitOfWork` rather than the identity one. Three reasons, all of them
+about failure rather than tidiness:
+
+1. **Write rate.** The rollup loop writes every five seconds per application.
+   Appending to the audit hash chain reads the previous tip inside the same
+   transaction; putting a five-second telemetry loop on that transaction would
+   make the chain the contended resource in the system.
+2. **Recoverability.** Everything here is derived - rollups are re-read from the
+   integrated system, signal states are recomputed from rollups, probe results
+   are re-run. Deleting the file costs the detector its recent history and costs
+   the incident record nothing, which is what makes hourly pruning safe.
+3. **Retention.** These tables age out in hours (`ROLLUP_RETENTION_S`, six by
+   default). The incident plane is kept and sealed. Two lifetimes in one file is
+   how the wrong thing eventually gets deleted.
+
+There is no Alembic revision for it. Alembic's environment targets the incident
+database's metadata, and a migration for a store whose only honest recovery is
+"let the poller run again" would be ceremony rather than safety; the schema is
+created from the models at startup (`create_rollup_schema`, called from the API
+lifespan).
+
+`metric_rollups` is unique on **(tenant_id, app_id, signal_key, region,
+bucket_start)**. That constraint is the idempotency the whole detector rests on:
+a bucket is *one observation*, so a poller tick that overlaps the next, a restart
+mid-sweep, or an operator forcing an evaluation cannot turn one scrape into two
+samples and move the baseline the detector is about to compare against. The store
+counts the second write as a duplicate rather than raising. `probe_results` is
+unique the same way, on (tenant, app, probe, region, at).
+
+`signal_states` holds the breach streak durably, keyed on (tenant, app, signal,
+region). It is one row per signal rather than a time series because it is a
+*belief*, not a measurement - and it is durable so that a restart in the middle
+of a developing incident resumes counting instead of starting again at zero and
+adding three evaluations to the time-to-detection. `detection_snapshots` is one
+row per application holding the last verdict, and exists only so that a
+five-second loop can publish **transitions** rather than a heartbeat.
+
+Tenant isolation holds here exactly as it does next door: every table carries
+`tenant_id` and every read applies the predicate inside the repository. The one
+cross-tenant method is `prune`, which removes by age across the install and
+returns a count rather than rows.
+
 ## 7. Indexes
 
 Every index exists for a query the platform actually makes:
 
 | Index | Serves |
 |---|---|
+| `ix_metric_rollups_series` | the detector's per-(signal, region) window read, which is every evaluation |
+| `ix_metric_rollups_app_time` | the rollup API's whole-application window |
+| `ix_metric_rollups_age` | the retention sweep, which deletes by bucket age across tenants |
+| `ix_signal_states_app` | loading what the detector believes about one application |
+| `ix_signal_states_status` | counting anomalous signals per tenant |
+| `ix_probe_results_app_time` | journey success rates over the evaluation window |
+| `ix_probe_results_age` | the retention sweep for probe runs |
 | `ix_events_tenant_seq` | replay paging (`tenant_id`, `seq > after_seq`) |
 | `ix_events_chain` | chain verification and sealing per (tenant, plane) |
 | `ix_events_lane_seq` | the dispatcher's per-lane sweep |
@@ -303,6 +369,18 @@ def load_metadata() -> MetaData:
     from signalforge.infrastructure.persistence.models import Base
 
     return Base.metadata
+
+
+def load_rollup_metadata() -> MetaData:
+    """The second database's models (S4-T01).
+
+    Two bases is how two databases stay two databases, so the generator reads
+    both rather than pretending the derived store is part of the schema Alembic
+    migrates.
+    """
+    from signalforge.infrastructure.persistence.rollup_models import RollupBase
+
+    return RollupBase.metadata
 
 
 def mermaid_erd(metadata: MetaData, tables: tuple[str, ...]) -> str:
@@ -368,10 +446,14 @@ def table_section(metadata: MetaData, name: str) -> str:
     return f"#### `{name}`\n\n{body}\n" + ("\n" + "  \n".join(extras) + "\n" if extras else "")
 
 
-def render(metadata: MetaData) -> str:
+def render(metadata: MetaData, rollups: MetaData | None = None) -> str:
     generated = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    if rollups is None:
+        rollups = load_rollup_metadata()
     known = {name for _, _, tables in GROUPS for name in tables}
     ungrouped = sorted(set(metadata.tables) - known - {"alembic_version"})
+    rollup_known = {name for _, _, tables in ROLLUP_GROUPS for name in tables}
+    rollup_ungrouped = sorted(set(rollups.tables) - rollup_known)
 
     parts = [
         "# 10 - Data design",
@@ -381,8 +463,14 @@ def render(metadata: MetaData) -> str:
         "cannot drift from the schema. The design notes below are authored; the ERD and",
         "the column tables are not.",
         "",
+        "Two databases. `signalforge.db` holds identity, the event backbone, the",
+        "integrations and onboarding, and is the one Alembic migrates. `rollups.db`",
+        "holds derived detection telemetry, is created from its models at startup, and",
+        "can be deleted without losing any record of anything that happened.",
+        "",
         f"Generated: {generated}",
-        f"Tables: {len(metadata.tables)}",
+        f"Tables: {len(metadata.tables)} in signalforge.db, {len(rollups.tables)} in "
+        "rollups.db",
         "",
         "## 1. Entity relationship diagram",
         "",
@@ -398,6 +486,18 @@ def render(metadata: MetaData) -> str:
             mermaid_erd(metadata, tuple(ungrouped)),
             "",
         ]
+    for title, blurb, tables in ROLLUP_GROUPS:
+        parts += [f"### {title}", "", blurb, "", mermaid_erd(rollups, tables), ""]
+    if rollup_ungrouped:
+        parts += [
+            "### Ungrouped (rollups.db)",
+            "",
+            "Tables not yet placed in a group - add them to ROLLUP_GROUPS in "
+            "scripts/gen_erd.py.",
+            "",
+            mermaid_erd(rollups, tuple(rollup_ungrouped)),
+            "",
+        ]
 
     parts += ["## 2. Tables", ""]
     for title, _blurb, tables in GROUPS:
@@ -407,6 +507,13 @@ def render(metadata: MetaData) -> str:
                 parts += [table_section(metadata, name), ""]
     for name in ungrouped:
         parts += [table_section(metadata, name), ""]
+    for title, _blurb, tables in ROLLUP_GROUPS:
+        parts += [f"### {title}", ""]
+        for name in tables:
+            if name in rollups.tables:
+                parts += [table_section(rollups, name), ""]
+    for name in rollup_ungrouped:
+        parts += [table_section(rollups, name), ""]
 
     parts.append(DESIGN_NOTES.strip())
     parts.append("")
@@ -420,7 +527,9 @@ def main() -> int:
 
     output = Path(args.out)
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(render(load_metadata()), encoding="utf-8")
+    output.write_text(
+        render(load_metadata(), load_rollup_metadata()), encoding="utf-8"
+    )
     print(f"gen_erd: wrote {output.relative_to(ROOT)}")
     return 0
 

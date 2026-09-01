@@ -96,6 +96,11 @@ TAGS: list[dict[str, str]] = [
     {"name": "onboarding", "description":
         "The seven wizard steps: basics, connect and discover, map, topology, "
         "SLOs and policy, baseline, test - plus the readiness score."},
+    {"name": "detection", "description":
+        "What the platform currently believes about an application: every mapped "
+        "signal against its rolling baseline, the weighted health score per "
+        "region, SLO burn rates, corroboration and the severity the application's "
+        "own matrix would propose. Detection proposes; only a human declares."},
     {"name": "ingest", "description":
         "Ingest keys, and the five frozen push endpoints a sending application "
         "posts to."},

@@ -30,7 +30,11 @@ class FakeClock(Clock):
         self.current += timedelta(**kwargs)
 
 
-def make_test_settings(db_url: str, adapters_dir: str | None = None) -> Settings:
+def make_test_settings(
+    db_url: str,
+    adapters_dir: str | None = None,
+    rollup_db_url: str | None = None,
+) -> Settings:
     return Settings(
         db_url=db_url,
         jwt_secret="test-jwt-secret-with-enough-length-0123456789",
@@ -57,7 +61,28 @@ def make_test_settings(db_url: str, adapters_dir: str | None = None) -> Settings
         ingest_rate_limit=50,
         ingest_rate_window_s=60,
         ingest_max_body_bytes=INGEST_DEFAULT_MAX_BODY_BYTES,
+        # The rollup database is a second file beside the first, so a test that
+        # inspects rollups.db reads only its own. Defaults to an in-memory URL
+        # derived from the main one when a caller does not care.
+        rollup_db_url=rollup_db_url or _rollup_url_beside(db_url),
+        detection_enabled=True,
     )
+
+
+def _rollup_url_beside(db_url: str) -> str:
+    """`.../test.db` becomes `.../test-rollups.db`.
+
+    Two files rather than two schemas in one, because that is what the product
+    does: the derived store is a separate database with a separate lifetime, and
+    a test suite that shared one file would not be exercising the thing that
+    makes pruning rollups safe.
+    """
+    if ":///" not in db_url:
+        return db_url
+    prefix, path = db_url.split(":///", 1)
+    if not path or path == ":memory:":
+        return db_url
+    return f"{prefix}:///{Path(path).with_name(Path(path).stem + '-rollups.db')}"
 
 
 @dataclass
@@ -66,6 +91,11 @@ class ApiCtx:
     container: object
     clock: FakeClock
     db_path: Path
+
+    @property
+    def rollup_db_path(self) -> Path:
+        """The second database - `rollups.db` - beside the first."""
+        return self.db_path.with_name(self.db_path.stem + "-rollups.db")
 
     # -- request helpers ---------------------------------------------------
 
