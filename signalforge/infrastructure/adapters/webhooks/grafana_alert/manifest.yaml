@@ -1,0 +1,36 @@
+id: grafana-alert-webhook
+name: Grafana alert webhook
+version: 1.0.0
+kind: alerts
+mode: push
+vendor: grafana
+description: >-
+  Receives Grafana unified-alerting webhook batches (and the legacy single-alert
+  shape) on the ingest API and normalises them into canonical alerts. Severity
+  comes from the severity label with the usual aliases; an unrecognised severity
+  becomes warning rather than critical or info. Grafana's unresolved sentinel
+  end time becomes null. An alert with no fingerprint gets a stable id derived
+  from its name and labels, so a re-notification is not mistaken for a new alert.
+availability: built_in
+simulated: false
+capabilities: [normalize]
+credential_scopes: [read_only]
+auth:
+  method: hmac
+  credential_fields: [ingest_secret]
+config_schema:
+  type: object
+  additionalProperties: false
+  properties:
+    default_service:
+      type: string
+      description: Service name to attribute alerts to when no label carries one.
+limits:
+  timeout_s: 10
+  max_calls_per_minute: 600
+  max_result_bytes: 1048576
+  max_rows: 500
+redaction:
+  policy_id: grafana-alert-default
+  patterns:
+    - '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'

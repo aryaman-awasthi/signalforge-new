@@ -1,0 +1,34 @@
+id: deploy-webhook
+name: Deployment webhook
+version: 1.0.0
+kind: changes
+mode: push
+vendor: generic
+description: >-
+  Receives deployment and change notifications on the ingest API from any CI or
+  release tool that can POST JSON. Accepts either a flat change document or an
+  envelope carrying event=deployment.started / deployment.completed, and pairs a
+  start with its completion by change_id so an open change window is visible. A
+  payload with neither a status nor an event name is rejected rather than
+  guessed at.
+availability: built_in
+simulated: false
+capabilities: [normalize]
+credential_scopes: [read_only]
+auth:
+  method: hmac
+  credential_fields: [ingest_secret]
+config_schema:
+  type: object
+  additionalProperties: false
+  properties:
+    default_service:
+      type: string
+      description: Service name to attribute a change to when the payload omits one.
+limits:
+  timeout_s: 10
+  max_calls_per_minute: 600
+  max_result_bytes: 262144
+  max_rows: 200
+redaction:
+  policy_id: deploy-webhook-none

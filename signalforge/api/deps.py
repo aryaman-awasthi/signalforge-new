@@ -12,13 +12,15 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from fastapi import Depends, Query, Request
+from fastapi import Depends, Query, Request, WebSocket, WebSocketException
 
 from signalforge.contracts.roles import Permission
 from signalforge.domain.identity.errors import AuthenticationError
 from signalforge.application.adapters.connector_service import ConnectorService
 from signalforge.application.adapters.health import ConnectorHealthSources
+from signalforge.application.adapters.invoker import ConnectorInvoker
 from signalforge.application.adapters.registry_service import AdapterRegistryService
+from signalforge.application.notifications.inbox import NotificationInbox
 from signalforge.application.events.bus import EventBus
 from signalforge.application.events.consumers import BUS_METRICS_GROUP, BusMetricsConsumer
 from signalforge.application.events.dead_letters import DeadLetterService
@@ -33,9 +35,16 @@ from signalforge.application.identity.oncall_service import OnCallService
 from signalforge.application.identity.org_service import OrgService
 from signalforge.application.identity.principal import Principal
 from signalforge.domain.events.retention import RetentionPolicy
+from signalforge.infrastructure.adapters.builtin import register_builtin_runtimes
+from signalforge.infrastructure.adapters.limits import CallBudget
 from signalforge.infrastructure.adapters.registry import FileAdapterRegistry
 from signalforge.infrastructure.adapters.runtimes import AdapterRuntimeRegistry
+from signalforge.infrastructure.adapters.services import AdapterServices
 from signalforge.infrastructure.clock import SwitchableClock, SystemClock
+from signalforge.infrastructure.notifications.hub import InProcessNotificationHub
+from signalforge.infrastructure.persistence.integrations import (
+    SqlIntegrationUnitOfWork,
+)
 from signalforge.infrastructure.config import VERSION, Settings, load_settings
 from signalforge.infrastructure.observability.metrics import build_registry
 from signalforge.infrastructure.observability.sources import (
@@ -136,6 +145,35 @@ class Container:
             self.uow_factory, self.adapter_registry, self.bus, self.clock
         )
 
+        # The shipped adapters (S3-T02). Their persistence is a unit of work of
+        # its own: an adapter must be able to store a ticket or a receipt
+        # without holding a transaction that also contains identity state.
+        self.notification_hub = InProcessNotificationHub()
+        self.integration_uow_factory = lambda: SqlIntegrationUnitOfWork(
+            self.session_factory
+        )
+        self.adapter_services = AdapterServices(
+            uow_factory=self.integration_uow_factory,
+            clock=self.clock,
+            budget=CallBudget(lambda: self.wall_clock.now().timestamp()),
+            notifications=self.notification_hub,
+            metrics=self.metrics,
+            # No embedding provider yet: kb-index ranks with BM25 until the
+            # llm.provider adapter registers one in S5 (REQ-051).
+            embeddings=None,
+        )
+        self.installed_adapters = register_builtin_runtimes(
+            self.adapter_runtimes, self.adapter_services
+        )
+        self.invoker = ConnectorInvoker(
+            self.uow_factory,
+            self.adapter_registry,
+            self.adapter_runtimes,
+            self.connectors,
+            metrics=self.metrics,
+        )
+        self.notification_inbox = NotificationInbox(self.uow_factory, self.clock)
+
         # Self-observability (S2-T03).
         self.health = ConnectorHealthService(
             self.event_uow_factory, self.bus, clock=self.wall_clock, metrics=self.metrics
@@ -224,6 +262,46 @@ async def get_principal(
     if not header.startswith("Bearer "):
         raise AuthenticationError("missing bearer token")
     return await container.auth.authenticate(header[len("Bearer "):])
+
+
+BEARER_SUBPROTOCOL = "bearer"
+
+
+def websocket_token(websocket: WebSocket) -> Optional[str]:
+    """A session token from the handshake.
+
+    Two places, both of which keep the token out of URLs. A browser cannot set
+    an Authorization header on a WebSocket handshake, so it offers the token as
+    the `bearer, <token>` subprotocol pair; server-side callers and tests use the
+    header. A `?token=` query parameter is deliberately not accepted: it would
+    put a live session token into every access log and proxy history on the path.
+    """
+    header = websocket.headers.get("authorization", "")
+    if header.startswith("Bearer "):
+        return header[len("Bearer "):]
+    subprotocols = list(websocket.scope.get("subprotocols") or [])
+    if len(subprotocols) >= 2 and subprotocols[0] == BEARER_SUBPROTOCOL:
+        return subprotocols[1]
+    return None
+
+
+async def get_ws_principal(
+    websocket: WebSocket, container: "Container" = Depends(get_container)
+) -> Principal:
+    """The WebSocket counterpart of get_principal.
+
+    A failure closes the handshake with 1008 (policy violation) rather than
+    raising into the HTTP error handlers, which never see a socket. The security
+    suite's router walk treats this and get_principal as equivalent: both resolve
+    a real session before any handler runs.
+    """
+    token = websocket_token(websocket)
+    if not token:
+        raise WebSocketException(code=1008, reason="missing bearer token")
+    try:
+        return await container.auth.authenticate(token)
+    except AuthenticationError as exc:
+        raise WebSocketException(code=1008, reason="authentication failed") from exc
 
 
 def require(permission: Permission):

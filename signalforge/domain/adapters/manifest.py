@@ -32,6 +32,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from enum import Enum
+from functools import lru_cache
 from typing import Any, Mapping, Optional, Sequence
 
 import jsonschema
@@ -58,6 +59,16 @@ DEFAULT_TIMEOUT_S = 10.0
 DEFAULT_CALLS_PER_MINUTE = 120
 DEFAULT_RESULT_BYTES = 1024 * 1024
 DEFAULT_ROWS = 1_000
+
+REDACTED = "***"
+
+
+@lru_cache(maxsize=256)
+def _compiled(pattern: str) -> "re.Pattern[str]":
+    """Patterns are validated at manifest load, so compiling here cannot fail;
+    the cache exists because a logs adapter applies the same handful of patterns
+    to every record of every page."""
+    return re.compile(pattern)
 
 
 class AdapterMode(str, Enum):
@@ -163,6 +174,22 @@ class AdapterRedaction:
     def declared(self) -> bool:
         return bool(self.policy_id)
 
+    def apply(self, text: str) -> str:
+        """Mask the declared patterns in free text.
+
+        This is where the promise in the manifest becomes an actual removal.
+        Adapters for the kinds that carry customer text - logs, traces,
+        collaboration, knowledge, itsm - run it on everything they return, so
+        redaction happens once, at the boundary, before the text can reach an
+        event payload, an evidence record or a prompt.
+        """
+        if not text or not self.patterns:
+            return text
+        masked = text
+        for pattern in self.patterns:
+            masked = _compiled(pattern).sub(REDACTED, masked)
+        return masked
+
     def __post_init__(self) -> None:
         if (self.fields or self.patterns) and not self.policy_id:
             raise ManifestValidationError(
@@ -231,8 +258,12 @@ class AdapterManifest:
         masked = dict(payload)
         for name in self.redaction.fields:
             if name in masked:
-                masked[name] = "***"
+                masked[name] = REDACTED
         return masked
+
+    def redact_text(self, text: str) -> str:
+        """Mask this manifest's declared patterns in a free-text value."""
+        return self.redaction.apply(text)
 
     # -- invariants --------------------------------------------------------
 

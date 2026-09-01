@@ -6,6 +6,92 @@ graph" section at the bottom is the authored pre-build decision record
 (signalforge-memory-graph.md, provided and imported 2026-09-01) - every N-line there
 is treated as already decided.
 
+## DR-032 (2026-09-01, S3) The durable receipt, not the socket, is the record of a notification
+Every notification adapter writes a `notification_deliveries` row before it
+touches a transport, and "nobody is connected" is QUEUED rather than failed. Why:
+a page whose delivery succeeded and whose record did not is a page nobody can
+prove happened, and an escalation timer built on the transport would silence
+itself on a lost frame. Consequence: `/ws` hands a connecting session everything
+still awaiting acknowledgement, so a notification produced at 03:00 with nobody
+looking is early rather than lost; a subscriber whose queue is full is not
+counted as delivered either, so back pressure on one browser cannot be mistaken
+for a page.
+
+## DR-031 (2026-09-01, S3) /ws authenticates but takes no permission
+The notification socket is the only product route with no permission check. Why:
+the people who most need to be paged - SMEs - hold no permissions in the frozen
+roles matrix, so any permission would exclude exactly the wrong group. The
+compensating control is structural rather than policy: the principal comes from
+the session, the subscription is keyed on that principal's tenant and user id,
+and catch-up reads that recipient's own rows, so there is no parameter through
+which a caller could ask for somebody else's. Consequence: the security suite's
+router walk was widened to accept `get_ws_principal` alongside `get_principal`,
+and two tenant-isolation tests pin the socket's behaviour; the token may arrive
+as the `bearer, <token>` subprotocol (a browser cannot set a header on a
+handshake) but never as a query parameter, which would put a live session token
+into every access log on the path.
+
+## DR-030 (2026-09-01, S3) The invoker's timeout is a watchdog, not the call limit
+`ConnectorInvoker` bounds a capability at `3 x timeout_s + 1s` while the HTTP
+transport bounds each call at the manifest's `timeout_s`. Why: one capability is
+not one call - `execute` asks whether the idempotency key already ran before it
+sends anything - so a watchdog equal to a single call's timeout would fire during
+the second call every time, and worse, would fire before the adapter could turn
+its own timeout into an UNCERTAIN outcome, reporting a timed-out remediation as a
+platform error and inviting a retry. Consequence: the per-call limit is where the
+real bound lives; the watchdog only catches a runtime that hangs with no timeout
+of its own, and a caller may tighten it but never widen it.
+
+## DR-029 (2026-09-01, S3) A timed-out action execution is UNCERTAIN, not failed
+`http-observe-actions.execute` returns `ExecutionState.UNCERTAIN` with a derived,
+stable execution id when the call times out or the target becomes unreachable,
+and raises only when the target answered and refused (auth, 4xx). Why: after a
+timeout the change may already have happened, and "failed" is a claim the adapter
+cannot support. Consequence: `get_execution` is the reconcile-before-retry
+primitive S6 builds on, and duplicate suppression is a lookup before the send
+rather than a lock.
+
+## DR-028 (2026-09-01, S3) The collaboration script is materialised, not streamed
+teams-sim writes a whole scripted conversation as rows at future `sent_at` when a
+channel is first touched, and reads window by time. Why: three properties fall
+out for free that a timer-driven player has to build - it follows whatever clock
+the platform holds, so a drill at 100x plays the conversation at 100x with no
+drill-aware code in the adapter; it is idempotent, because message ids derive
+from the channel and the line's position; and it survives a restart, because a
+schedule made of rows has nothing to lose. Consequence: `sim_messages.sent_at`
+may be in the future, and the read's upper bound is what hides a line until it is
+due; a script should start at `after_s: 0`, since the channel's epoch is its
+earliest message.
+
+## DR-027 (2026-09-01, S3) A topology document imports whole or not at all
+`topo-import` rejects a document whose edges name undeclared nodes, naming the
+offending edges, rather than dropping them. Why: topology is what blast radius is
+computed from, and a graph missing some edges looks complete while understating
+impact - which is worse than having no graph. Consequence: an over-large graph is
+refused rather than truncated for the same reason, and a document with no
+declared version gets a content fingerprint so re-importing an unchanged map is
+not a change.
+
+## DR-026 (2026-09-01, S3) kb-index ranks lexically first and semantically second
+BM25 always runs; embeddings are blended only when a provider is installed and
+reachable, and a provider failure at index time or query time degrades ranking
+quality without failing the search. Why: the same discipline REQ-051 puts on the
+LLM provider - the deterministic path is the product and the model is the
+improvement - applied one layer down. Consequence: documents indexed while a
+provider was down carry no vector and are still found; `use_embeddings: false`
+pins ranking for a drill; redaction is applied at index time, because a policy
+applied on read could be bypassed by a later reader of the row.
+
+## DR-025 (2026-09-01, S3) The shipped adapters get their own unit of work
+`IntegrationUnitOfWork` (tickets, messages, deliveries, knowledge) is separate
+from `IdentityUnitOfWork`. Why: those four tables hold the *integrated system's*
+data rather than SignalForge's own state, and an adapter call is not a use case -
+it must not be able to commit a transaction that also contains role bindings.
+Consequence: `notification_deliveries` is reachable from both, because
+acknowledging a page is a human act whose receipt, audit entry and event have to
+be one commit; the adapters write receipts through their own unit of work and the
+inbox acknowledges through the identity one.
+
 ## DR-024 (2026-09-01, S3) The capability matrix is a declaration view, not a runtime view
 Coverage per kind is computed from the manifests' `availability`, so an
 interface-only adapter is listed and never counted, while a `built_in` manifest

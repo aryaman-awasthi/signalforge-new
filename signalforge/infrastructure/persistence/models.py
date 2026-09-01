@@ -350,6 +350,133 @@ class ConnectorBindingRow(Base):
     consecutive_failures: Mapped[int] = mapped_column(Integer, default=0)
 
 
+class SimTicketRow(Base):
+    """A ticket in the built-in lightweight ITSM (itsm-lite).
+
+    This is the *integrated system's* data, not SignalForge's: it exists so an
+    installation without ServiceNow can still rehearse ticket sync end to end.
+    Durable on purpose - a simulated pager or ticket queue that forgets on
+    restart cannot be used to rehearse anything.
+    """
+
+    __tablename__ = "sim_tickets"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "app_id", "ticket_id", name="uq_sim_tickets_id"),
+        Index("ix_sim_tickets_tenant_app", "tenant_id", "app_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    app_id: Mapped[str] = mapped_column(String(100))
+    ticket_id: Mapped[str] = mapped_column(String(100))
+    reference: Mapped[str] = mapped_column(String(50))
+    title: Mapped[str] = mapped_column(String(300))
+    status: Mapped[str] = mapped_column(String(20))
+    severity: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    assignee: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    links: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime)
+    updated_at: Mapped[datetime] = mapped_column(TZDateTime)
+
+
+class SimMessageRow(Base):
+    """One message in a simulated collaboration channel (teams-sim).
+
+    `scripted` tells a drill's rehearsed conversation apart from what a human
+    typed into the bridge. `sent_at` may be in the future: the script player
+    materialises a whole conversation at its scheduled times and reads window by
+    time, which is how a script follows the drill clock without a timer.
+    """
+
+    __tablename__ = "sim_messages"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "message_id", name="uq_sim_messages_id"),
+        Index("ix_sim_messages_channel_time", "tenant_id", "channel", "sent_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    app_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    channel: Mapped[str] = mapped_column(String(200))
+    message_id: Mapped[str] = mapped_column(String(100))
+    thread_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    author_type: Mapped[str] = mapped_column(String(20))
+    author_id: Mapped[str] = mapped_column(String(200))
+    author_display: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    text: Mapped[str] = mapped_column(Text)
+    sent_at: Mapped[datetime] = mapped_column(TZDateTime)
+    scripted: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class NotificationDeliveryRow(Base):
+    """The receipt for one notification on one channel.
+
+    Every notification adapter writes here - in-app, browser push, the simulated
+    pager and the simulated DM - so "was this person told, and did they say they
+    had it" is one query regardless of transport, and so a cockpit that
+    reconnects can be caught up on what is still waiting for an acknowledgement.
+    """
+
+    __tablename__ = "notification_deliveries"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "notification_id", name="uq_notification_deliveries_id"
+        ),
+        Index("ix_notification_deliveries_recipient", "tenant_id", "recipient", "at"),
+        Index("ix_notification_deliveries_incident", "tenant_id", "incident_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    notification_id: Mapped[str] = mapped_column(String(100))
+    adapter_id: Mapped[str] = mapped_column(String(64))
+    channel: Mapped[str] = mapped_column(String(20))
+    recipient: Mapped[str] = mapped_column(String(200))
+    title: Mapped[str] = mapped_column(String(300))
+    body: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(20))
+    at: Mapped[datetime] = mapped_column(TZDateTime)
+    app_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    incident_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    requires_ack: Mapped[bool] = mapped_column(Boolean, default=False)
+    simulated: Mapped[bool] = mapped_column(Boolean, default=False)
+    detail: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    acked_by: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    acked_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, nullable=True)
+
+
+class KnowledgeDocumentRow(Base):
+    """A runbook, PIR or note in the built-in knowledge index (kb-index).
+
+    `tokens` is the tokenised body BM25 ranks against, stored rather than
+    recomputed so a search costs one read. `embedding` is present only when an
+    embedding provider was reachable at index time; its absence is exactly what
+    makes the search fall back to lexical ranking rather than fail.
+    """
+
+    __tablename__ = "knowledge_documents"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "doc_id", name="uq_knowledge_documents_id"),
+        Index("ix_knowledge_documents_tenant_app", "tenant_id", "app_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    doc_id: Mapped[str] = mapped_column(String(100))
+    app_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    title: Mapped[str] = mapped_column(String(300))
+    body: Mapped[str] = mapped_column(Text)
+    doc_type: Mapped[str] = mapped_column(String(20))
+    tags: Mapped[list] = mapped_column(JSON, default=list)
+    tokens: Mapped[list] = mapped_column(JSON, default=list)
+    embedding: Mapped[list] = mapped_column(JSON, default=list)
+    embedding_model: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    redaction_policy_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(TZDateTime)
+    indexed_at: Mapped[datetime] = mapped_column(TZDateTime)
+
+
 class EventSealRow(Base):
     __tablename__ = "event_seals"
     __table_args__ = (Index("ix_event_seals_tenant", "tenant_id", "sealed_at"),)

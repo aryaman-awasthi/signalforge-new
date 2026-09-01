@@ -1,0 +1,35 @@
+id: teams-sim-dm
+name: teams-sim direct messages (SIMULATED)
+version: 1.0.0
+kind: notifications
+mode: invoke
+vendor: signalforge
+description: >-
+  Sends a notification as a direct message in the simulated collaboration
+  workspace. It writes into the same message store as the bridge, so a responder
+  sees one history, and into the delivery store, so escalation can ask whether
+  the person was told. Labelled SIMULATED end to end.
+availability: built_in
+simulated: true
+capabilities: [send, status]
+credential_scopes: [remediation]
+auth:
+  method: none
+config_schema:
+  type: object
+  additionalProperties: false
+  properties:
+    post_as:
+      type: string
+      minLength: 1
+      maxLength: 100
+      default: SignalForge
+limits:
+  timeout_s: 10
+  max_calls_per_minute: 300
+  max_result_bytes: 262144
+  max_rows: 200
+redaction:
+  policy_id: teams-sim-dm-default
+  patterns:
+    - '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'

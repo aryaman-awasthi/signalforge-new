@@ -29,6 +29,7 @@ from signalforge.api.routers import (
     platform,
     roles,
     users,
+    ws,
 )
 from signalforge.infrastructure.config import VERSION, load_settings
 from signalforge.infrastructure.observability.logging import configure_logging
@@ -83,3 +84,4 @@ app.include_router(escalation.router)
 app.include_router(events.router)
 app.include_router(adapters.router)
 app.include_router(platform.router)
+app.include_router(ws.router)

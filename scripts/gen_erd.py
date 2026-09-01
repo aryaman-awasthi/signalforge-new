@@ -48,6 +48,15 @@ GROUPS: list[tuple[str, str, tuple[str, ...]]] = [
         ("connector_bindings",),
     ),
     (
+        "Shipped integrations (S3)",
+        "What the generic adapters remember. itsm-lite, teams-sim and page-sim "
+        "simulate an integrated *system*; the record of what SignalForge did is "
+        "durable either way, because a rehearsal whose pages and tickets vanish "
+        "on restart proves nothing.",
+        ("sim_tickets", "sim_messages", "notification_deliveries",
+         "knowledge_documents"),
+    ),
+    (
         "Agent traces (S2, filled S5)",
         "Written from Sprint 5 by the agent suite; shipped now so agents are born "
         "observable rather than instrumented afterwards.",
@@ -141,6 +150,26 @@ what the integration health screen reads. They are durable on purpose: after a
 restart the screen shows the last observed verdict and the last error rather
 than an empty table until the next poll.
 
+## 6b. What the shipped adapters store
+
+Four tables belong to the generic adapters rather than to SignalForge's own
+state, and they are on a separate unit of work (`IntegrationUnitOfWork`) for that
+reason: an adapter call is not a use case and must not be able to commit a
+transaction containing identity or incident state.
+
+| Table | Owner | Why it is durable |
+|---|---|---|
+| `sim_tickets` | itsm-lite | a rehearsal of ticket sync needs tickets that survive a restart |
+| `sim_messages` | teams-sim bridge and DMs | the script player schedules by writing rows at future `sent_at`, so the schedule survives a restart and follows the drill clock; reads window by time |
+| `notification_deliveries` | every notification adapter | the receipt is written *before* the transport is touched, so "was this person told" survives a lost frame; acknowledgement is terminal |
+| `knowledge_documents` | kb-index | `tokens` is stored so a search costs one read; `embedding` is present only when a provider was reachable, and its absence is what makes search fall back to BM25 rather than fail |
+
+`notification_deliveries` is reachable from both units of work. The adapters
+write receipts through `IntegrationUnitOfWork`; acknowledgement goes through the
+identity one, because an acknowledgement, its audit entry and its event have to
+be a single commit or an escalation timer and the audit chain can disagree about
+whether a human answered.
+
 ## 7. Indexes
 
 Every index exists for a query the platform actually makes:
@@ -158,6 +187,11 @@ Every index exists for a query the platform actually makes:
 | `ix_audit_log_tenant_seq` | audit chain verification |
 | `ix_connector_bindings_tenant_app` | the integration health screen, per app |
 | `ix_connector_bindings_enabled` | the connector health loop's cross-tenant work list |
+| `ix_sim_messages_channel_time` | the bridge's time-windowed read, which is also what hides a scripted line until it is due |
+| `ix_notification_deliveries_recipient` | a reconnecting cockpit asking what is still open for this person |
+| `ix_notification_deliveries_incident` | the war room's "who was told about this incident" |
+| `ix_knowledge_documents_tenant_app` | the kb-index corpus read, tenant- and app-scoped |
+| `ix_sim_tickets_tenant_app` | the simulated ticket queue per application |
 
 ## 8. Portability
 

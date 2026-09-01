@@ -1,0 +1,38 @@
+id: itsm-lite
+name: itsm-lite (built-in ticket queue, SIMULATED)
+version: 1.0.0
+kind: itsm
+mode: invoke
+vendor: signalforge
+description: >-
+  A working ticket queue built into SignalForge, so an installation with no
+  ServiceNow can still rehearse ticket creation, assignment, resolution and
+  closure end to end. Tickets are durable and carry a LITE-000001 style
+  reference. Create is idempotent on ticket_id, and a closed ticket cannot be
+  reopened by a retrying machine. Everything it produces is labelled SIMULATED.
+availability: built_in
+simulated: true
+capabilities: [create, update, get]
+credential_scopes: [remediation]
+auth:
+  method: none
+config_schema:
+  type: object
+  additionalProperties: false
+  properties:
+    reference_prefix:
+      type: string
+      minLength: 1
+      maxLength: 8
+      default: LITE
+      description: Prefix for generated ticket references.
+limits:
+  timeout_s: 10
+  max_calls_per_minute: 300
+  max_result_bytes: 262144
+  max_rows: 500
+redaction:
+  policy_id: itsm-lite-default
+  patterns:
+    - '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'
+    - '\b(?:\d[ -]?){13,19}\b'

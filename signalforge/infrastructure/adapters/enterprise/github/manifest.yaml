@@ -1,0 +1,39 @@
+id: github
+name: GitHub deployment webhooks
+version: 0.1.0
+kind: changes
+mode: push
+vendor: github
+description: >-
+  Interface only in this deployment. Declares a GitHub webhook binding that would
+  normalise deployment and release events posted to the ingest API, secured with
+  GitHub's own HMAC secret. No runtime is installed here; deploy-webhook accepts
+  the generic shape today.
+availability: available
+simulated: false
+capabilities: [normalize]
+credential_scopes: [read_only]
+auth:
+  method: hmac
+  credential_fields: [webhook_secret]
+config_schema:
+  type: object
+  required: [repository]
+  additionalProperties: false
+  properties:
+    repository:
+      type: string
+      minLength: 3
+      description: owner/name of the repository sending the webhook.
+    environments:
+      type: array
+      items:
+        type: string
+      description: Deployment environments to accept. Empty means all.
+limits:
+  timeout_s: 10
+  max_calls_per_minute: 600
+  max_result_bytes: 1048576
+  max_rows: 500
+redaction:
+  policy_id: github-none

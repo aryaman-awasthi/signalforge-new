@@ -1,0 +1,37 @@
+id: prometheus
+name: Prometheus
+version: 1.0.0
+kind: metrics
+mode: pull
+vendor: prometheus
+description: >-
+  Queries a Prometheus server's HTTP API. This is the adapter that answers range
+  queries - /api/v1/query_range - which is what baselines, burn rates and the
+  incident timeline's charts are computed from. Instant queries go through
+  /api/v1/query, so any PromQL expression works, not only the selector subset the
+  observe adapter parses locally.
+availability: built_in
+simulated: false
+capabilities: [query_instant, query_range]
+credential_scopes: [read_only]
+auth:
+  method: none
+config_schema:
+  type: object
+  required: [base_url]
+  additionalProperties: false
+  properties:
+    base_url:
+      type: string
+      minLength: 8
+      description: Prometheus root URL, e.g. http://localhost:9090
+    verify_tls:
+      type: boolean
+      default: true
+limits:
+  timeout_s: 30
+  max_calls_per_minute: 300
+  max_result_bytes: 8388608
+  max_rows: 50000
+redaction:
+  policy_id: prometheus-none

@@ -1,0 +1,37 @@
+id: http-observe-chaos
+name: Observe chaos
+version: 1.0.0
+kind: chaos
+mode: invoke
+vendor: generic
+description: >-
+  Imports an application's chaos manifest from GET /observe/chaos, validated
+  against the frozen chaos-manifest schema, and injects, inspects and aborts
+  faults through /observe/chaos/*. Offers the drill credential scope and nothing
+  else, and refuses an injection whose scope is not drill:<id>.
+availability: built_in
+simulated: false
+capabilities: [manifest, inject, status, abort]
+credential_scopes: [drill]
+auth:
+  method: bearer
+  credential_fields: [token]
+  header: Authorization
+config_schema:
+  type: object
+  required: [base_url]
+  additionalProperties: false
+  properties:
+    base_url:
+      type: string
+      minLength: 8
+    verify_tls:
+      type: boolean
+      default: true
+limits:
+  timeout_s: 30
+  max_calls_per_minute: 30
+  max_result_bytes: 524288
+  max_rows: 200
+redaction:
+  policy_id: observe-chaos-none

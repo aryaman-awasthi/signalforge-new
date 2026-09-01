@@ -23,6 +23,7 @@ from signalforge.infrastructure.persistence.connectors import (
     SqlConnectorBindingRepository,
 )
 from signalforge.infrastructure.persistence.event_store import SqlEventStore
+from signalforge.infrastructure.persistence.integrations import SqlNotificationStore
 from signalforge.infrastructure.security.audit import AuditChainWriter
 from signalforge.infrastructure.security.secrets import FernetSecretStore
 
@@ -50,6 +51,7 @@ class SqlIdentityUnitOfWork(IdentityUnitOfWork):
         self.escalations = SqlEscalationRepository(self._session)
         self.secrets = FernetSecretStore(self._session, key=self._fernet_key)
         self.connectors = SqlConnectorBindingRepository(self._session)
+        self.notifications = SqlNotificationStore(self._session)
         self.audit = AuditChainWriter(self._session, clock=self._clock)
         self.events = SqlEventStore(self._session, clock=self._clock)
         return self

@@ -12,6 +12,20 @@ signalforge/infrastructure/adapters/
     adapter.py         the runtime, registered into AdapterRuntimeRegistry
 ```
 
+A manifest and a runtime are separate things. The manifest is data and travels
+with the folder; the runtime is code and only exists where somebody wrote it.
+`builtin.py` maps adapter id to runtime class for everything this build ships,
+and it is the only file in the platform that names an adapter - `api`,
+`application` and `domain` contain none. A manifest with no entry there is
+`availability: available`: the registry lists it, the capability matrix shows
+what it would cover and never counts it as coverage, and a binding to it reports
+UNKNOWN rather than a green tick.
+
+Related adapters may share one runtime module and keep a folder each holding only
+`manifest.yaml` - the six http-observe adapters and the four notification
+channels do. The installable unit is the manifest; where the code lives is a
+packaging choice.
+
 The schema is hardcoded by SignalForge (`domain/adapters/manifest.py`); the
 content is declared by the adapter. A manifest that breaks a rule below is
 rejected at load time, recorded with its path, and shown on `GET /adapters`
@@ -51,6 +65,29 @@ under `errors` - the other adapters still load.
    and `itsm`: those carry free text out of the customer's estate into evidence
    and prompts, so the manifest must state a `redaction.policy_id` even when the
    policy redacts nothing.
+
+## What this build ships
+
+| Adapter | Kind | Mode | Notes |
+|---|---|---|---|
+| `http-observe-metrics` | metrics | pull | Prometheus text from `/observe/metrics`, `name{label="value"}` selectors. Instant only: a scrape has no history. |
+| `http-observe-logs` | logs | pull | search / aggregate / sample over `/observe/logs`; sampling spreads across the window. |
+| `http-observe-traces` | traces | pull | span search and whole-trace fetch. |
+| `http-observe-health` | health | pull | `/observe/health` plus synthetic probes SignalForge runs itself. |
+| `http-observe-actions` | actions | invoke | imports the app's action manifest; a timed-out execution is UNCERTAIN, not failed. |
+| `http-observe-chaos` | chaos | invoke | imports the chaos manifest; refuses a scope that is not `drill:<id>`. |
+| `prometheus` | metrics | pull | the range-query adapter (`/api/v1/query_range`). |
+| `grafana-alert-webhook` | alerts | push | normalises Grafana unified-alerting batches. |
+| `deploy-webhook` | changes | push | normalises deployment webhooks; refuses to guess a status. |
+| `topo-import` | topology | pull | pull or upload, same versioned snapshot; imports whole or not at all. |
+| `itsm-lite` | itsm | invoke | SIMULATED ticket queue with a real state machine. |
+| `teams-sim` | collaboration | invoke | SIMULATED bridge: script player plus live input. |
+| `teams-sim-dm` | notifications | invoke | SIMULATED direct messages. |
+| `notify-in-app` | notifications | invoke | delivered over `/ws`. |
+| `notify-browser-push` | notifications | invoke | raised by the cockpit's service worker. |
+| `page-sim` | notifications | invoke | SIMULATED SMS and voice, transcript in the delivery log. |
+| `kb-index` | knowledge | pull | BM25 always, embeddings blended when a provider exists. |
+| `datadog`, `splunk`, `servicenow`, `jenkins`, `github` | various | various | interface only; see `enterprise/README.md`. |
 
 ## Example
 

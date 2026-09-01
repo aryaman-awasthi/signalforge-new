@@ -1,0 +1,29 @@
+id: notify-browser-push
+name: Browser push notifications
+version: 1.0.0
+kind: notifications
+mode: invoke
+vendor: signalforge
+description: >-
+  Raises an operating-system notification through the cockpit's service worker.
+  Delivery rides the platform's own authenticated socket rather than a
+  third-party push service, so a deployment with no outbound internet still
+  notifies, and incident text is never handed to an external provider. With no
+  subscribed browser session the notification is QUEUED for catch-up.
+availability: built_in
+simulated: false
+capabilities: [send, status]
+credential_scopes: [remediation]
+auth:
+  method: none
+config_schema:
+  type: object
+  additionalProperties: false
+  properties: {}
+limits:
+  timeout_s: 10
+  max_calls_per_minute: 600
+  max_result_bytes: 262144
+  max_rows: 200
+redaction:
+  policy_id: notify-browser-push-none

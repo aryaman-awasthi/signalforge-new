@@ -1,0 +1,46 @@
+id: kb-index
+name: kb-index knowledge base
+version: 1.0.0
+kind: knowledge
+mode: pull
+vendor: signalforge
+description: >-
+  Indexes runbooks, post-incident reviews and notes and answers scored searches.
+  BM25 is the floor and always runs; when an embedding provider is configured its
+  cosine similarity is blended in. A model failure degrades ranking quality and
+  never the search itself - documents indexed without a vector are still found
+  lexically. Redaction is applied at index time, so what must not reach a prompt
+  is never stored.
+availability: built_in
+simulated: false
+capabilities: [index, search]
+credential_scopes: [read_only]
+auth:
+  method: none
+config_schema:
+  type: object
+  additionalProperties: false
+  properties:
+    use_embeddings:
+      type: boolean
+      default: true
+      description: >-
+        Blend semantic similarity when a provider is installed. Turn off to pin
+        ranking to deterministic BM25, for example while rehearsing a drill.
+    semantic_weight:
+      type: number
+      minimum: 0
+      maximum: 1
+      default: 0.4
+      description: Weight of the semantic score against the lexical one.
+limits:
+  timeout_s: 30
+  max_calls_per_minute: 300
+  max_result_bytes: 4194304
+  max_rows: 100
+redaction:
+  policy_id: kb-index-default
+  patterns:
+    - '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'
+    - '\b(?:\d[ -]?){13,19}\b'
+    - '(?i)\b(?:password|secret|api[_-]?key)\s*[:=]\s*\S+'

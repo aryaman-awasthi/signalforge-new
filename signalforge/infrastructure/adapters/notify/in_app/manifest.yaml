@@ -1,0 +1,30 @@
+id: notify-in-app
+name: In-app notifications (WebSocket)
+version: 1.0.0
+kind: notifications
+mode: invoke
+vendor: signalforge
+description: >-
+  Delivers notifications to open cockpit sessions over the authenticated /ws
+  socket. Every notification gets a durable receipt before anything is
+  transmitted, so "was this person told" survives a lost frame. With nobody
+  connected the notification is QUEUED rather than failed, and a socket asks for
+  what is still open when it connects. Acknowledgement arrives back over the same
+  socket and is terminal.
+availability: built_in
+simulated: false
+capabilities: [send, status]
+credential_scopes: [remediation]
+auth:
+  method: none
+config_schema:
+  type: object
+  additionalProperties: false
+  properties: {}
+limits:
+  timeout_s: 10
+  max_calls_per_minute: 600
+  max_result_bytes: 262144
+  max_rows: 200
+redaction:
+  policy_id: notify-in-app-none

@@ -1,0 +1,31 @@
+id: page-sim
+name: page-sim SMS and voice paging (SIMULATED)
+version: 1.0.0
+kind: notifications
+mode: invoke
+vendor: signalforge
+description: >-
+  A simulated pager for SMS and voice. Nothing leaves the machine; the delivery
+  log records the transcript exactly as the channel would have rendered it - SMS
+  truncated at 160 characters, voice as the words that would be spoken - so a
+  rehearsal shows what the responder would actually have received. Everything it
+  produces is labelled SIMULATED.
+availability: built_in
+simulated: true
+capabilities: [send, status]
+credential_scopes: [remediation]
+auth:
+  method: none
+config_schema:
+  type: object
+  additionalProperties: false
+  properties: {}
+limits:
+  timeout_s: 10
+  max_calls_per_minute: 300
+  max_result_bytes: 262144
+  max_rows: 200
+redaction:
+  policy_id: page-sim-default
+  patterns:
+    - '\b(?:\d[ -]?){13,19}\b'

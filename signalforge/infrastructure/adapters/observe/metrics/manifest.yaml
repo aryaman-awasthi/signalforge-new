@@ -1,0 +1,40 @@
+id: http-observe-metrics
+name: Observe metrics (Prometheus text)
+version: 1.0.0
+kind: metrics
+mode: pull
+vendor: generic
+description: >-
+  Reads GET /observe/metrics in Prometheus text exposition format from any
+  application that serves the observe contract, and selects series with a
+  name{label="value"} selector. Only query_instant is declared: a scrape carries
+  the current sample and no history, so a range query has no honest answer here -
+  bind the prometheus adapter for that.
+availability: built_in
+simulated: false
+capabilities: [query_instant]
+credential_scopes: [read_only]
+auth:
+  method: bearer
+  credential_fields: [token]
+  header: Authorization
+config_schema:
+  type: object
+  required: [base_url]
+  additionalProperties: false
+  properties:
+    base_url:
+      type: string
+      minLength: 8
+      description: Root URL of the application, e.g. http://localhost:8080
+    verify_tls:
+      type: boolean
+      default: true
+      description: Verify the target's TLS certificate. Turn off only for a lab.
+limits:
+  timeout_s: 10
+  max_calls_per_minute: 120
+  max_result_bytes: 2097152
+  max_rows: 20000
+redaction:
+  policy_id: observe-metrics-none

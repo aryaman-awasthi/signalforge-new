@@ -1,0 +1,37 @@
+id: http-observe-health
+name: Observe health and synthetic probes
+version: 1.0.0
+kind: health
+mode: pull
+vendor: generic
+description: >-
+  Reads GET /observe/health from any application that serves the observe
+  contract, and runs synthetic probes from SignalForge against a URL the
+  application exposes. A non-2xx is a probe result, not an error: expected_status
+  decides.
+availability: built_in
+simulated: false
+capabilities: [get_health, run_probe]
+credential_scopes: [read_only]
+auth:
+  method: bearer
+  credential_fields: [token]
+  header: Authorization
+config_schema:
+  type: object
+  required: [base_url]
+  additionalProperties: false
+  properties:
+    base_url:
+      type: string
+      minLength: 8
+    verify_tls:
+      type: boolean
+      default: true
+limits:
+  timeout_s: 15
+  max_calls_per_minute: 240
+  max_result_bytes: 1048576
+  max_rows: 1000
+redaction:
+  policy_id: observe-health-none

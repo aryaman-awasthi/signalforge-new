@@ -115,3 +115,145 @@ Three separations follow from a source knowing which tenant it belongs to:
 `GET /adapters`, `GET /adapters/capability-matrix`, `GET /adapters/{id}`, `GET|POST
 /connectors`, `GET /connectors/health`, `GET|PATCH|DELETE /connectors/{id}` - all `manage_apps`.
 Shapes are in docs/11.
+
+## 2. Integrations: the adapters this build ships (REQ-031, REQ-033, REQ-035)
+
+Seventeen adapters ship with a runtime and five ship as interfaces. None of them names an
+application: every one is configured by a binding, and the only file in the platform that names
+an adapter is `infrastructure/adapters/builtin.py`, which lives inside the adapters tree.
+
+### 2.1 The observe set
+
+Any application that serves `contracts/observe.py` is observable and partly controllable with
+no platform code written for it. Six adapters divide that surface, because a binding is per
+capability set and per credential scope: reading an application's logs and being allowed to
+restart it are different permissions held as different credentials.
+
+| Adapter | Kind | Capabilities | Notes |
+|---|---|---|---|
+| `http-observe-metrics` | metrics | `query_instant` | parses Prometheus text exposition; selects with `name{label="value"}` using `=`, `!=`, `=~`, `!~`. A scrape carries no history, so it declares no range query - `prometheus` answers those. |
+| `http-observe-logs` | logs | `search`, `aggregate`, `sample` | aggregation is computed from what was read and never extrapolated; sampling strides across the window, because the first n records of an incident are all from its first second. |
+| `http-observe-traces` | traces | `search`, `get_trace` | span attributes pass through the declared redaction. |
+| `http-observe-health` | health | `get_health`, `run_probe` | probes run from SignalForge against a URL the app exposes; a non-2xx is a result, not an error. |
+| `http-observe-actions` | actions | `manifest`, `execute`, `get_execution` | see 2.2. |
+| `http-observe-chaos` | chaos | `manifest`, `inject`, `status`, `abort` | drill credential only; refuses a scope that is not `drill:<id>`. |
+| `prometheus` | metrics | `query_instant`, `query_range` | the range adapter baselines and burn rates are computed from. |
+
+Each pings the endpoint it actually uses. Pinging `/observe/health` for all of them would
+report a metrics binding healthy while `/observe/metrics` returns 500.
+
+### 2.2 Executing an action safely
+
+Two behaviours matter more than the call itself, and both are about not knowing:
+
+- **A timed-out execution is UNCERTAIN, not failed.** The request may still be running and the
+  change may already have happened; reporting failure would invite a retry that applies it
+  twice. `get_execution(idempotency_key)` is the reconcile-before-retry lookup the gateway uses
+  to find out what really happened (REQ-062, S6).
+- **A repeated idempotency key is not a second execution.** The adapter asks the application
+  whether that key already ran before it sends anything.
+
+The imported action manifest is validated against the frozen schema, so an application cannot
+publish a high-risk action with no approver roles and have it become executable.
+
+### 2.3 Push adapters
+
+`grafana-alert-webhook` and `deploy-webhook` have no outbound call: their whole job is one pure
+`normalize`. Three translation decisions are deliberate, because a normaliser that gets them
+wrong is a misled responder at 3am. An unrecognised severity becomes `warning`, never
+`critical` (which trains people to ignore pages) and never `info` (which hides a real one).
+Grafana's unresolved-end-time sentinel becomes null rather than a timestamp in year one. A
+deployment webhook with neither a status nor an event name is *rejected*: guessing "completed"
+would close a change window that is still open, and the change window is how a responder finds
+the cause. An alert with no fingerprint gets an id derived from its name and labels, so a
+re-notification is not mistaken for a new alert.
+
+For a push binding, healthy means "SignalForge is mounted and accepting posts for this
+binding". Whether anything has arrived is freshness, which the ingest API records.
+
+### 2.4 Topology import
+
+`topo-import` covers both directions - pull `/observe/topology`, or normalise a document the
+wizard uploads - and both produce the same snapshot from the same content, because a pull and an
+upload that disagreed about the version would make "has the map changed since the incident
+started" unanswerable. Two rules are absolute: a document imports **whole or not at all** (a
+graph missing half its edges looks complete and understates blast radius, so a dangling edge
+rejects the document with the offending edges named), and every import is **versioned by its
+content** when the document does not declare a version, so re-importing an unchanged map is not
+a change.
+
+### 2.5 Simulated integrations
+
+Three adapters simulate an integrated system so that an installation with no ServiceNow, no
+Teams tenant and no pager can still rehearse the whole lifecycle. `simulated: true` in the
+manifest carries a SIMULATED badge from the adapter through the event payload to the screen.
+Simulated means the *system* is faked; the record of what SignalForge did is durable, because a
+rehearsal whose pages and tickets vanish on restart proves nothing.
+
+- **itsm-lite** is a working ticket queue with `LITE-000001` references. Create is idempotent
+  on `ticket_id` - ITSM calls are retried by everything, and a duplicate incident ticket costs a
+  human real time - and a closed ticket cannot be reopened by a retrying machine, because
+  closure records that a person signed off.
+- **teams-sim** is a bridge that plays a written script *and* accepts live input, both landing
+  in one channel. The script is materialised at its scheduled times when the channel is first
+  touched rather than driven by a timer, which buys three things: it follows the platform clock
+  (a drill at 100x plays the conversation at 100x, with no drill-aware code in the adapter), it
+  is idempotent on replay because message ids come from the channel and the line's position, and
+  it survives a restart because a schedule made of rows has nothing to lose.
+- **page-sim** records the transcript an SMS or voice call would have carried - truncated at 160
+  characters, or as the words that would be spoken - so a rehearsal shows what the responder
+  would actually have received.
+
+### 2.6 Notifications
+
+Four channels, one promise: every notification gets a durable receipt **before** anything is
+transmitted. A page whose delivery succeeded and whose record did not is a page nobody can
+prove happened, and an escalation timer built on the transport rather than the record would
+silence itself on a lost frame.
+
+| Outcome | Status |
+|---|---|
+| a live cockpit session took the frame | SENT |
+| nobody is connected, or the session is not keeping up | QUEUED - not a failure |
+| the simulated pager wrote its transcript | SENT |
+| a person acknowledged | ACKED, and terminal |
+
+Sending the same `notification_id` twice returns the first receipt without transmitting again.
+In-app delivery and browser push both ride the authenticated `/ws` socket - browser push is
+raised by the cockpit's service worker rather than handed to a third-party push service, so a
+deployment with no outbound internet still notifies and incident text never leaves the estate.
+A session declares which channels it can render; a browser-push notification to a session that
+has not is QUEUED for catch-up. On connect, a session is handed everything still waiting for
+acknowledgement, which is what makes "nobody was looking" an acceptable outcome.
+
+### 2.7 Knowledge
+
+`kb-index` stores runbooks, PIRs and notes and answers scored searches. BM25 is the floor and
+always runs: it is deterministic, needs nothing external, and works the moment a document is
+indexed. When an embedding provider is configured its cosine similarity is blended in. A model
+failure - at index time or at query time - degrades the *ranking* and never the search: the
+document is still indexed, still found lexically, and the search still answers. This is the
+same discipline the LLM provider is held to (REQ-051): the deterministic path is the product.
+
+Redaction happens at index time, not at query time. A runbook's text reaches briefs and
+prompts, so what must not be there must never be stored; a policy applied on the way out could
+always be bypassed by a later reader of the same row.
+
+### 2.8 Enterprise connectors: Available, not installed
+
+`datadog`, `splunk`, `servicenow`, `jenkins` and `github` ship as manifests with no runtime.
+That is a deliberate, visible state. Hiding them would suggest the platform cannot integrate
+with them; shipping a mock under a `built_in` flag would let a demo show a working Datadog
+integration while nothing was ever queried. They are listed, their capability rows are shown,
+and the matrix never counts them as coverage. Adding a real runtime later is an entry in
+`builtin.py` and a manifest field - nothing else in the platform changes.
+
+### 2.9 Calling an adapter
+
+Every call goes through one path (`ConnectorInvoker`), because five checks have to happen on
+every single one and none may be a caller's responsibility to remember: the binding exists in
+this tenant and is enabled; its adapter is still installed and this node has a runtime; the
+credential-scope floor allows this capability on this credential; the credential is decrypted
+for this call and nothing caches it; and the call is bounded. The floor is re-checked at *call*
+time rather than at bind time, which is what makes a permission change mid-flow safe - the next
+call is refused even though the binding, the runtime and the credential are all still there.

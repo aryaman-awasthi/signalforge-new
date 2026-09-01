@@ -1,0 +1,39 @@
+id: http-observe-traces
+name: Observe traces
+version: 1.0.0
+kind: traces
+mode: pull
+vendor: generic
+description: >-
+  Searches spans and fetches whole traces from GET /observe/traces on any
+  application that serves the observe contract. Span attributes pass through the
+  declared redaction before they leave the adapter.
+availability: built_in
+simulated: false
+capabilities: [search, get_trace]
+credential_scopes: [read_only]
+auth:
+  method: bearer
+  credential_fields: [token]
+  header: Authorization
+config_schema:
+  type: object
+  required: [base_url]
+  additionalProperties: false
+  properties:
+    base_url:
+      type: string
+      minLength: 8
+    verify_tls:
+      type: boolean
+      default: true
+limits:
+  timeout_s: 20
+  max_calls_per_minute: 60
+  max_result_bytes: 4194304
+  max_rows: 5000
+redaction:
+  policy_id: observe-traces-default
+  patterns:
+    - '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'
+    - '\b(?:\d[ -]?){13,19}\b'

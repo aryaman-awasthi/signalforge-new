@@ -1,0 +1,39 @@
+id: http-observe-actions
+name: Observe actions
+version: 1.0.0
+kind: actions
+mode: invoke
+vendor: generic
+description: >-
+  Imports an application's action manifest from GET /observe/actions, validated
+  against the frozen action-manifest schema, and executes actions through
+  POST /observe/actions/{id}/execute. A timeout returns UNCERTAIN rather than
+  failed, and get_execution is the reconcile-before-retry lookup. Runs only on a
+  remediation credential; the policy floor still decides whether an action may
+  run at all.
+availability: built_in
+simulated: false
+capabilities: [manifest, execute, get_execution]
+credential_scopes: [remediation]
+auth:
+  method: bearer
+  credential_fields: [token]
+  header: Authorization
+config_schema:
+  type: object
+  required: [base_url]
+  additionalProperties: false
+  properties:
+    base_url:
+      type: string
+      minLength: 8
+    verify_tls:
+      type: boolean
+      default: true
+limits:
+  timeout_s: 60
+  max_calls_per_minute: 60
+  max_result_bytes: 1048576
+  max_rows: 500
+redaction:
+  policy_id: observe-actions-none

@@ -34,6 +34,15 @@ class ConnectorConfigError(DomainValidationError):
     """The binding's config does not satisfy the manifest's config_schema."""
 
 
+class ConnectorDisabledError(DomainValidationError):
+    """The binding exists but an operator turned it off.
+
+    Distinct from "not found" on purpose: a disabled connector is a decision
+    somebody made and can undo, and telling a caller it does not exist would
+    send them to create a duplicate.
+    """
+
+
 class CredentialScopeError(DomainValidationError):
     """A credential was pointed at something its scope does not authorise.
 

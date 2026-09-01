@@ -1,0 +1,44 @@
+id: splunk
+name: Splunk logs
+version: 0.1.0
+kind: logs
+mode: pull
+vendor: splunk
+description: >-
+  Interface only in this deployment. Declares a Splunk search-head binding - host
+  and index, a bearer token, search and aggregation - so the registry and the
+  capability matrix can show it without pretending it runs here. No runtime is
+  installed, so a binding reports UNKNOWN.
+availability: available
+simulated: false
+capabilities: [search, aggregate]
+credential_scopes: [read_only]
+auth:
+  method: bearer
+  credential_fields: [token]
+  header: Authorization
+config_schema:
+  type: object
+  required: [base_url, index]
+  additionalProperties: false
+  properties:
+    base_url:
+      type: string
+      minLength: 8
+      description: Search head URL, e.g. https://splunk.internal:8089
+    index:
+      type: string
+      minLength: 1
+    verify_tls:
+      type: boolean
+      default: true
+limits:
+  timeout_s: 60
+  max_calls_per_minute: 60
+  max_result_bytes: 8388608
+  max_rows: 10000
+redaction:
+  policy_id: splunk-default
+  patterns:
+    - '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'
+    - '\b(?:\d[ -]?){13,19}\b'

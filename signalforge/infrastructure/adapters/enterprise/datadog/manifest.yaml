@@ -1,0 +1,40 @@
+id: datadog
+name: Datadog metrics
+version: 0.1.0
+kind: metrics
+mode: pull
+vendor: datadog
+description: >-
+  Interface only in this deployment. The manifest declares what a Datadog metrics
+  binding would look like - API and application keys, site, and both query
+  capabilities - so the registry, the capability matrix and the wizard can show
+  it honestly. No runtime is installed here, so a binding to it reports UNKNOWN
+  rather than a green tick.
+availability: available
+simulated: false
+capabilities: [query_instant, query_range]
+credential_scopes: [read_only]
+auth:
+  method: api_key
+  credential_fields: [api_key, application_key]
+  header: DD-API-KEY
+config_schema:
+  type: object
+  required: [site]
+  additionalProperties: false
+  properties:
+    site:
+      type: string
+      minLength: 3
+      default: datadoghq.com
+      description: Datadog site, e.g. datadoghq.com or datadoghq.eu
+    default_query:
+      type: string
+      description: Metric query the wizard prefills.
+limits:
+  timeout_s: 30
+  max_calls_per_minute: 300
+  max_result_bytes: 8388608
+  max_rows: 50000
+redaction:
+  policy_id: datadog-none

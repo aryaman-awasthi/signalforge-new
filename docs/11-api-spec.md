@@ -141,6 +141,56 @@ the last successful check, `null` when there has never been one.
 | `system.connector.unbound` | signal | owning tenant | a binding is deleted |
 | `system.connector.health` | signal | owning tenant for a binding, `_platform` for the platform's own components | every poll |
 
+## `GET /ws` - the cockpit notification socket (REQ-033)
+
+A WebSocket, authenticated and self-scoped, and the only product route with no
+permission check. It cannot have one: the people who most need to be paged - SMEs -
+hold no permissions in the roles matrix. The compensating control is that the socket is
+incapable of naming anyone else. The principal comes from the session, the subscription is
+keyed on that principal's tenant and user id, and catch-up reads that recipient's own
+notifications; there is no parameter through which a caller could ask for somebody else's.
+
+Authentication is a bearer token in the `Authorization` header, or - because a browser cannot
+set a header on a WebSocket handshake - as the `bearer, <token>` subprotocol pair. A
+`?token=` query parameter is deliberately not accepted: it would put a live session token into
+every access log and proxy history on the path. A missing or invalid token closes the
+handshake with 1008.
+
+Client frames:
+
+```json
+{"type": "hello", "channels": ["in_app", "browser_push"]}
+{"type": "ack",   "notification_id": "n-1"}
+{"type": "ping"}
+```
+
+Server frames: `ready` on connect, then one `notification` per still-open item (with
+`"replay": true`), then live `notification` frames, plus `subscribed`, `ack.ok`, `pong` and
+`error`. A notification frame is:
+
+```json
+{"type": "notification", "replay": false, "notification_id": "n-1",
+ "adapter_id": "notify-in-app", "channel": "in_app", "title": "...", "body": "...",
+ "incident_id": null, "requires_ack": true, "simulated": false,
+ "status": "sent", "at": "2026-09-01T12:00:00+00:00"}
+```
+
+Acknowledgement is the human override: idempotent, terminal, and written with its audit entry
+in one transaction, so an escalation timer and the audit chain cannot disagree about whether
+somebody answered. Acknowledging another tenant's id answers `notification not found`, the
+same as one that never existed.
+
+## Adapter invocation (REQ-030, REQ-031)
+
+There is no HTTP endpoint that invokes an adapter capability. Every call goes through
+`ConnectorInvoker` in the application layer, which is what the onboarding wizard's connection
+test (S3-T04), evidence gathering (S5) and the Tool Gateway (S6) each use; exposing a generic
+"call this capability" route would put the policy floor behind a query parameter. Five checks
+happen on every call: the binding exists in this tenant and is enabled, its adapter is still
+installed with a runtime on this node, the credential-scope floor allows that capability on
+that credential, the credential is decrypted for this call only, and a watchdog bounds the
+whole capability while the manifest's `timeout_s` bounds each HTTP call inside it.
+
 ## Unauthenticated endpoints (S1/S2, unchanged)
 
 `GET /health` reports this node's own components only - a customer's connector never appears

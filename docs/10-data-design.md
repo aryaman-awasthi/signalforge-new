@@ -5,8 +5,8 @@ SQLAlchemy models Alembic also autogenerates migrations from, so this document
 cannot drift from the schema. The design notes below are authored; the ERD and
 the column tables are not.
 
-Generated: 2026-08-31T22:21:42+00:00
-Tables: 18
+Generated: 2026-09-01T00:02:34+00:00
+Tables: 22
 
 ## 1. Entity relationship diagram
 
@@ -215,6 +215,78 @@ erDiagram
         datetime last_ok_at
         text last_error
         integer consecutive_failures
+    }
+```
+
+### Shipped integrations (S3)
+
+What the generic adapters remember. itsm-lite, teams-sim and page-sim simulate an integrated *system*; the record of what SignalForge did is durable either way, because a rehearsal whose pages and tickets vanish on restart proves nothing.
+
+```mermaid
+erDiagram
+    sim_tickets {
+        integer id "PK"
+        string tenant_id
+        string app_id
+        string ticket_id
+        string reference
+        string title
+        string status
+        string severity
+        string assignee
+        text description
+        json links
+        datetime created_at
+        datetime updated_at
+    }
+    sim_messages {
+        integer id "PK"
+        string tenant_id
+        string app_id
+        string channel
+        string message_id
+        string thread_id
+        string author_type
+        string author_id
+        string author_display
+        text text
+        datetime sent_at
+        boolean scripted
+    }
+    notification_deliveries {
+        integer id "PK"
+        string tenant_id
+        string notification_id
+        string adapter_id
+        string channel
+        string recipient
+        string title
+        text body
+        string status
+        datetime at
+        string app_id
+        string incident_id
+        boolean requires_ack
+        boolean simulated
+        text detail
+        string acked_by
+        datetime acked_at
+    }
+    knowledge_documents {
+        integer id "PK"
+        string tenant_id
+        string doc_id
+        string app_id
+        string title
+        text body
+        string doc_type
+        json tags
+        json tokens
+        json embedding
+        string embedding_model
+        string redaction_policy_id
+        datetime updated_at
+        datetime indexed_at
     }
 ```
 
@@ -532,6 +604,100 @@ Indexes: `ix_connector_bindings_enabled`, `ix_connector_bindings_tenant_app`, `i
 Constraints: unique (tenant_id, app_id, adapter_id, credential_scope)
 
 
+### Shipped integrations (S3)
+
+#### `sim_tickets`
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | integer | no | primary key |
+| `tenant_id` | string | no |  |
+| `app_id` | string | no |  |
+| `ticket_id` | string | no |  |
+| `reference` | string | no |  |
+| `title` | string | no |  |
+| `status` | string | no |  |
+| `severity` | string | yes |  |
+| `assignee` | string | yes |  |
+| `description` | text | yes |  |
+| `links` | json | no |  |
+| `created_at` | datetime | no |  |
+| `updated_at` | datetime | no |  |
+
+Indexes: `ix_sim_tickets_tenant_app`, `ix_sim_tickets_tenant_id`  
+Constraints: unique (tenant_id, app_id, ticket_id)
+
+
+#### `sim_messages`
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | integer | no | primary key |
+| `tenant_id` | string | no |  |
+| `app_id` | string | yes |  |
+| `channel` | string | no |  |
+| `message_id` | string | no |  |
+| `thread_id` | string | yes |  |
+| `author_type` | string | no |  |
+| `author_id` | string | no |  |
+| `author_display` | string | yes |  |
+| `text` | text | no |  |
+| `sent_at` | datetime | no |  |
+| `scripted` | boolean | no |  |
+
+Indexes: `ix_sim_messages_channel_time`, `ix_sim_messages_tenant_id`  
+Constraints: unique (tenant_id, message_id)
+
+
+#### `notification_deliveries`
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | integer | no | primary key |
+| `tenant_id` | string | no |  |
+| `notification_id` | string | no |  |
+| `adapter_id` | string | no |  |
+| `channel` | string | no |  |
+| `recipient` | string | no |  |
+| `title` | string | no |  |
+| `body` | text | no |  |
+| `status` | string | no |  |
+| `at` | datetime | no |  |
+| `app_id` | string | yes |  |
+| `incident_id` | string | yes |  |
+| `requires_ack` | boolean | no |  |
+| `simulated` | boolean | no |  |
+| `detail` | text | yes |  |
+| `acked_by` | string | yes |  |
+| `acked_at` | datetime | yes |  |
+
+Indexes: `ix_notification_deliveries_incident`, `ix_notification_deliveries_recipient`, `ix_notification_deliveries_tenant_id`  
+Constraints: unique (tenant_id, notification_id)
+
+
+#### `knowledge_documents`
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | integer | no | primary key |
+| `tenant_id` | string | no |  |
+| `doc_id` | string | no |  |
+| `app_id` | string | yes |  |
+| `title` | string | no |  |
+| `body` | text | no |  |
+| `doc_type` | string | no |  |
+| `tags` | json | no |  |
+| `tokens` | json | no |  |
+| `embedding` | json | no |  |
+| `embedding_model` | string | yes |  |
+| `redaction_policy_id` | string | yes |  |
+| `updated_at` | datetime | no |  |
+| `indexed_at` | datetime | no |  |
+
+Indexes: `ix_knowledge_documents_tenant_app`, `ix_knowledge_documents_tenant_id`  
+Constraints: unique (tenant_id, doc_id)
+
+
 ### Agent traces (S2, filled S5)
 
 #### `agent_runs`
@@ -657,6 +823,26 @@ what the integration health screen reads. They are durable on purpose: after a
 restart the screen shows the last observed verdict and the last error rather
 than an empty table until the next poll.
 
+## 6b. What the shipped adapters store
+
+Four tables belong to the generic adapters rather than to SignalForge's own
+state, and they are on a separate unit of work (`IntegrationUnitOfWork`) for that
+reason: an adapter call is not a use case and must not be able to commit a
+transaction containing identity or incident state.
+
+| Table | Owner | Why it is durable |
+|---|---|---|
+| `sim_tickets` | itsm-lite | a rehearsal of ticket sync needs tickets that survive a restart |
+| `sim_messages` | teams-sim bridge and DMs | the script player schedules by writing rows at future `sent_at`, so the schedule survives a restart and follows the drill clock; reads window by time |
+| `notification_deliveries` | every notification adapter | the receipt is written *before* the transport is touched, so "was this person told" survives a lost frame; acknowledgement is terminal |
+| `knowledge_documents` | kb-index | `tokens` is stored so a search costs one read; `embedding` is present only when a provider was reachable, and its absence is what makes search fall back to BM25 rather than fail |
+
+`notification_deliveries` is reachable from both units of work. The adapters
+write receipts through `IntegrationUnitOfWork`; acknowledgement goes through the
+identity one, because an acknowledgement, its audit entry and its event have to
+be a single commit or an escalation timer and the audit chain can disagree about
+whether a human answered.
+
 ## 7. Indexes
 
 Every index exists for a query the platform actually makes:
@@ -674,6 +860,11 @@ Every index exists for a query the platform actually makes:
 | `ix_audit_log_tenant_seq` | audit chain verification |
 | `ix_connector_bindings_tenant_app` | the integration health screen, per app |
 | `ix_connector_bindings_enabled` | the connector health loop's cross-tenant work list |
+| `ix_sim_messages_channel_time` | the bridge's time-windowed read, which is also what hides a scripted line until it is due |
+| `ix_notification_deliveries_recipient` | a reconnecting cockpit asking what is still open for this person |
+| `ix_notification_deliveries_incident` | the war room's "who was told about this incident" |
+| `ix_knowledge_documents_tenant_app` | the kb-index corpus read, tenant- and app-scoped |
+| `ix_sim_tickets_tenant_app` | the simulated ticket queue per application |
 
 ## 8. Portability
 

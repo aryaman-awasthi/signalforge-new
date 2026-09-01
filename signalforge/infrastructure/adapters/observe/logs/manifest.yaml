@@ -1,0 +1,41 @@
+id: http-observe-logs
+name: Observe logs
+version: 1.0.0
+kind: logs
+mode: pull
+vendor: generic
+description: >-
+  Searches, aggregates and samples GET /observe/logs from any application that
+  serves the observe contract. Aggregation and sampling are computed from what
+  was read, never extrapolated, and sampling spreads across the window rather
+  than taking the first n records.
+availability: built_in
+simulated: false
+capabilities: [search, aggregate, sample]
+credential_scopes: [read_only]
+auth:
+  method: bearer
+  credential_fields: [token]
+  header: Authorization
+config_schema:
+  type: object
+  required: [base_url]
+  additionalProperties: false
+  properties:
+    base_url:
+      type: string
+      minLength: 8
+    verify_tls:
+      type: boolean
+      default: true
+limits:
+  timeout_s: 20
+  max_calls_per_minute: 60
+  max_result_bytes: 4194304
+  max_rows: 5000
+redaction:
+  policy_id: observe-logs-default
+  patterns:
+    - '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'
+    - '\b(?:\d[ -]?){13,19}\b'
+    - '(?i)\b(?:bearer|token|api[_-]?key)\s*[:=]?\s*[A-Za-z0-9._~+/-]{12,}'

@@ -1,0 +1,43 @@
+id: servicenow
+name: ServiceNow ITSM
+version: 0.1.0
+kind: itsm
+mode: invoke
+vendor: servicenow
+description: >-
+  Interface only in this deployment. Declares a ServiceNow incident-table binding
+  with the three ticket capabilities. Because it can create and update tickets it
+  is invoke mode and offers only the remediation credential scope - the manifest
+  floor refuses read_only for anything that mutates, whether or not a runtime
+  exists. No runtime is installed here; itsm-lite is the working queue.
+availability: available
+simulated: false
+capabilities: [create, update, get]
+credential_scopes: [remediation]
+auth:
+  method: basic
+  credential_fields: [username, password]
+config_schema:
+  type: object
+  required: [instance_url]
+  additionalProperties: false
+  properties:
+    instance_url:
+      type: string
+      minLength: 8
+      description: Instance URL, e.g. https://acme.service-now.com
+    table:
+      type: string
+      default: incident
+    verify_tls:
+      type: boolean
+      default: true
+limits:
+  timeout_s: 30
+  max_calls_per_minute: 120
+  max_result_bytes: 2097152
+  max_rows: 1000
+redaction:
+  policy_id: servicenow-default
+  patterns:
+    - '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'

@@ -1,0 +1,40 @@
+id: topo-import
+name: Topology import (versioned)
+version: 1.0.0
+kind: topology
+mode: pull
+vendor: generic
+description: >-
+  Imports a service topology either by pulling GET /observe/topology or by
+  normalising a document uploaded in the onboarding wizard - both produce the
+  same versioned snapshot from the same content. A document that names an edge
+  endpoint it does not declare as a node is rejected whole: a half-imported graph
+  understates blast radius while looking complete. Version is the document's own
+  when it declares one, otherwise a content fingerprint, so re-importing an
+  unchanged map is not a change.
+availability: built_in
+simulated: false
+capabilities: [fetch, normalize]
+credential_scopes: [read_only]
+auth:
+  method: bearer
+  credential_fields: [token]
+  header: Authorization
+config_schema:
+  type: object
+  required: [base_url]
+  additionalProperties: false
+  properties:
+    base_url:
+      type: string
+      minLength: 8
+    verify_tls:
+      type: boolean
+      default: true
+limits:
+  timeout_s: 20
+  max_calls_per_minute: 60
+  max_result_bytes: 4194304
+  max_rows: 10000
+redaction:
+  policy_id: topo-import-none

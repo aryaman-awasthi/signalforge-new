@@ -250,7 +250,7 @@ requirements:
     area: integrations
     sprint: S3
     priority: must
-    status: planned
+    status: built
     acceptance: >
       http-observe metrics/logs/traces/health/actions/chaos plus prometheus
       query_range work against any app implementing /observe/*; enterprise interfaces
@@ -272,7 +272,7 @@ requirements:
     area: integrations
     sprint: S3
     priority: must
-    status: planned
+    status: built
     acceptance: >
       Real in-app WebSocket and browser push; teams-sim bridge/chat, itsm-lite and
       page-sim SMS/voice clearly labelled SIMULATED end to end.
@@ -282,7 +282,7 @@ requirements:
     area: integrations
     sprint: S3
     priority: should
-    status: planned
+    status: built
     acceptance: >
       kb-index stores runbooks and PIRs with embeddings via llm.provider or BM25
       fallback; search returns scored hits.

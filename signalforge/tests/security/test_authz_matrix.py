@@ -118,8 +118,15 @@ def test_authz_matrix_across_roles_and_endpoints(api):
     )
 
 
+# The two dependencies that resolve a real session before a handler runs. They
+# are equivalent for this walk's purpose: get_ws_principal is get_principal for
+# a WebSocket handshake, which cannot carry an Authorization header from a
+# browser and cannot raise into the HTTP error handlers (S3-T02).
+PRINCIPAL_RESOLVERS = (deps.get_principal, deps.get_ws_principal)
+
+
 def _depends_on_principal(dependant) -> bool:
-    if dependant.call is deps.get_principal:
+    if dependant.call in PRINCIPAL_RESOLVERS:
         return True
     return any(_depends_on_principal(sub) for sub in dependant.dependencies)
 

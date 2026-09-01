@@ -1,0 +1,71 @@
+id: teams-sim
+name: teams-sim collaboration bridge (SIMULATED)
+version: 1.0.0
+kind: collaboration
+mode: invoke
+vendor: signalforge
+description: >-
+  A simulated collaboration bridge that plays a written script and accepts live
+  input at the same time, both landing in one durable channel. The script is
+  materialised at its scheduled times when the channel is first touched, so it
+  follows the platform clock - a drill at 100x plays it at 100x - is idempotent
+  on replay, and survives a restart. Every message is labelled SIMULATED.
+availability: built_in
+simulated: true
+capabilities: [post, fetch]
+credential_scopes: [remediation]
+auth:
+  method: none
+config_schema:
+  type: object
+  additionalProperties: false
+  properties:
+    default_channel:
+      type: string
+      minLength: 1
+      maxLength: 200
+      default: bridge
+    post_as:
+      type: string
+      minLength: 1
+      maxLength: 100
+      default: SignalForge
+      description: Display name messages posted by the platform carry.
+    script:
+      type: array
+      maxItems: 500
+      description: >-
+        Conversation played into the channel, offsets in seconds from the
+        channel's first use. Start the first entry at after_s 0.
+      items:
+        type: object
+        required: [author_id, text]
+        additionalProperties: false
+        properties:
+          after_s:
+            type: number
+            minimum: 0
+            default: 0
+          author_id:
+            type: string
+            minLength: 1
+          author_display:
+            type: string
+          author_type:
+            enum: [human, agent, system, external]
+            default: human
+          text:
+            type: string
+            minLength: 1
+          thread_id:
+            type: string
+limits:
+  timeout_s: 10
+  max_calls_per_minute: 600
+  max_result_bytes: 1048576
+  max_rows: 1000
+redaction:
+  policy_id: teams-sim-default
+  patterns:
+    - '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'
+    - '\b(?:\d[ -]?){13,19}\b'

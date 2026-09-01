@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 
 from signalforge.domain.adapters.ports import ConnectorBindingRepository
 from signalforge.domain.events.ports import EventStore
+from signalforge.domain.integrations.ports import NotificationStore
 from signalforge.domain.identity.ports import (
     AuditWriter,
     EscalationRepository,
@@ -35,6 +36,11 @@ class IdentityUnitOfWork(ABC):
     its Fernet-encrypted credentials and its audit entry have to be one commit:
     a stored credential with no binding is unreachable, and a binding with no
     credential is a connector that silently cannot authenticate."""
+    notifications: NotificationStore
+    """Delivery receipts (S3). Here as well as on the adapters' own unit of work
+    because acknowledging a page is a human act on the record: the receipt, its
+    audit entry and its event have to be one commit, or the audit chain can
+    disagree with what the escalation timer is reading."""
     audit: AuditWriter
     events: EventStore
     """The outbox: an event published here shares the use case's transaction."""

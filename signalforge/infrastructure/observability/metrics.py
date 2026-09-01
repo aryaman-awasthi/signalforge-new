@@ -247,6 +247,21 @@ def build_registry() -> MetricsRegistry:
         "Scheduled job runs that raised", ("job",),
     )
     registry.declare(
+        # Channel and outcome only. Who was notified about what is exactly the
+        # kind of thing an unauthenticated scrape must never carry.
+        "signalforge_notifications_total", MetricType.COUNTER,
+        "Notifications handed to a channel adapter, by delivery outcome",
+        ("channel", "status"),
+    )
+    registry.declare(
+        "signalforge_adapter_calls_total", MetricType.COUNTER,
+        "Adapter capability invocations, by outcome", ("adapter", "capability", "outcome"),
+    )
+    registry.declare(
+        "signalforge_adapter_call_duration_seconds", MetricType.HISTOGRAM,
+        "Adapter capability invocation duration", ("adapter", "capability"),
+    )
+    registry.declare(
         "signalforge_retention_pruned_total", MetricType.COUNTER,
         "Signal-plane events removed by retention", ("plane",),
     )

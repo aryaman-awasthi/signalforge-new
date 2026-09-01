@@ -16,6 +16,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Optional
 
+import httpx
 import pytest
 import yaml
 
@@ -198,6 +199,131 @@ class StubActionsAdapter(ActionsAdapter):
 
     async def get_execution(self, idempotency_key):
         return None
+
+
+class ObserveHarness:
+    """The integrated systems an adapter suite talks to, and the wiring that
+    points a container's adapters at them.
+
+    The adapters reach them over an ASGI transport rather than a mock, so the
+    request line, the auth header, the status handling and the size limit are
+    all exercised for real; only the socket is elided. Hosts that were never
+    mounted refuse the connection, which is how "the target is unreachable" is
+    exercised without a firewall.
+    """
+
+    BASE_URL = "http://app.test"
+    PROMETHEUS_URL = "http://prom.test"
+
+    def __init__(self):
+        self.apps: dict[str, object] = {}
+        self.timing_out: set[str] = set()
+        self.state = None
+        self.prometheus = None
+
+    def mount(self, url: str, app) -> None:
+        self.apps[httpx.URL(url).host] = httpx.ASGITransport(app=app)
+
+    def attach(self, container) -> None:
+        container.adapter_services.client_factory = self.client_factory
+
+    def times_out(self, path: str) -> None:
+        """Stage a read timeout on one path.
+
+        Staged at the transport rather than by making the application sleep,
+        because that is where a timeout actually comes from - and because an
+        in-process ASGI transport has no socket to time out on, so a sleeping
+        handler would test the test rather than the adapter.
+        """
+        self.timing_out.add(path)
+
+    def client_factory(self, timeout_s: float):
+        return httpx.AsyncClient(
+            transport=_StagedTransport(self.apps, self.timing_out),
+            timeout=httpx.Timeout(timeout_s),
+        )
+
+
+class _StagedTransport(httpx.AsyncBaseTransport):
+    """Routes to the mounted application for the request's host."""
+
+    def __init__(self, apps: dict[str, object], timing_out: set[str]):
+        self._apps = apps
+        self._timing_out = timing_out
+
+    async def handle_async_request(self, request):
+        if request.url.path in self._timing_out:
+            raise httpx.ReadTimeout("staged read timeout", request=request)
+        inner = self._apps.get(request.url.host)
+        if inner is None:
+            raise httpx.ConnectError(
+                f"nothing is listening on {request.url.host}", request=request
+            )
+        return await inner.handle_async_request(request)
+
+
+@pytest.fixture
+def observe(api):
+    """The integrated-system test doubles, attached to the API's container."""
+    from signalforge.tests.adapters.observe_app import (
+        build_observe_app,
+        build_prometheus_app,
+    )
+
+    harness = ObserveHarness()
+    app, state = build_observe_app()
+    harness.mount(ObserveHarness.BASE_URL, app)
+    harness.state = state
+    prom_app, prom_state = build_prometheus_app()
+    harness.mount(ObserveHarness.PROMETHEUS_URL, prom_app)
+    harness.prometheus = prom_state
+    harness.attach(api.container)
+    return harness
+
+
+def connect(
+    api,
+    token: str,
+    adapter_id: str,
+    *,
+    app_id: str = "checkout",
+    scope: Optional[str] = None,
+    config: Optional[dict] = None,
+    credentials: Optional[dict] = None,
+    name: Optional[str] = None,
+    expect: int = 201,
+) -> dict:
+    """Bind an application to a shipped adapter through the real API.
+
+    Everything downstream - the encrypted credential, the validated config, the
+    runtime lookup - then happens exactly as it does in production, which is the
+    point: these tests never construct an adapter by hand.
+    """
+    manifest = api.container.adapter_registry.get(adapter_id)
+    body = {
+        "app_id": app_id,
+        "adapter_id": adapter_id,
+        "name": name or f"{app_id} {adapter_id}",
+        "credential_scope": scope or manifest.credential_scopes[0].value,
+        "config": config if config is not None else default_config(manifest),
+        "credentials": (
+            credentials
+            if credentials is not None
+            else {field: "app-token" for field in manifest.auth.credential_fields}
+        ),
+    }
+    response = api.client.post("/connectors", json=body, headers=api.auth_header(token))
+    assert response.status_code == expect, response.text
+    return response.json()
+
+
+def default_config(manifest) -> dict:
+    schema = dict(manifest.config_schema or {})
+    required = list(schema.get("required") or [])
+    config: dict[str, Any] = {}
+    if "base_url" in required:
+        config["base_url"] = ObserveHarness.BASE_URL
+    return config
 
 
 @pytest.fixture

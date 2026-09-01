@@ -1,0 +1,42 @@
+id: jenkins
+name: Jenkins builds and deployments
+version: 0.1.0
+kind: changes
+mode: pull
+vendor: jenkins
+description: >-
+  Interface only in this deployment. Declares a Jenkins binding that would poll
+  job history for deployments and normalise a build notification, so change
+  correlation has a named source in the capability matrix. No runtime is
+  installed here; deploy-webhook is the working push-mode alternative.
+availability: available
+simulated: false
+capabilities: [list_changes, normalize]
+credential_scopes: [read_only]
+auth:
+  method: basic
+  credential_fields: [username, api_token]
+config_schema:
+  type: object
+  required: [base_url]
+  additionalProperties: false
+  properties:
+    base_url:
+      type: string
+      minLength: 8
+      description: Jenkins root URL, e.g. https://jenkins.internal
+    jobs:
+      type: array
+      items:
+        type: string
+      description: Job paths to watch. Empty means every job the credential can read.
+    verify_tls:
+      type: boolean
+      default: true
+limits:
+  timeout_s: 30
+  max_calls_per_minute: 60
+  max_result_bytes: 2097152
+  max_rows: 1000
+redaction:
+  policy_id: jenkins-none
