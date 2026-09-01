@@ -101,6 +101,15 @@ TAGS: list[dict[str, str]] = [
         "signal against its rolling baseline, the weighted health score per "
         "region, SLO burn rates, corroboration and the severity the application's "
         "own matrix would propose. Detection proposes; only a human declares."},
+    {"name": "incidents", "description":
+        "The incident lifecycle: steady, watch and proposed are detection's "
+        "stances; active, recovering and closed are an incident, and only a "
+        "person moves between the two halves. Reads are session-scoped to the "
+        "caller's tenant and carry no permission, because the frozen roles "
+        "matrix gives the SME - the role that answers a page - none; every "
+        "write names declare_incident, change_severity or close_incident. Also "
+        "the change window: a deployment announced as started and never "
+        "announced as completed."},
     {"name": "ingest", "description":
         "Ingest keys, and the five frozen push endpoints a sending application "
         "posts to."},

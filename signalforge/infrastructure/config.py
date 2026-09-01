@@ -82,6 +82,10 @@ class Settings:
     probe_interval_s: float = 30.0
     rollup_retention_s: float = float(ROLLUP_RETENTION_S)
     detection_baseline_window_s: float = float(DEFAULT_BASELINE_WINDOW_S)
+    # Incident lifecycle (S4-T02). How often the ITSM link is retried for
+    # incidents whose ticket is pending, failed or - the one that matters -
+    # uncertain after a timeout.
+    itsm_sync_interval_s: float = 30.0
 
 
 def load_settings() -> Settings:
@@ -184,5 +188,11 @@ def load_settings() -> Settings:
                 )
             ),
             60.0,
+        ),
+        # At least five seconds: a retry sweep tighter than that would hammer a
+        # ticket queue that is already failing, which is the opposite of what a
+        # recovery path is for.
+        itsm_sync_interval_s=max(
+            float(os.environ.get("SIGNALFORGE_ITSM_SYNC_INTERVAL_S", 30)), 5.0
         ),
     )

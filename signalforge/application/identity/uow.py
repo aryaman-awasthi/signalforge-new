@@ -8,6 +8,11 @@ from abc import ABC, abstractmethod
 
 from signalforge.domain.adapters.ports import ConnectorBindingRepository
 from signalforge.domain.events.ports import EventStore
+from signalforge.domain.incidents.ports import (
+    ChangeWindowStore,
+    IncidentRepository,
+    IncidentTransitionRepository,
+)
 from signalforge.domain.ingest.ports import IngestKeyRepository, IngestReceiptStore
 from signalforge.domain.integrations.ports import NotificationStore
 from signalforge.domain.onboarding.ports import (
@@ -61,6 +66,18 @@ class IdentityUnitOfWork(ABC):
     entry did not would make the timeline disagree with what the platform is
     actually watching, and a topology version stored without its event would be
     invisible to replay."""
+    incidents: IncidentRepository
+    incident_transitions: IncidentTransitionRepository
+    """The incident lifecycle (S4-T02). Here because declaring, re-grading and
+    closing are each one commit of four things: the incident row, the transition
+    that records who moved it, the audit entry and the incident-plane event. An
+    incident whose transition did not commit would be a state change nobody
+    performed."""
+    changes: ChangeWindowStore
+    """The change-window projection (S4-T02). Reachable from this unit of work
+    for reads and from the event one for writes, exactly as delivery receipts
+    are: the bus consumer folds a deployment event inside the dispatcher's
+    transaction, and a screen reads it without joining that transaction."""
     audit: AuditWriter
     events: EventStore
     """The outbox: an event published here shares the use case's transaction."""

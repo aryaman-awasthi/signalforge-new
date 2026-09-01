@@ -10,8 +10,8 @@ integrations and onboarding, and is the one Alembic migrates. `rollups.db`
 holds derived detection telemetry, is created from its models at startup, and
 can be deleted without losing any record of anything that happened.
 
-Generated: 2026-09-01T05:32:15+00:00
-Tables: 27 in signalforge.db, 4 in rollups.db
+Generated: 2026-09-01T06:57:23+00:00
+Tables: 30 in signalforge.db, 4 in rollups.db
 
 ## 1. Entity relationship diagram
 
@@ -389,6 +389,81 @@ erDiagram
         string imported_by
         string source
         string normalized_by
+    }
+```
+
+### Incident lifecycle (S4)
+
+The record of decisions people made. `incidents` is what a declaration produced, `incident_transitions` is who moved it and when, and `change_windows` is the projection of deployment events that answers 'was something changing when this started'. All three are on the incident database rather than beside the detection rollups, because a stance is derived and safe to delete while a declaration is not.
+
+```mermaid
+erDiagram
+    incidents {
+        string id "PK"
+        string tenant_id
+        string app_id
+        string reference
+        integer ordinal
+        string title
+        text summary
+        string severity
+        string severity_source
+        string state
+        string stance_at_declare
+        datetime declared_at
+        string declared_by
+        string declared_by_display
+        datetime updated_at
+        datetime recovering_at
+        datetime closed_at
+        string closed_by
+        text closure_reason
+        json proposal
+        json change_windows
+        string ticket_state
+        string ticket_id
+        string ticket_reference
+        string ticket_status
+        string ticket_adapter_id
+        string ticket_binding_id
+        integer ticket_attempts
+        text ticket_detail
+        datetime ticket_last_attempt_at
+        datetime ticket_synced_at
+    }
+    incident_transitions {
+        integer id "PK"
+        string tenant_id
+        string incident_id
+        string app_id
+        string from_state
+        string to_state
+        datetime at
+        string actor_type
+        string actor_id
+        text reason
+        string severity_before
+        string severity_after
+        json detail
+    }
+    change_windows {
+        string tenant_id "PK"
+        string app_id "PK"
+        string change_id "PK"
+        string change_type
+        string service
+        string status
+        datetime started_at
+        datetime completed_at
+        datetime first_seen_at
+        datetime last_event_at
+        string version
+        string actor
+        string diff_ref
+        string source_system
+        boolean simulated
+        boolean announced_started
+        boolean announced_completed
     }
 ```
 
@@ -991,6 +1066,94 @@ Indexes: `ix_topology_versions_app`, `ix_topology_versions_tenant_id`
 Constraints: unique (tenant_id, app_id, version)
 
 
+### Incident lifecycle (S4)
+
+#### `incidents`
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | string | no | primary key |
+| `tenant_id` | string | no |  |
+| `app_id` | string | no |  |
+| `reference` | string | no |  |
+| `ordinal` | integer | no |  |
+| `title` | string | no |  |
+| `summary` | text | no |  |
+| `severity` | string | no |  |
+| `severity_source` | string | no |  |
+| `state` | string | no |  |
+| `stance_at_declare` | string | no |  |
+| `declared_at` | datetime | no |  |
+| `declared_by` | string | no |  |
+| `declared_by_display` | string | no |  |
+| `updated_at` | datetime | no |  |
+| `recovering_at` | datetime | yes |  |
+| `closed_at` | datetime | yes |  |
+| `closed_by` | string | yes |  |
+| `closure_reason` | text | no |  |
+| `proposal` | json | yes |  |
+| `change_windows` | json | no |  |
+| `ticket_state` | string | no |  |
+| `ticket_id` | string | yes |  |
+| `ticket_reference` | string | yes |  |
+| `ticket_status` | string | yes |  |
+| `ticket_adapter_id` | string | yes |  |
+| `ticket_binding_id` | string | yes |  |
+| `ticket_attempts` | integer | no |  |
+| `ticket_detail` | text | no |  |
+| `ticket_last_attempt_at` | datetime | yes |  |
+| `ticket_synced_at` | datetime | yes |  |
+
+Indexes: `ix_incidents_app_state`, `ix_incidents_tenant_declared`, `ix_incidents_tenant_id`, `ix_incidents_ticket_state`  
+Constraints: unique (tenant_id, reference)
+
+
+#### `incident_transitions`
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | integer | no | primary key |
+| `tenant_id` | string | no |  |
+| `incident_id` | string | no |  |
+| `app_id` | string | no |  |
+| `from_state` | string | no |  |
+| `to_state` | string | no |  |
+| `at` | datetime | no |  |
+| `actor_type` | string | no |  |
+| `actor_id` | string | no |  |
+| `reason` | text | no |  |
+| `severity_before` | string | yes |  |
+| `severity_after` | string | yes |  |
+| `detail` | json | no |  |
+
+Indexes: `ix_incident_transitions_incident`, `ix_incident_transitions_tenant_id`
+
+
+#### `change_windows`
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `tenant_id` | string | no | primary key |
+| `app_id` | string | no | primary key |
+| `change_id` | string | no | primary key |
+| `change_type` | string | no |  |
+| `service` | string | no |  |
+| `status` | string | no |  |
+| `started_at` | datetime | no |  |
+| `completed_at` | datetime | yes |  |
+| `first_seen_at` | datetime | no |  |
+| `last_event_at` | datetime | no |  |
+| `version` | string | yes |  |
+| `actor` | string | yes |  |
+| `diff_ref` | string | yes |  |
+| `source_system` | string | no |  |
+| `simulated` | boolean | no |  |
+| `announced_started` | boolean | no |  |
+| `announced_completed` | boolean | no |  |
+
+Indexes: `ix_change_windows_app_started`, `ix_change_windows_open`
+
+
 ### Agent traces (S2, filled S5)
 
 #### `agent_runs`
@@ -1338,6 +1501,54 @@ Tenant isolation holds here exactly as it does next door: every table carries
 cross-tenant method is `prune`, which removes by age across the install and
 returns a count rather than rows.
 
+## 6f. The incident lifecycle
+
+`incidents` holds one row per declaration. It is deliberately *not* in
+`rollups.db`: a stance is derived and recomputed every five seconds, and an
+incident is a decision a person made, which is kept and sealed with the
+incident-plane events that carry its `incident_id`.
+
+Three columns are worth naming.
+
+`proposal` is a JSON **snapshot** of what detection was saying at the instant
+Declare was pressed - the proposed severity, the rule that matched, the
+corroborating families, the health score and the evidence refs. Copied rather
+than referenced, because the rollups those refs point at age out in hours: an
+incident that could only explain itself by re-reading live telemetry would
+explain itself differently every time it was opened.
+
+`change_windows` on the incident row is the same idea applied to
+`change_windows` the table: what was in flight when the incident was declared,
+copied, so it survives the deployment finishing.
+
+The `ticket_*` columns are the ITSM link, and `ticket_state` has five values
+because four would be a lie: `not_configured`, `pending`, `synced`, `failed` and
+`uncertain`. `uncertain` is what a create that *timed out* becomes - the ticket
+may or may not exist - and it is the reason the retry path calls `get` before it
+calls `create`. `ix_incidents_ticket_state` is the retry sweep's cross-tenant
+work list, the only cross-tenant read in this group besides the two `count_open`
+methods that feed gauges on the unauthenticated scrape.
+
+One open incident per application is enforced in the service inside the
+declaring transaction (`IncidentRepository.open_for_app`, re-read after the
+first check) rather than by a partial unique index, because a partial index is
+not portable across the two databases this platform targets. The reference
+`INC-000001` is unique per tenant by constraint, and a collision between two
+simultaneous declarations retries rather than surfacing.
+
+`incident_transitions` is append-only and never pruned. A severity change is
+recorded as a transition whose `from_state` equals its `to_state`: the grade
+moved and the state did not, and a review that wants "everything that happened
+to this incident, in order" gets one list rather than two.
+
+`change_windows` is keyed on **(tenant_id, app_id, change_id)**, and that key is
+the idempotency: a re-triggered pipeline announcing the same change is one
+window. The fold is order-independent as well as duplicate-safe - the earliest
+`started_at` wins and `announced_completed` is sticky - so a `completed`
+delivered before its `started` cannot reopen a finished deployment. Nothing
+prunes the table: a deployment history is what change intelligence reads, and it
+is small.
+
 ## 7. Indexes
 
 Every index exists for a query the platform actually makes:
@@ -1373,6 +1584,12 @@ Every index exists for a query the platform actually makes:
 | `ix_ingest_receipts_stream` | ingest volume and freshness per stream |
 | `ix_applications_tenant` | the apps overview and every wizard route's lookup |
 | `ix_topology_versions_app` | the topology step's version list, newest first |
+| `ix_incidents_app_state` | "does this application already have an open incident", asked on every declaration |
+| `ix_incidents_tenant_declared` | the incident list, newest first |
+| `ix_incidents_ticket_state` | the ITSM retry sweep's cross-tenant work list |
+| `ix_incident_transitions_incident` | one incident's history, in order |
+| `ix_change_windows_app_started` | the change-window chip and the recent-changes list |
+| `ix_change_windows_open` | the install-wide count of changes in flight, for the scrape |
 
 ## 8. Portability
 

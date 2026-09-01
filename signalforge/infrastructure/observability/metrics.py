@@ -304,4 +304,30 @@ def build_registry() -> MetricsRegistry:
         "signalforge_detection_stance", MetricType.GAUGE,
         "Whether the last evaluated application is in this stance", ("stance",),
     )
+    # Incident lifecycle (S4-T02). Install-wide counts over closed vocabularies:
+    # the states and severities are enums, so a scrape can show that a P0 is
+    # running without being able to say whose it is.
+    registry.declare(
+        "signalforge_incident_transitions_total", MetricType.COUNTER,
+        "Incident lifecycle transitions, by the states moved between and the "
+        "kind of actor that moved them",
+        ("from_state", "to_state", "actor"),
+    )
+    registry.declare(
+        "signalforge_incidents_open", MetricType.GAUGE,
+        "Incidents currently active or recovering, by severity", ("severity",),
+    )
+    registry.declare(
+        "signalforge_incident_ticket_sync_total", MetricType.COUNTER,
+        "ITSM ticket sync attempts, by outcome - uncertain is not a failure",
+        ("outcome",),
+    )
+    registry.declare(
+        "signalforge_change_windows_total", MetricType.COUNTER,
+        "Change events folded into a change window, by status", ("status", "open"),
+    )
+    registry.declare(
+        "signalforge_change_windows_open", MetricType.GAUGE,
+        "Changes announced as started and never announced as completed", (),
+    )
     return registry

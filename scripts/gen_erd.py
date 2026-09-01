@@ -74,6 +74,16 @@ GROUPS: list[tuple[str, str, tuple[str, ...]]] = [
         ("applications", "onboarding_profiles", "topology_versions"),
     ),
     (
+        "Incident lifecycle (S4)",
+        "The record of decisions people made. `incidents` is what a declaration "
+        "produced, `incident_transitions` is who moved it and when, and "
+        "`change_windows` is the projection of deployment events that answers "
+        "'was something changing when this started'. All three are on the "
+        "incident database rather than beside the detection rollups, because a "
+        "stance is derived and safe to delete while a declaration is not.",
+        ("incidents", "incident_transitions", "change_windows"),
+    ),
+    (
         "Agent traces (S2, filled S5)",
         "Written from Sprint 5 by the agent suite; shipped now so agents are born "
         "observable rather than instrumented afterwards.",
@@ -311,6 +321,54 @@ Tenant isolation holds here exactly as it does next door: every table carries
 cross-tenant method is `prune`, which removes by age across the install and
 returns a count rather than rows.
 
+## 6f. The incident lifecycle
+
+`incidents` holds one row per declaration. It is deliberately *not* in
+`rollups.db`: a stance is derived and recomputed every five seconds, and an
+incident is a decision a person made, which is kept and sealed with the
+incident-plane events that carry its `incident_id`.
+
+Three columns are worth naming.
+
+`proposal` is a JSON **snapshot** of what detection was saying at the instant
+Declare was pressed - the proposed severity, the rule that matched, the
+corroborating families, the health score and the evidence refs. Copied rather
+than referenced, because the rollups those refs point at age out in hours: an
+incident that could only explain itself by re-reading live telemetry would
+explain itself differently every time it was opened.
+
+`change_windows` on the incident row is the same idea applied to
+`change_windows` the table: what was in flight when the incident was declared,
+copied, so it survives the deployment finishing.
+
+The `ticket_*` columns are the ITSM link, and `ticket_state` has five values
+because four would be a lie: `not_configured`, `pending`, `synced`, `failed` and
+`uncertain`. `uncertain` is what a create that *timed out* becomes - the ticket
+may or may not exist - and it is the reason the retry path calls `get` before it
+calls `create`. `ix_incidents_ticket_state` is the retry sweep's cross-tenant
+work list, the only cross-tenant read in this group besides the two `count_open`
+methods that feed gauges on the unauthenticated scrape.
+
+One open incident per application is enforced in the service inside the
+declaring transaction (`IncidentRepository.open_for_app`, re-read after the
+first check) rather than by a partial unique index, because a partial index is
+not portable across the two databases this platform targets. The reference
+`INC-000001` is unique per tenant by constraint, and a collision between two
+simultaneous declarations retries rather than surfacing.
+
+`incident_transitions` is append-only and never pruned. A severity change is
+recorded as a transition whose `from_state` equals its `to_state`: the grade
+moved and the state did not, and a review that wants "everything that happened
+to this incident, in order" gets one list rather than two.
+
+`change_windows` is keyed on **(tenant_id, app_id, change_id)**, and that key is
+the idempotency: a re-triggered pipeline announcing the same change is one
+window. The fold is order-independent as well as duplicate-safe - the earliest
+`started_at` wins and `announced_completed` is sticky - so a `completed`
+delivered before its `started` cannot reopen a finished deployment. Nothing
+prunes the table: a deployment history is what change intelligence reads, and it
+is small.
+
 ## 7. Indexes
 
 Every index exists for a query the platform actually makes:
@@ -346,6 +404,12 @@ Every index exists for a query the platform actually makes:
 | `ix_ingest_receipts_stream` | ingest volume and freshness per stream |
 | `ix_applications_tenant` | the apps overview and every wizard route's lookup |
 | `ix_topology_versions_app` | the topology step's version list, newest first |
+| `ix_incidents_app_state` | "does this application already have an open incident", asked on every declaration |
+| `ix_incidents_tenant_declared` | the incident list, newest first |
+| `ix_incidents_ticket_state` | the ITSM retry sweep's cross-tenant work list |
+| `ix_incident_transitions_incident` | one incident's history, in order |
+| `ix_change_windows_app_started` | the change-window chip and the recent-changes list |
+| `ix_change_windows_open` | the install-wide count of changes in flight, for the scrape |
 
 ## 8. Portability
 

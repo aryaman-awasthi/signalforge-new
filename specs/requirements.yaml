@@ -344,7 +344,7 @@ requirements:
     area: detection-lifecycle
     sprint: S4
     priority: must
-    status: planned
+    status: built
     acceptance: >
       Steady/Watch/Proposed/Active/Recovering/Closed; only humans declare, change
       severity and close; itsm sync follows.
@@ -354,7 +354,7 @@ requirements:
     area: detection-lifecycle
     sprint: S4
     priority: must
-    status: planned
+    status: built
     acceptance: >
       deployment.started without completed opens a visible change window chip sourced
       from a real webhook call.

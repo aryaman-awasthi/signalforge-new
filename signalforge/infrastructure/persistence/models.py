@@ -640,6 +640,136 @@ class TopologyVersionRow(Base):
     normalized_by: Mapped[str] = mapped_column(String(64), default="")
 
 
+# --- incident lifecycle (S4-T02) ---------------------------------------------
+
+
+class IncidentRow(Base):
+    """An incident: the record of a decision a person made (REQ-043).
+
+    On the incident database rather than beside the detection rollups, and that
+    is the whole distinction the two stores exist to keep. A stance is derived,
+    recomputed every five seconds and safe to delete; an incident is a
+    declaration, and it is kept and sealed with the events that belong to it.
+
+    `proposal` is a JSON snapshot of what detection was saying at the instant
+    Declare was pressed, copied rather than referenced: the rollups it was drawn
+    from age out in hours, and an incident that could only explain itself by
+    re-reading live telemetry would explain itself differently every time.
+
+    The `ticket_*` columns are the ITSM link. `ticket_state` has five values and
+    `uncertain` is the one that earns its place - a create whose outcome is
+    unknown must never be retried as though it had failed.
+    """
+
+    __tablename__ = "incidents"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "reference", name="uq_incidents_reference"),
+        Index("ix_incidents_app_state", "tenant_id", "app_id", "state"),
+        Index("ix_incidents_tenant_declared", "tenant_id", "declared_at"),
+        # The ITSM retry job's cross-tenant work list.
+        Index("ix_incidents_ticket_state", "ticket_state"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    app_id: Mapped[str] = mapped_column(String(100))
+    reference: Mapped[str] = mapped_column(String(40))
+    ordinal: Mapped[int] = mapped_column(Integer, default=1)
+    title: Mapped[str] = mapped_column(String(200))
+    summary: Mapped[str] = mapped_column(Text, default="")
+    severity: Mapped[str] = mapped_column(String(4))
+    severity_source: Mapped[str] = mapped_column(String(10), default="proposed")
+    state: Mapped[str] = mapped_column(String(20))
+    stance_at_declare: Mapped[str] = mapped_column(String(20), default="")
+    declared_at: Mapped[datetime] = mapped_column(TZDateTime)
+    declared_by: Mapped[str] = mapped_column(String(36))
+    declared_by_display: Mapped[str] = mapped_column(String(200), default="")
+    updated_at: Mapped[datetime] = mapped_column(TZDateTime)
+    recovering_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, nullable=True)
+    closed_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, nullable=True)
+    closed_by: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    closure_reason: Mapped[str] = mapped_column(Text, default="")
+    proposal: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    change_windows: Mapped[list] = mapped_column(JSON, default=list)
+    ticket_state: Mapped[str] = mapped_column(String(20), default="pending")
+    ticket_id: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    ticket_reference: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    ticket_status: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    ticket_adapter_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    ticket_binding_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    ticket_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    ticket_detail: Mapped[str] = mapped_column(Text, default="")
+    ticket_last_attempt_at: Mapped[Optional[datetime]] = mapped_column(
+        TZDateTime, nullable=True
+    )
+    ticket_synced_at: Mapped[Optional[datetime]] = mapped_column(
+        TZDateTime, nullable=True
+    )
+
+
+class IncidentTransitionRow(Base):
+    """Every lifecycle move, append-only.
+
+    Never summarised into the incident row and never pruned: "who moved this to
+    recovering, when, and what did they say" is the first question a
+    post-incident review asks, and a current-state column cannot answer it.
+    """
+
+    __tablename__ = "incident_transitions"
+    __table_args__ = (
+        Index("ix_incident_transitions_incident", "tenant_id", "incident_id", "id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    incident_id: Mapped[str] = mapped_column(String(36))
+    app_id: Mapped[str] = mapped_column(String(100))
+    from_state: Mapped[str] = mapped_column(String(20))
+    to_state: Mapped[str] = mapped_column(String(20))
+    at: Mapped[datetime] = mapped_column(TZDateTime)
+    actor_type: Mapped[str] = mapped_column(String(20))
+    actor_id: Mapped[str] = mapped_column(String(200))
+    reason: Mapped[str] = mapped_column(Text, default="")
+    severity_before: Mapped[Optional[str]] = mapped_column(String(4), nullable=True)
+    severity_after: Mapped[Optional[str]] = mapped_column(String(4), nullable=True)
+    detail: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class ChangeWindowRow(Base):
+    """One change, folded from every deployment event that named it (REQ-044).
+
+    A projection of the timeline rather than a second source of truth: the
+    events remain what an auditor replays, and this table exists so that "is a
+    change in flight right now" is a keyed read instead of a scan of the log.
+    Keyed on (tenant, app, change_id), which is what makes a re-triggered
+    pipeline one window rather than two.
+    """
+
+    __tablename__ = "change_windows"
+    __table_args__ = (
+        Index("ix_change_windows_app_started", "tenant_id", "app_id", "started_at"),
+        Index("ix_change_windows_open", "announced_completed"),
+    )
+
+    tenant_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    app_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    change_id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    change_type: Mapped[str] = mapped_column(String(20))
+    service: Mapped[str] = mapped_column(String(200), default="")
+    status: Mapped[str] = mapped_column(String(20))
+    started_at: Mapped[datetime] = mapped_column(TZDateTime)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, nullable=True)
+    first_seen_at: Mapped[datetime] = mapped_column(TZDateTime)
+    last_event_at: Mapped[datetime] = mapped_column(TZDateTime)
+    version: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    actor: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    diff_ref: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)
+    source_system: Mapped[str] = mapped_column(String(100), default="")
+    simulated: Mapped[bool] = mapped_column(Boolean, default=False)
+    announced_started: Mapped[bool] = mapped_column(Boolean, default=False)
+    announced_completed: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
 class EventSealRow(Base):
     __tablename__ = "event_seals"
     __table_args__ = (Index("ix_event_seals_tenant", "tenant_id", "sealed_at"),)

@@ -15,6 +15,7 @@ from signalforge.domain.events.ports import (
     SealStore,
 )
 from signalforge.domain.identity.ports import AuditWriter
+from signalforge.domain.incidents.ports import ChangeWindowStore
 from signalforge.domain.observability.agent_runs import AgentRunStore
 
 
@@ -26,6 +27,10 @@ class EventUnitOfWork(ABC):
     seals: SealStore
     retention: RetentionStore
     agent_runs: AgentRunStore
+    changes: ChangeWindowStore
+    """The change-window projection (S4-T02). On this unit of work because a
+    consumer that folded a deployment event outside the dispatcher's transaction
+    could advance its offset without having stored what it read."""
     audit: AuditWriter
 
     @abstractmethod

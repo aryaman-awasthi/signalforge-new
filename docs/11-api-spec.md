@@ -38,13 +38,16 @@ frozen roles matrix.
 
 ### Per-application scope
 
-`manage_apps` can be granted org-wide or bound to one application. Which application a call is
-about therefore has to be readable before the handler runs, and it comes from one of two places:
-the `?app_id=` query parameter (`deps.require`) or the `{app_id}` path segment
-(`deps.require_app`). The catalogue names which, per route, and the exported document repeats it
-in `x-signalforge-app-scope`. Both resolve to the same decision; the split exists because
-FastAPI resolves a dependency parameter declared as a query parameter as a query parameter even
-when the route has a path parameter of that name (DR-038).
+A permission can be granted org-wide or bound to one application. Which application a call is
+about therefore has to be readable before the handler runs, and it comes from one of three
+places: the `?app_id=` query parameter (`deps.require`), the `{app_id}` path segment
+(`deps.require_app`), or - for the incident-scoped routes, where the application is not in the
+URL at all - the incident named by `{incident_id}` (`deps.require_incident`, S4-T02). The
+catalogue names which, per route, and the exported document repeats it in
+`x-signalforge-app-scope` as `query`, `path` or `incident`. All three resolve to the same
+decision; the first split exists because FastAPI resolves a dependency parameter declared as a
+query parameter as a query parameter even when the route has a path parameter of that name
+(DR-038), and the third because an incident is what names its own application.
 
 ### Errors
 
@@ -104,7 +107,7 @@ catalogue below and its frame protocol is written out later in this document.
 
 <!-- BEGIN GENERATED ROUTE CATALOGUE (scripts/gen_openapi.py) -->
 
-75 routes: 64 need a human session, 5 a sending application's ingest key, and 6 no credential at all - and that last number is the one the security suite pins to a closed list.
+84 routes: 73 need a human session, 5 a sending application's ingest key, and 6 no credential at all - and that last number is the one the security suite pins to a closed list.
 
 The permission column is read from each route's own RBAC dependency, so a route guarded by the wrong permission is documented as guarded by the wrong permission. It also says where a per-application role binding is evaluated from: `?app_id=`, the optional query parameter every route guarded by `deps.require` accepts, or `path`, the application named in the URL on the wizard's own routes.
 
@@ -241,6 +244,22 @@ What the platform currently believes about an application: every mapped signal a
 | GET | `/apps/{app_id}/detection` | session | `manage_apps` (path) | The current stance, every signal against its baseline, the health score per region, SLO burn, corroboration and the severity the matrix would propose. |
 | POST | `/apps/{app_id}/detection/evaluate` | session | `manage_apps` (path) | Run an evaluation now instead of waiting for the next tick. |
 | GET | `/apps/{app_id}/rollups` | session | `manage_apps` (path) | The five-second buckets a verdict was derived from, so a proposal can be checked against the measurements rather than believed. |
+
+### `incidents`
+
+The incident lifecycle: steady, watch and proposed are detection's stances; active, recovering and closed are an incident, and only a person moves between the two halves. Reads are session-scoped to the caller's tenant and carry no permission, because the frozen roles matrix gives the SME - the role that answers a page - none; every write names declare_incident, change_severity or close_incident. Also the change window: a deployment announced as started and never announced as completed.
+
+| Method | Path | Credential | Permission | Purpose |
+|---|---|---|---|---|
+| GET | `/apps/{app_id}/change-window` | session | `manage_apps` (path) | Changes announced as started and never announced as completed - the chip beside the health score, sourced from real deploy-hook calls. |
+| GET | `/apps/{app_id}/lifecycle` | session | `manage_apps` (path) | Where this application sits: a detection stance, or an incident somebody declared - and the response says which of the two it is reading. |
+| GET | `/incidents` | session | (session only) | The tenant's incidents. |
+| POST | `/incidents` | session | `declare_incident` (`?app_id=`) | Declare an incident. |
+| GET | `/incidents/{incident_id}` | session | (session only) | One incident with its whole transition history: who moved it, when, and what they said. |
+| POST | `/incidents/{incident_id}/close` | session | `close_incident` | Close an incident. |
+| POST | `/incidents/{incident_id}/itsm-sync` | session | `declare_incident` | Try the ITSM again now instead of waiting for the retry sweep. |
+| PATCH | `/incidents/{incident_id}/severity` | session | `change_severity` | Re-grade an open incident. |
+| POST | `/incidents/{incident_id}/state` | session | `declare_incident` | Move an incident to recovering, or back to active after a regression. |
 
 ### `ingest`
 
@@ -509,9 +528,8 @@ error message carries a credential - the transport that raises them redacts its 
 ## Detection: `/apps/{app_id}/detection` (REQ-040, REQ-041, REQ-042, REQ-046)
 
 Three routes, all `manage_apps` with the application named in the path. They read what the
-platform currently believes; **none of them declares anything**, and there is no route in this
-API that does. Declaring, changing a severity and closing are human acts (REQ-043) and land in
-S4-T02's lifecycle.
+platform currently believes; **none of them declares anything**. Declaring, changing a severity
+and closing are human acts (REQ-043) and live under `/incidents` below.
 
 | Route | What it does |
 |---|---|
@@ -549,6 +567,70 @@ proposal as though it were an incident.
 |---|---|
 | 404 | the application is not in this tenant - identical body whether it belongs to another tenant or to nobody |
 | 422 | `window_s` outside 0..86400, or a signal key that is not mapped |
+
+## Incidents and the change window: `/incidents`, `/apps/{app_id}/lifecycle` (REQ-043, REQ-044)
+
+Detection reaches `proposed` and stops. Everything in this section is the other side of that
+line, and the guard on each route says which side it is on.
+
+| Route | Credential | Permission |
+|---|---|---|
+| `POST /incidents?app_id=…` | session | `declare_incident` |
+| `GET /incidents` · `GET /incidents/{id}` | session | **none** |
+| `PATCH /incidents/{id}/severity` | session | `change_severity` |
+| `POST /incidents/{id}/state` | session | `declare_incident` |
+| `POST /incidents/{id}/close` | session | `close_incident` |
+| `POST /incidents/{id}/itsm-sync` | session | `declare_incident` |
+| `GET /apps/{app_id}/lifecycle` · `GET /apps/{app_id}/change-window` | session | `manage_apps` |
+
+The reads carry no permission on purpose. `ROLE_PERMISSIONS[Role.SME]` in the frozen matrix is
+empty, so the person most likely to be paged holds none at all; any permission on the read path
+would lock the incident out of exactly the people it exists to reach. They are session-scoped to
+the caller's own tenant instead, and a cross-tenant read answers 404 - the same reasoning `/ws`
+records as DR-031. The four writes name the three incident permissions the matrix does define,
+and the incident-scoped ones resolve the application off the incident
+(`x-signalforge-app-scope: incident`).
+
+**Declaring.** `POST /incidents?app_id=…` takes `{title?, summary?, severity?, reason?}`. With no
+`severity` the one detection's matrix proposed is accepted and recorded as `severity_source:
+proposed`; with one it is recorded as `chosen` and `overrode_detection` is true. With neither a
+proposal nor a severity the call is a 422 naming what it needs - the platform will not invent a
+grade. A second declaration while one is open is a 409 naming the incident to join.
+
+The response carries the whole record, including `proposal` - a **snapshot** of what detection
+was saying at that instant, evidence refs included, copied rather than referenced because the
+rollups behind those refs age out in hours - and `change_windows`, what was in flight when the
+incident was declared. `declared_by_human` is a published constant and is always true.
+
+**Moving it.** `POST /incidents/{id}/state` takes `active` or `recovering` only; closing has its
+own route because it has its own permission, and a stance is not something a person sets on an
+incident. Re-submitting the severity that is already set is a no-op with no event; moving to the
+state it is already in is a 409. `GET /incidents/{id}` returns the full `transitions[]` history:
+who moved it, when, from what to what, and what they said. A severity change appears there as a
+transition whose `from_state` equals its `to_state`.
+
+**The ticket.** `ticket.state` is `not_configured`, `pending`, `synced`, `failed` or `uncertain`.
+`uncertain` means a call timed out and the ticket may or may not exist; the retry sweep and
+`POST /incidents/{id}/itsm-sync` both reconcile - `get` before `create` - so one incident keeps
+one ticket. A ticket queue that is down never blocks a declaration.
+
+**The change window.** `GET /apps/{app_id}/change-window` returns `open` (the chip), `windows[]`
+(in flight), `stale[]` (started, never completed, older than `max_age_s`) and `recent[]`
+(finished within a day). It is a projection of the `deployment.*` events a pipeline posted to
+`/api/v1/ingest/changes`, keyed on `change_id`, so a re-triggered pipeline is one window and a
+`completed` delivered before its `started` cannot reopen a finished deployment.
+
+`GET /apps/{app_id}/lifecycle` is the two halves in one read: `state`, `source` (`detection` or
+`incident`), the stance and the health the detector is reporting, the open incident if there is
+one, the change window, and `next_states` / `human_moves` so a screen can tell which buttons
+exist from which a person may press. `declare_requires_human` is a published constant and is
+always true.
+
+| Code | When |
+|---|---|
+| 404 | the application or the incident is not in this tenant - identical body whether it belongs to another tenant or to nobody |
+| 409 | a second declaration while one is open; a move the lifecycle refuses from the state it is in; closing an incident that is closed |
+| 422 | a severity that is not P0-P3, a state this route may not set, or a declaration with neither a proposal nor a severity |
 
 ## Ingest keys (REQ-032)
 
@@ -690,11 +772,26 @@ fix the payload and resend with the same one.
 | `detection.evaluation.forced` | signal | owning tenant | a **human** ran an evaluation off-cadence. The one detection topic with a human actor, and an audit entry |
 | `system.detection.poll.degraded` / `.recovered` | signal | owning tenant | a metrics scrape started or stopped failing. Written **once** per outage, not once per five-second tick |
 
+| `incident.declared` | **incident** | owning tenant | a person declared. Carries the severity, whether it was `proposed` or `chosen`, the stance it was declared from, the evidence and what was changing |
+| `incident.severity.changed` | **incident** | owning tenant | a person re-graded an open incident, with the previous grade and the one the matrix had proposed |
+| `incident.state.changed` | **incident** | owning tenant | active <-> recovering, with the reason and the incident's age |
+| `incident.closed` | **incident** | owning tenant | a person closed it. Terminal: nothing reopens a closed incident |
+| `incident.itsm.synced` | **incident** | owning tenant | the ticket now matches the incident. System actor, `observed` authority - the ticket queue is the system of record for tickets |
+| `incident.itsm.sync.failed` / `.uncertain` | **incident** | owning tenant | the ITSM refused with a reason, or a call timed out and the ticket may or may not exist. Published on a *change* of sync state, never once per retry |
+
 Every `detection.*` event except `detection.evaluation.forced` carries an `actor.type` of
 `system` and a `source.authority` of `observed`: the platform measured this, it is not the
 system of record for it, and an evidence chain that cannot tell those apart is one an auditor
 cannot use. All of them are on the **signal** plane and carry no `incident_id`, because
 detection proposes and only a human declares (REQ-043).
+
+Every `incident.*` event is the opposite in every dimension, and the contrast is the point: the
+**incident** plane, so it is kept and sealed rather than aged out; a `human` actor with the
+session's own user id (the two `itsm` topics excepted - a machine talking to another machine);
+`authoritative` authority, because SignalForge *is* the system of record for its own lifecycle;
+and an `incident_id`, which makes the incident the partition key so one incident's events are
+ordered among themselves and never wait behind another's. Each of the four human topics is also
+an audit entry with the same payload, written in the same transaction.
 
 Audit topics `audit.ingest.rejected` and `audit.ingest.duplicate` carry the same facts into the
 hash chain, one entry per batch rather than one per item. Every onboarding topic above is also an

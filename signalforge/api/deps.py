@@ -25,6 +25,16 @@ from signalforge.application.adapters.registry_service import AdapterRegistrySer
 from signalforge.application.detection.poller import MetricRollupPoller
 from signalforge.application.detection.probes import ProbeRunner
 from signalforge.application.detection.service import DetectionService
+from signalforge.application.incidents.changes import (
+    ChangeWindowProjector,
+    ChangeWindowService,
+)
+from signalforge.application.incidents.common import (
+    CHANGE_TOPIC_PATTERNS,
+    CHANGE_WINDOW_GROUP,
+)
+from signalforge.application.incidents.itsm import IncidentTicketSync
+from signalforge.application.incidents.service import IncidentService
 from signalforge.application.notifications.inbox import NotificationInbox
 from signalforge.application.onboarding.apps import ApplicationService
 from signalforge.application.onboarding.discovery import DiscoveryService
@@ -77,6 +87,7 @@ from signalforge.infrastructure.persistence.rollups import (
     create_rollup_schema,
 )
 from signalforge.infrastructure.persistence.uow import SqlIdentityUnitOfWork
+from signalforge.workers.lifecycle import lifecycle_jobs
 from signalforge.workers.pollers import detection_jobs
 from signalforge.workers.runner import PlatformWorker, ScheduledJob
 from signalforge.infrastructure.security.hmac_verify import IngestHmacVerifier
@@ -301,6 +312,33 @@ class Container:
         # points inward.
         self.applications.on_removed.append(self.detection.forget)
 
+        # Incident lifecycle (S4-T02). The change-window projection is a consumer
+        # group on the bus, so a deployment announced through the frozen ingest
+        # path becomes a chip by the same route an auditor replays.
+        self.changes = ChangeWindowService(self.uow_factory, self.clock)
+        self.dispatcher.register(
+            CHANGE_WINDOW_GROUP,
+            ChangeWindowProjector(metrics=self.metrics),
+            topics=CHANGE_TOPIC_PATTERNS,
+        )
+        self.incident_tickets = IncidentTicketSync(
+            self.uow_factory,
+            self.adapter_registry,
+            self.invoker,
+            self.bus,
+            self.clock,
+            metrics=self.metrics,
+        )
+        self.incidents = IncidentService(
+            self.uow_factory,
+            self.bus,
+            self.clock,
+            self.changes,
+            self.incident_tickets,
+            detection=self.detection,
+            metrics=self.metrics,
+        )
+
         # Self-observability (S2-T03).
         self.health = ConnectorHealthService(
             self.event_uow_factory, self.bus, clock=self.wall_clock, metrics=self.metrics
@@ -363,6 +401,13 @@ class Container:
                 probe_interval_s=self.settings.probe_interval_s,
                 retention_s=self.settings.rollup_retention_s,
             )
+        # The ITSM retry sweep runs whether or not detection does: an incident
+        # declared by hand on a node with no detector still has a ticket to keep
+        # in step.
+        jobs += lifecycle_jobs(
+            self.incident_tickets,
+            interval_s=self.settings.itsm_sync_interval_s,
+        )
         return jobs
 
     async def prepare_rollup_store(self) -> None:
@@ -390,6 +435,9 @@ class Container:
                 1.0 if status.healthy else 0.0,
                 {"connector": f"job:{status.name}"},
             )
+        # Install-wide counts only: an incident id and an app_id belong to one
+        # tenant, and this scrape has no session (S4-T02).
+        await self.incidents.refresh_gauges()
 
 
 _container: Optional[Container] = None
@@ -555,4 +603,37 @@ def require_app(permission: Permission):
 
     dependency.required_permission = permission
     dependency.app_id_source = "path"
+    return dependency
+
+
+def require_incident(permission: Permission):
+    """The same decision for a route that names an *incident* (S4-T02).
+
+    `/incidents/{incident_id}/close` asks the same question the other two
+    factories do - which application is this call about - but the answer is not
+    in the URL: it is on the incident. So the incident is resolved first, inside
+    the caller's own tenant, and the permission is then evaluated against the
+    application it names. A per-application incident commander is therefore
+    bound to the incidents of their own applications and to no others.
+
+    Resolving before authorizing means an id that exists in this tenant is
+    distinguishable from one that does not, which is deliberate and bounded: the
+    lookup is tenant-scoped, so a caller learns nothing about any other tenant,
+    and reading an incident of one's own tenant needs no permission anyway.
+    """
+
+    async def dependency(
+        request: Request,
+        principal: Principal = Depends(get_principal),
+        container: Container = Depends(get_container),
+    ) -> Principal:
+        incident_id = request.path_params.get("incident_id")
+        app_id = await container.incidents.app_of(principal.tenant_id, incident_id)
+        await container.auth.authorize(
+            principal, permission, app_id, resource=request.url.path
+        )
+        return principal
+
+    dependency.required_permission = permission
+    dependency.app_id_source = "incident"
     return dependency

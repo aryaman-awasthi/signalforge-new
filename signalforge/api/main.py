@@ -25,6 +25,7 @@ from signalforge.api.routers import (
     escalation,
     events,
     health,
+    incidents,
     ingest,
     ingest_keys,
     invites,
@@ -100,6 +101,8 @@ app.include_router(events.router)
 app.include_router(adapters.router)
 app.include_router(onboarding.router)
 app.include_router(detection.router)
+app.include_router(incidents.router)
+app.include_router(incidents.apps_router)
 app.include_router(ingest_keys.router)
 app.include_router(ingest.router)
 app.include_router(platform.router)

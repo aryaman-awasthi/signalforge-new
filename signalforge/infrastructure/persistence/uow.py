@@ -23,6 +23,11 @@ from signalforge.infrastructure.persistence.connectors import (
     SqlConnectorBindingRepository,
 )
 from signalforge.infrastructure.persistence.event_store import SqlEventStore
+from signalforge.infrastructure.persistence.incidents import (
+    SqlChangeWindowStore,
+    SqlIncidentRepository,
+    SqlIncidentTransitionRepository,
+)
 from signalforge.infrastructure.persistence.ingest import (
     SqlIngestKeyRepository,
     SqlIngestReceiptStore,
@@ -66,6 +71,9 @@ class SqlIdentityUnitOfWork(IdentityUnitOfWork):
         self.applications = SqlApplicationRepository(self._session)
         self.onboarding = SqlOnboardingProfileRepository(self._session)
         self.topologies = SqlTopologyVersionRepository(self._session)
+        self.incidents = SqlIncidentRepository(self._session)
+        self.incident_transitions = SqlIncidentTransitionRepository(self._session)
+        self.changes = SqlChangeWindowStore(self._session)
         self.audit = AuditChainWriter(self._session, clock=self._clock)
         self.events = SqlEventStore(self._session, clock=self._clock)
         return self

@@ -1658,6 +1658,250 @@
         "title": "CausalChainOut",
         "type": "object"
       },
+      "ChangeWindowItemOut": {
+        "properties": {
+          "actor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor"
+          },
+          "age_s": {
+            "title": "Age S",
+            "type": "number"
+          },
+          "announced_completed": {
+            "default": false,
+            "title": "Announced Completed",
+            "type": "boolean"
+          },
+          "announced_started": {
+            "default": false,
+            "title": "Announced Started",
+            "type": "boolean"
+          },
+          "change_id": {
+            "title": "Change Id",
+            "type": "string"
+          },
+          "change_type": {
+            "title": "Change Type",
+            "type": "string"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "diff_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diff Ref"
+          },
+          "duration_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration S"
+          },
+          "open": {
+            "title": "Open",
+            "type": "boolean"
+          },
+          "service": {
+            "title": "Service",
+            "type": "string"
+          },
+          "simulated": {
+            "default": false,
+            "title": "Simulated",
+            "type": "boolean"
+          },
+          "source_system": {
+            "default": "",
+            "title": "Source System",
+            "type": "string"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "change_id",
+          "change_type",
+          "service",
+          "status",
+          "started_at",
+          "open",
+          "stale",
+          "age_s"
+        ],
+        "title": "ChangeWindowItemOut",
+        "type": "object"
+      },
+      "ChangeWindowLinkOut": {
+        "properties": {
+          "actor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor"
+          },
+          "change_id": {
+            "title": "Change Id",
+            "type": "string"
+          },
+          "change_type": {
+            "title": "Change Type",
+            "type": "string"
+          },
+          "service": {
+            "title": "Service",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "change_id",
+          "change_type",
+          "service"
+        ],
+        "title": "ChangeWindowLinkOut",
+        "type": "object"
+      },
+      "ChangeWindowOut": {
+        "properties": {
+          "app_id": {
+            "title": "App Id",
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "max_age_s": {
+            "default": 14400.0,
+            "description": "Past this, an unfinished change is stale rather than open: the pipeline stopped talking, and a chip that stays lit for days is a chip people stop seeing.",
+            "title": "Max Age S",
+            "type": "number"
+          },
+          "open": {
+            "description": "A deployment announced its start and never announced its completion. This is the chip.",
+            "title": "Open",
+            "type": "boolean"
+          },
+          "recent": {
+            "items": {
+              "$ref": "#/components/schemas/ChangeWindowItemOut"
+            },
+            "title": "Recent",
+            "type": "array"
+          },
+          "stale": {
+            "items": {
+              "$ref": "#/components/schemas/ChangeWindowItemOut"
+            },
+            "title": "Stale",
+            "type": "array"
+          },
+          "windows": {
+            "items": {
+              "$ref": "#/components/schemas/ChangeWindowItemOut"
+            },
+            "title": "Windows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "app_id",
+          "at",
+          "open"
+        ],
+        "title": "ChangeWindowOut",
+        "type": "object"
+      },
       "ClockOut": {
         "properties": {
           "now": {
@@ -1685,6 +1929,18 @@
           "paused"
         ],
         "title": "ClockOut",
+        "type": "object"
+      },
+      "CloseIn": {
+        "properties": {
+          "reason": {
+            "default": "",
+            "maxLength": 1000,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "title": "CloseIn",
         "type": "object"
       },
       "ComponentOut": {
@@ -2564,6 +2820,49 @@
         ],
         "title": "DeadLetterState",
         "type": "string"
+      },
+      "DeclareIn": {
+        "properties": {
+          "reason": {
+            "default": "",
+            "maxLength": 1000,
+            "title": "Reason",
+            "type": "string"
+          },
+          "severity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "P0, P1, P2 or P3. Omitted, the severity detection's matrix proposed is accepted - which is still a human act, because a person pressed Declare. Supplied, it is recorded as chosen rather than proposed.",
+            "title": "Severity"
+          },
+          "summary": {
+            "default": "",
+            "maxLength": 4000,
+            "title": "Summary",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Left out, the incident is titled from the severity and the application. There is no automatic summarisation here.",
+            "title": "Title"
+          }
+        },
+        "title": "DeclareIn",
+        "type": "object"
       },
       "DetectionOut": {
         "properties": {
@@ -3478,6 +3777,337 @@
         "title": "ImpactOut",
         "type": "object"
       },
+      "IncidentDetailOut": {
+        "properties": {
+          "app_id": {
+            "title": "App Id",
+            "type": "string"
+          },
+          "change_windows": {
+            "items": {
+              "$ref": "#/components/schemas/ChangeWindowLinkOut"
+            },
+            "title": "Change Windows",
+            "type": "array"
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At"
+          },
+          "closed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed By"
+          },
+          "closure_reason": {
+            "default": "",
+            "title": "Closure Reason",
+            "type": "string"
+          },
+          "declared_at": {
+            "format": "date-time",
+            "title": "Declared At",
+            "type": "string"
+          },
+          "declared_by": {
+            "title": "Declared By",
+            "type": "string"
+          },
+          "declared_by_display": {
+            "default": "",
+            "title": "Declared By Display",
+            "type": "string"
+          },
+          "declared_by_human": {
+            "default": true,
+            "description": "Always true. Only a person declares an incident (REQ-043).",
+            "title": "Declared By Human",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "open": {
+            "title": "Open",
+            "type": "boolean"
+          },
+          "overrode_detection": {
+            "default": false,
+            "title": "Overrode Detection",
+            "type": "boolean"
+          },
+          "proposal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProposalOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recovering_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recovering At"
+          },
+          "reference": {
+            "title": "Reference",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "severity_source": {
+            "title": "Severity Source",
+            "type": "string"
+          },
+          "stance_at_declare": {
+            "default": "",
+            "title": "Stance At Declare",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "summary": {
+            "default": "",
+            "title": "Summary",
+            "type": "string"
+          },
+          "ticket": {
+            "$ref": "#/components/schemas/TicketSyncOut"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "transitions": {
+            "items": {
+              "$ref": "#/components/schemas/TransitionOut"
+            },
+            "title": "Transitions",
+            "type": "array"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "reference",
+          "app_id",
+          "title",
+          "state",
+          "severity",
+          "severity_source",
+          "declared_at",
+          "declared_by",
+          "updated_at",
+          "open",
+          "ticket"
+        ],
+        "title": "IncidentDetailOut",
+        "type": "object"
+      },
+      "IncidentListOut": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "incidents": {
+            "items": {
+              "$ref": "#/components/schemas/IncidentOut"
+            },
+            "title": "Incidents",
+            "type": "array"
+          }
+        },
+        "required": [
+          "count"
+        ],
+        "title": "IncidentListOut",
+        "type": "object"
+      },
+      "IncidentOut": {
+        "properties": {
+          "app_id": {
+            "title": "App Id",
+            "type": "string"
+          },
+          "change_windows": {
+            "items": {
+              "$ref": "#/components/schemas/ChangeWindowLinkOut"
+            },
+            "title": "Change Windows",
+            "type": "array"
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At"
+          },
+          "closed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed By"
+          },
+          "closure_reason": {
+            "default": "",
+            "title": "Closure Reason",
+            "type": "string"
+          },
+          "declared_at": {
+            "format": "date-time",
+            "title": "Declared At",
+            "type": "string"
+          },
+          "declared_by": {
+            "title": "Declared By",
+            "type": "string"
+          },
+          "declared_by_display": {
+            "default": "",
+            "title": "Declared By Display",
+            "type": "string"
+          },
+          "declared_by_human": {
+            "default": true,
+            "description": "Always true. Only a person declares an incident (REQ-043).",
+            "title": "Declared By Human",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "open": {
+            "title": "Open",
+            "type": "boolean"
+          },
+          "overrode_detection": {
+            "default": false,
+            "title": "Overrode Detection",
+            "type": "boolean"
+          },
+          "proposal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProposalOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recovering_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recovering At"
+          },
+          "reference": {
+            "title": "Reference",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "severity_source": {
+            "title": "Severity Source",
+            "type": "string"
+          },
+          "stance_at_declare": {
+            "default": "",
+            "title": "Stance At Declare",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "summary": {
+            "default": "",
+            "title": "Summary",
+            "type": "string"
+          },
+          "ticket": {
+            "$ref": "#/components/schemas/TicketSyncOut"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "reference",
+          "app_id",
+          "title",
+          "state",
+          "severity",
+          "severity_source",
+          "declared_at",
+          "declared_by",
+          "updated_at",
+          "open",
+          "ticket"
+        ],
+        "title": "IncidentOut",
+        "type": "object"
+      },
       "IngestAck": {
         "additionalProperties": false,
         "description": "Body of the 202 response.",
@@ -4277,6 +4907,137 @@
         "title": "KindCoverageOut",
         "type": "object"
       },
+      "LifecycleOut": {
+        "properties": {
+          "app_id": {
+            "title": "App Id",
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "change_window": {
+            "$ref": "#/components/schemas/ChangeWindowOut"
+          },
+          "corroborated": {
+            "default": false,
+            "title": "Corroborated",
+            "type": "boolean"
+          },
+          "declare_requires_human": {
+            "default": true,
+            "description": "Always true. Detection proposes; a person declares (REQ-043).",
+            "title": "Declare Requires Human",
+            "type": "boolean"
+          },
+          "declared": {
+            "title": "Declared",
+            "type": "boolean"
+          },
+          "detection_error": {
+            "default": "",
+            "description": "Why the detector could not be read, when it could not. A person can still declare.",
+            "title": "Detection Error",
+            "type": "string"
+          },
+          "health_band": {
+            "default": "",
+            "title": "Health Band",
+            "type": "string"
+          },
+          "health_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Health Score"
+          },
+          "human_moves": {
+            "description": "Which of next_states only a person may make.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Human Moves",
+            "type": "array"
+          },
+          "incident": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IncidentOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "next_states": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Next States",
+            "type": "array"
+          },
+          "proposed_severity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposed Severity"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "severity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Severity"
+          },
+          "source": {
+            "description": "`detection` - the state is a stance recomputed from measurements - or `incident`, a decision a person made.",
+            "title": "Source",
+            "type": "string"
+          },
+          "stance": {
+            "title": "Stance",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "app_id",
+          "state",
+          "source",
+          "at",
+          "stance",
+          "declared",
+          "change_window"
+        ],
+        "title": "LifecycleOut",
+        "type": "object"
+      },
       "LoginRequest": {
         "additionalProperties": false,
         "properties": {
@@ -4881,6 +5642,126 @@
           "can_corroborate"
         ],
         "title": "ProfileOut",
+        "type": "object"
+      },
+      "ProposalOut": {
+        "description": "What detection was saying when Declare was pressed - a snapshot, not a\nlive read, so it still explains the incident after the rollups age out.",
+        "properties": {
+          "corroborated": {
+            "default": false,
+            "title": "Corroborated",
+            "type": "boolean"
+          },
+          "customer_impacting": {
+            "default": false,
+            "title": "Customer Impacting",
+            "type": "boolean"
+          },
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRefOut"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "families": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Families",
+            "type": "array"
+          },
+          "health_band": {
+            "default": "",
+            "title": "Health Band",
+            "type": "string"
+          },
+          "health_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Health Score"
+          },
+          "journey_tier": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journey Tier"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "regions_affected": {
+            "default": 0,
+            "title": "Regions Affected",
+            "type": "integer"
+          },
+          "regions_total": {
+            "default": 0,
+            "title": "Regions Total",
+            "type": "integer"
+          },
+          "rule": {
+            "default": "",
+            "title": "Rule",
+            "type": "string"
+          },
+          "severity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Severity"
+          },
+          "stance": {
+            "title": "Stance",
+            "type": "string"
+          },
+          "success_rate_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Success Rate Pct"
+          },
+          "unavailable": {
+            "default": "",
+            "description": "Why there is no proposal, when there is none. A person may always declare without one: the moment the detector is broken is the moment somebody most needs to.",
+            "title": "Unavailable",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stance"
+        ],
+        "title": "ProposalOut",
         "type": "object"
       },
       "ReadinessCheckOut": {
@@ -5688,6 +6569,25 @@
         "title": "Severity",
         "type": "string"
       },
+      "SeverityIn": {
+        "properties": {
+          "reason": {
+            "default": "",
+            "maxLength": 1000,
+            "title": "Reason",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "severity"
+        ],
+        "title": "SeverityIn",
+        "type": "object"
+      },
       "SeverityMatrixIn": {
         "properties": {
           "default": {
@@ -6403,6 +7303,26 @@
         "title": "Source",
         "type": "object"
       },
+      "StateIn": {
+        "properties": {
+          "reason": {
+            "default": "",
+            "maxLength": 1000,
+            "title": "Reason",
+            "type": "string"
+          },
+          "state": {
+            "description": "active or recovering. Closing has its own route.",
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "title": "StateIn",
+        "type": "object"
+      },
       "StormOut": {
         "properties": {
           "alerts": {
@@ -6540,6 +7460,98 @@
           "skipped"
         ],
         "title": "TestSummaryOut",
+        "type": "object"
+      },
+      "TicketSyncOut": {
+        "properties": {
+          "adapter_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adapter Id"
+          },
+          "attempts": {
+            "default": 0,
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "last_attempt_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Attempt At"
+          },
+          "reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference"
+          },
+          "state": {
+            "description": "not_configured, pending, synced, failed or uncertain. `uncertain` means a call timed out and the ticket may or may not exist; the retry reconciles before it creates.",
+            "title": "State",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "synced_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Synced At"
+          },
+          "ticket_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ticket Id"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "title": "TicketSyncOut",
         "type": "object"
       },
       "TokenPairOut": {
@@ -6914,6 +7926,67 @@
           "normalized_by"
         ],
         "title": "TopologyVersionOut",
+        "type": "object"
+      },
+      "TransitionOut": {
+        "properties": {
+          "actor_id": {
+            "title": "Actor Id",
+            "type": "string"
+          },
+          "actor_type": {
+            "title": "Actor Type",
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "from_state": {
+            "title": "From State",
+            "type": "string"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          },
+          "severity_after": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Severity After"
+          },
+          "severity_before": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Severity Before"
+          },
+          "to_state": {
+            "title": "To State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from_state",
+          "to_state",
+          "at",
+          "actor_type",
+          "actor_id"
+        ],
+        "title": "TransitionOut",
         "type": "object"
       },
       "UserOut": {
@@ -8116,6 +9189,57 @@
         "x-signalforge-permission": "manage_apps"
       }
     },
+    "/apps/{app_id}/change-window": {
+      "get": {
+        "description": "Changes announced as started and never announced as completed - the chip\nbeside the health score, sourced from real deploy-hook calls.",
+        "operationId": "get_change_window_apps__app_id__change_window_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "app_id",
+            "required": true,
+            "schema": {
+              "title": "App Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeWindowOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Get Change Window",
+        "tags": [
+          "incidents"
+        ],
+        "x-signalforge-app-scope": "path",
+        "x-signalforge-auth": "session",
+        "x-signalforge-permission": "manage_apps"
+      }
+    },
     "/apps/{app_id}/connection-tests": {
       "post": {
         "operationId": "run_connection_tests_apps__app_id__connection_tests_post",
@@ -8398,6 +9522,57 @@
         "summary": "Set Governance",
         "tags": [
           "onboarding"
+        ],
+        "x-signalforge-app-scope": "path",
+        "x-signalforge-auth": "session",
+        "x-signalforge-permission": "manage_apps"
+      }
+    },
+    "/apps/{app_id}/lifecycle": {
+      "get": {
+        "description": "Where this application sits: a detection stance, or an incident somebody\ndeclared - and the response says which of the two it is reading.",
+        "operationId": "get_lifecycle_apps__app_id__lifecycle_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "app_id",
+            "required": true,
+            "schema": {
+              "title": "App Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LifecycleOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Get Lifecycle",
+        "tags": [
+          "incidents"
         ],
         "x-signalforge-app-scope": "path",
         "x-signalforge-auth": "session",
@@ -10216,6 +11391,436 @@
         "x-signalforge-auth": "none"
       }
     },
+    "/incidents": {
+      "get": {
+        "description": "The tenant's incidents. Readable by every member of the tenant, because\nthe role that answers a page holds no permission in the frozen matrix.",
+        "operationId": "list_incidents_incidents_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "app_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "App Id"
+            }
+          },
+          {
+            "description": "A lifecycle state, or `open` for active plus recovering",
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A lifecycle state, or `open` for active plus recovering",
+              "title": "State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncidentListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "List Incidents",
+        "tags": [
+          "incidents"
+        ],
+        "x-signalforge-auth": "session"
+      },
+      "post": {
+        "description": "Declare an incident. The only way one comes into existence.\n\nDetection can reach a corroborated proposal and stops there; this is the act\nthat turns it into an incident, and it is always a person's. The severity\ndetection proposed is accepted when none is given, and recorded as `chosen`\nwhen one is - both are human decisions, and the record says which.",
+        "operationId": "declare_incident_incidents_post",
+        "parameters": [
+          {
+            "description": "The application this incident is about",
+            "in": "query",
+            "name": "app_id",
+            "required": true,
+            "schema": {
+              "description": "The application this incident is about",
+              "title": "App Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeclareIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncidentDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Declare Incident",
+        "tags": [
+          "incidents"
+        ],
+        "x-signalforge-app-scope": "query",
+        "x-signalforge-auth": "session",
+        "x-signalforge-permission": "declare_incident"
+      }
+    },
+    "/incidents/{incident_id}": {
+      "get": {
+        "description": "One incident with its whole transition history: who moved it, when, and\nwhat they said.",
+        "operationId": "get_incident_incidents__incident_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncidentDetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Get Incident",
+        "tags": [
+          "incidents"
+        ],
+        "x-signalforge-auth": "session"
+      }
+    },
+    "/incidents/{incident_id}/close": {
+      "post": {
+        "description": "Close an incident. Terminal: a regression afterwards is a new declaration\nby a person at a new time, which is what the record should say.",
+        "operationId": "close_incident_incidents__incident_id__close_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloseIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncidentOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Close Incident",
+        "tags": [
+          "incidents"
+        ],
+        "x-signalforge-app-scope": "incident",
+        "x-signalforge-auth": "session",
+        "x-signalforge-permission": "close_incident"
+      }
+    },
+    "/incidents/{incident_id}/itsm-sync": {
+      "post": {
+        "description": "Try the ITSM again now instead of waiting for the retry sweep. Reconciles\nbefore it creates, so a link left uncertain by a timeout cannot become a\nsecond ticket.",
+        "operationId": "resync_ticket_incidents__incident_id__itsm_sync_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncidentOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Resync Ticket",
+        "tags": [
+          "incidents"
+        ],
+        "x-signalforge-app-scope": "incident",
+        "x-signalforge-auth": "session",
+        "x-signalforge-permission": "declare_incident"
+      }
+    },
+    "/incidents/{incident_id}/severity": {
+      "patch": {
+        "description": "Re-grade an open incident. Nothing else in the platform can: detection\nproposes a severity and never sets one.",
+        "operationId": "change_severity_incidents__incident_id__severity_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SeverityIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncidentOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Change Severity",
+        "tags": [
+          "incidents"
+        ],
+        "x-signalforge-app-scope": "incident",
+        "x-signalforge-auth": "session",
+        "x-signalforge-permission": "change_severity"
+      }
+    },
+    "/incidents/{incident_id}/state": {
+      "post": {
+        "description": "Move an incident to recovering, or back to active after a regression.",
+        "operationId": "set_incident_state_incidents__incident_id__state_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncidentOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Set Incident State",
+        "tags": [
+          "incidents"
+        ],
+        "x-signalforge-app-scope": "incident",
+        "x-signalforge-auth": "session",
+        "x-signalforge-permission": "declare_incident"
+      }
+    },
     "/ingest-keys": {
       "get": {
         "operationId": "list_ingest_keys_ingest_keys_get",
@@ -11656,6 +13261,10 @@
     {
       "description": "What the platform currently believes about an application: every mapped signal against its rolling baseline, the weighted health score per region, SLO burn rates, corroboration and the severity the application's own matrix would propose. Detection proposes; only a human declares.",
       "name": "detection"
+    },
+    {
+      "description": "The incident lifecycle: steady, watch and proposed are detection's stances; active, recovering and closed are an incident, and only a person moves between the two halves. Reads are session-scoped to the caller's tenant and carry no permission, because the frozen roles matrix gives the SME - the role that answers a page - none; every write names declare_incident, change_severity or close_incident. Also the change window: a deployment announced as started and never announced as completed.",
+      "name": "incidents"
     },
     {
       "description": "Ingest keys, and the five frozen push endpoints a sending application posts to.",

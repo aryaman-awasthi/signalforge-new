@@ -1150,3 +1150,183 @@ reach Watch and can never reach a proposal, however long it lasts.
 Removing an application removes what the detector believes about it - the signal states and the
 snapshot - after the removal commits and never inside it, because a derived store that failed to
 clean up must not roll back the removal the operator asked for.
+
+## 8. The incident lifecycle: a proposal becomes a decision (REQ-043, REQ-044)
+
+Chapter 7 ends one step short of an incident on purpose. This chapter is that step and the four
+that follow it, and the single rule it is built around is that **the platform never takes any of
+them**.
+
+### 8.1 Six states, in two halves
+
+| State | What it means | Who moves into it |
+|---|---|---|
+| `steady` | nothing is breaching | detection |
+| `watch` | something is being observed - the quiet "AI is checking" banner | detection |
+| `proposed` | corroborated evidence and a severity the application's own matrix computed | detection |
+| `active` | a person declared an incident | **a human, only** |
+| `recovering` | a person says a mitigation is applied and is being validated | **a human, only** |
+| `closed` | a person signed it off | **a human, only** |
+
+The first three are *stances*. Detection owns them, they are recomputed from measurements every
+five seconds, and no incident row exists. The last three are an incident, and one exists because
+somebody pressed a button. `GET /apps/{app_id}/lifecycle` publishes `source` for exactly this
+reason: the same six words name both halves, and a screen that could not tell "the detector
+believes this right now" from "a person decided this" would be describing a product this
+deliberately is not.
+
+An application returns to a stance when its incident closes. `active -> steady` is not a
+transition: an incident does not stop being an incident because the metrics recovered.
+
+### 8.2 The floor: three acts reserved for people
+
+`assert_transition` refuses a non-human actor on every move into, through and out of an incident,
+and `assert_severity_change` does the same for a re-grade. Both live in the domain, so a use
+case, a future agent, a drill and a hand-written script all meet the same refusal - and the
+refusal is a 422, not a 403, because there is no permission that grants it and therefore nothing
+for a 403 to name.
+
+There is exactly one move a machine may make inside an incident: `recovering -> active`. A
+regression during validation escalates, and escalation is the safe direction; it cannot create an
+incident, relax one or end one. S6's revalidation loop (REQ-065) is built on that one edge.
+
+**Closure is terminal for everyone.** Nothing reopens a closed incident - not a machine, and not
+another person. Closure is the record that a human signed off, and a system that can un-sign it
+is a system whose record means nothing. A regression after closure is a *new* declaration, by a
+new person at a new time, which is what the record should say.
+
+### 8.3 Declaring
+
+`POST /incidents?app_id=…` behind `declare_incident`. It reads the detector's current belief
+without advancing it - a declaration must not be able to age a breach into an anomaly, and the
+proposal on the record has to be the one that was on the screen the person was looking at - and
+then commits four things in one transaction: the incident, the transition that records who moved
+it, the audit entry, and the incident-plane event.
+
+Three facts are captured that cannot be recovered later:
+
+- **the proposal**, copied rather than referenced. The rollups its evidence refs point at age out
+  in hours; an incident that could only explain itself by re-reading live telemetry would explain
+  itself differently every time it was opened.
+- **the stance it was declared from**, so "declared straight out of steady" is visible as the
+  judgement call it was.
+- **what was changing**, copied from the open change windows (8.6).
+
+The severity is the person's either way, and the record says which way. Omitted, the severity the
+matrix proposed is accepted and recorded as `proposed`; supplied, it is recorded as `chosen` and
+`overrode_detection` is true. With no proposal *and* no severity the declaration is refused with
+a 422 that names what it needs - the platform will not invent a grade.
+
+A declaration while one is already open is refused with a 409 naming the incident to join.
+Two commanders pressing Declare seconds apart is what a pager does to a rota, and the check is
+re-read inside the declaring transaction rather than only before it.
+
+### 8.4 Running it, and reading it
+
+| Route | Permission |
+|---|---|
+| `POST /incidents` | `declare_incident` |
+| `PATCH /incidents/{id}/severity` | `change_severity` |
+| `POST /incidents/{id}/state` | `declare_incident` |
+| `POST /incidents/{id}/close` | `close_incident` |
+| `POST /incidents/{id}/itsm-sync` | `declare_incident` |
+| `GET /incidents`, `GET /incidents/{id}` | **none** - a session in the tenant |
+
+The read path is the one asymmetry, and it comes out of the frozen roles matrix rather than a
+preference: `ROLE_PERMISSIONS[Role.SME]` is empty, so the person most likely to be paged holds no
+permission at all. Any permission on the read path would lock the incident out of exactly the
+people it exists to reach. The reads are therefore session-scoped to the caller's own tenant and
+carry none - the same decision `/ws` records as DR-031 - and a cross-tenant read answers the way
+a read of nothing does.
+
+The incident-scoped writes need the application to evaluate a per-application role binding
+against, and it is not in the URL, so `deps.require_incident` resolves the incident first and
+authorizes against the application it names. A commander bound to one application is bound to its
+incidents and to no others.
+
+Re-submitting the severity that is already set is a no-op: no transition, no event, no ticket
+update. A screen re-posting what is true must not fill the timeline people are reading during an
+incident. Moving to the state it is already in is a 409 rather than a silent success, because
+that one is a person clicking the wrong button.
+
+Every move appends to `incident_transitions`, which is append-only and never summarised into the
+incident row: "who moved this to recovering, when, and what did they say" is what a
+post-incident review reads first, and a current-state column cannot answer it. A severity change
+is recorded as a transition whose `from_state` equals its `to_state` - the grade moved, the state
+did not - so one ordered list is the whole history.
+
+### 8.5 ITSM sync
+
+On every lifecycle move, and on a 30-second sweep for anything unsettled, the incident's ticket is
+brought into line through the application's own bound ITSM connector - the shipped `itsm-lite`
+queue, or a real one, through the same `ConnectorInvoker` and the same credential-scope floor as
+every other adapter call.
+
+    active      -> ticket in_progress
+    recovering  -> ticket in_progress
+    closed      -> ticket closed
+
+`recovering` is deliberately not `resolved`: recovering means a mitigation is being validated,
+and resolved is a claim about the outcome that the platform has no business making on a person's
+behalf while the validation is still running. Because ITSM systems refuse skipped states, closing
+an incident whose ticket is in progress is two updates - resolve, then close - walked one step at
+a time.
+
+The sync **never raises**. A ticket queue that is down, slow, misconfigured or absent must not be
+able to stop a P0 being declared, so the declaration commits first and the ticket is attempted
+after. What happened lands on the incident's own row in five states:
+
+| State | What happened | What the retry does |
+|---|---|---|
+| `not_configured` | no ITSM connector is bound to this application | nothing - there is nothing to sync to |
+| `pending` | not attempted yet | attempt it |
+| `synced` | the ticket matches the incident | nothing until the incident moves |
+| `failed` | the ITSM refused, and said why | attempt again; the reason is on the row |
+| `uncertain` | a call timed out - the ticket may or may not exist | **reconcile, then retry** |
+
+`uncertain` is the state this design exists for. A create that timed out is not a create that
+failed: retrying it blindly is how an incident ends up with two tickets, and treating it as done
+is how it ends up with none. The retry calls `get` first - the ITSM equivalent of the actions
+SPI's reconcile-before-retry - and only creates when the queue itself says the ticket is not
+there. A person can force the attempt now with `POST /incidents/{id}/itsm-sync` rather than
+waiting for the sweep.
+
+### 8.6 The change window (REQ-044)
+
+The signal is not "somebody deployed". It is **`deployment.started` with no
+`deployment.completed`**: a change that is in flight right now. That is what earns a chip beside
+a health score, because the first question during an incident is "what changed", and "something
+is changing *now*" outranks every entry in a history.
+
+The chip is fed by real deploy-hook calls. A pipeline posts canonical `ChangeEvent`s to the frozen
+`/api/v1/ingest/changes` path with its HMAC; the events land on the timeline; a consumer group on
+the bus folds them into `change_windows`, keyed on `(tenant, app, change_id)`. Writing through the
+dispatcher's own unit of work means the projection, the idempotency-ledger row and the consumer
+offset commit together, so catch-up after a restart and an operator requeue are both harmless.
+
+The fold survives the three things a real pipeline does:
+
+- **duplicates.** A re-triggered pipeline announces the same change again. Applying an event
+  twice produces an equal window.
+- **out-of-order delivery.** A `completed` can be recorded before its `started`. Nothing reads
+  arrival order: the earliest `started_at` wins and a completion, once seen, is never unseen, so
+  a late start cannot reopen a finished deployment.
+- **silence.** A pipeline that dies between the two calls leaves a window open forever. It is not
+  closed on a guess - nobody knows whether the deploy landed - but past four hours it is marked
+  `stale` and the chip goes out, because a chip that stays lit for three days is a chip people
+  stop seeing. The window is still listed, with "started 3.1h ago and never announced completion".
+
+`failed` and `rolled_back` end a window too, and which of the three endings it was is recorded
+rather than collapsed: a rolled-back deployment is *more* interesting as evidence, not less.
+
+### 8.7 Where every lifecycle failure lands
+
+| Failure | Where it lands | Held by |
+|---|---|---|
+| **Timeout** | a ticket create that timed out is `uncertain`, never `failed`; the incident is declared regardless | `test_itsm_sync.py` |
+| **Uncertain external state** | the retry calls `get` before it creates, adopts the ticket that was already there, and one incident keeps one ticket | `test_itsm_sync.py` |
+| **Partial completion** | the declaration commits before the ITSM is touched, so an application with no ticket queue still gets an incident and the row says why there is no ticket | `test_itsm_sync.py` |
+| **Duplicates** | a second declaration is refused naming the incident to join; a re-submitted severity is a no-op with no event; a re-announced deployment is one change window | `test_incident_idempotency.py` |
+| **Model / adapter failure** | a person can declare while the detector cannot be read at all - the refusal names the reason and asks for a severity, and the incident records `proposal.unavailable` | `test_incident_lifecycle.py` |
+| **Human override** | declaring against a steady stance, and choosing a severity the matrix did not propose, are both recorded as overrides with the proposal kept beside the decision | `test_lifecycle_floor.py`, `test_incident_lifecycle.py` |
+| **Permission change mid-flow** | a commander re-bound to another application is refused on the next write and what was already declared is intact; a connector disabled mid-incident leaves the incident closable | `test_incident_boundary.py`, `test_itsm_sync.py` |

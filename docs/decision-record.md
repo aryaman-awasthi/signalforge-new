@@ -6,6 +6,85 @@ graph" section at the bottom is the authored pre-build decision record
 (signalforge-memory-graph.md, provided and imported 2026-09-01) - every N-line there
 is treated as already decided.
 
+## DR-076 (2026-09-01, S4) A change window is a projection, not a scan of the timeline
+`change_windows` is a table keyed on (tenant, app, change_id), filled by a bus consumer group
+that folds every `deployment.*` and `change.*` event. Why: "is a change in flight right now" is
+asked every time an application screen opens and every time an incident is declared, and the
+`EventStore.read` port pages oldest-first from a seq floor - answering it by scanning the log
+would make the answer depend on how much unrelated traffic happened to be in the way. Writing
+through the dispatcher's own unit of work makes the projection, the idempotency-ledger row and
+the consumer offset one commit. Consequence: a second consumer group in the install, and the
+fold has to be idempotent and order-independent in its own right (it is: earliest start wins,
+completion is sticky), because a projection that could disagree with the events it is derived
+from would be worse than the scan it replaced.
+
+## DR-075 (2026-09-01, S4) `recovering` maps to an in-progress ticket, not a resolved one
+The ITSM mapping is active -> in_progress, recovering -> in_progress, closed -> closed. Why:
+recovering means a mitigation is applied and is being *validated*; resolved is a claim about the
+outcome, and the platform has no business making that claim on a person's behalf while the
+validation it describes has not finished. It also removes the only backwards move the lifecycle
+could produce - a regression from recovering to active leaves the ticket where it is.
+Consequence: closing an incident is two ITSM updates rather than one, because an in-progress
+ticket cannot jump to closed; `ticket_path` walks the canonical order one step at a time.
+
+## DR-074 (2026-09-01, S4) An ITSM create that timed out is `uncertain`, and the retry reconciles
+`TicketSync.state` has five values and the fifth is `uncertain`. A timeout never becomes
+`failed`, and the next attempt calls `get` before it calls `create`. Why: a create whose answer
+was lost may or may not have made a ticket; retrying it blindly is how an incident ends up with
+two tickets and treating it as done is how it ends up with none. This is the actions SPI's
+reconcile-before-retry (DR-005) applied to the one other mutating integration this sprint uses.
+Consequence: the ITSM retry sweep is a scheduled job rather than an in-request retry, because
+the request that declared the incident has already returned - and it must have, since a ticket
+queue being down may not delay a P0.
+
+## DR-073 (2026-09-01, S4) Declaring names its application in the query string
+`POST /incidents?app_id=…` rather than `POST /apps/{app_id}/incidents`. Why: the security
+suite pins every route under `/apps` to `manage_apps`, and declaring is `declare_incident` -
+putting it in that tree would have meant weakening a control to accommodate new code. The
+existing `deps.require` factory already reads `app_id` from the query string, so a
+per-application role binding is still evaluated against the application being declared on.
+Consequence: the whole incident surface lives under one prefix, and the two lifecycle *reads*
+that are genuinely operator work (`/apps/{app_id}/lifecycle` and `/change-window`) stay in the
+`/apps` tree behind `manage_apps` where that test can see them.
+
+## DR-072 (2026-09-01, S4) `deps.require_incident`: a third place an application id comes from
+A route named by `{incident_id}` still has to evaluate a per-application role binding, and the
+application is not in the URL. The factory resolves the incident inside the caller's tenant
+first, then authorizes against the application it names, and publishes
+`x-signalforge-app-scope: incident`. Why: without it, an incident commander scoped to one
+application could move another application's incident. Consequence: an incident id that exists
+in the caller's own tenant is distinguishable from one that does not, before the permission
+check - bounded and deliberate, because the lookup is tenant-scoped and reading an incident of
+one's own tenant needs no permission anyway.
+
+## DR-071 (2026-09-01, S4) Incident *reads* carry no permission; every write carries one
+`GET /incidents` and `GET /incidents/{id}` are session-scoped to the caller's tenant and name no
+permission. Why: this is the question DR-067 left open, and the frozen roles matrix answers it -
+`ROLE_PERMISSIONS[Role.SME]` is empty, so the person most likely to be paged holds nothing. Any
+permission on the read path would exclude exactly the group an incident exists to reach, which
+is the same reasoning `/ws` was given in DR-031. Consequence: a member bound to one application
+can read incidents of another in the same tenant; the compensating controls are that every write
+is permissioned and per-application scoped, and that the security suite pins the read set at
+exactly two routes with an empty permission set and every write to its matrix permission.
+
+## DR-070 (2026-09-01, S4) Closure is terminal for people as well as machines
+`assert_transition` refuses every move out of `closed`, whoever asks. Why: closure is the record
+that a human signed off, and a system that can un-sign it is a system whose record means nothing;
+a regression after closure is a new decision by a new person at a new time, and that is what the
+record should say. Consequence: there is no "reopen" anywhere in the API. Declaring again on the
+same application produces a second incident with its own reference, which is also what makes the
+one-open-incident-per-application guard safe to enforce.
+
+## DR-069 (2026-09-01, S4) The lifecycle state machine is domain code with an actor argument
+`assert_transition(current, target, by=ActorType)` and `assert_severity_change(state, by=...)`
+live in `domain/incidents/lifecycle.py` and raise rather than returning a verdict. Why: "only
+humans declare, change severity and close" (REQ-043) had to be a refusal every future caller
+meets - a use case, an agent, a drill, a script - rather than a property of which service methods
+happen to exist. The one machine move allowed inside an incident is `recovering -> active`,
+because escalation is the safe direction and S6's revalidation loop needs it. Consequence: the
+`HUMAN_ONLY` set is asserted as a literal in the test suite, so adding a transition without
+deciding who may make it fails the build instead of silently granting it to everyone.
+
 ## DR-068 (2026-09-01, S4) Removing an application clears detection state through a callback
 `ApplicationService` holds a list of `on_removed` hooks that the composition root fills
 with `DetectionService.forget`, and they run *after* the removal commits. Why: onboarding

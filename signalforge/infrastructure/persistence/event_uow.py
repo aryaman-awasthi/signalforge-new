@@ -17,6 +17,7 @@ from signalforge.infrastructure.persistence.event_store import (
     SqlSealStore,
 )
 from signalforge.infrastructure.persistence.agent_runs import SqlAgentRunStore
+from signalforge.infrastructure.persistence.incidents import SqlChangeWindowStore
 from signalforge.infrastructure.security.audit import AuditChainWriter
 
 
@@ -45,6 +46,7 @@ class SqlEventUnitOfWork(EventUnitOfWork):
         self.seals = SqlSealStore(self._session)
         self.retention = SqlRetentionStore(self._session)
         self.agent_runs = SqlAgentRunStore(self._session)
+        self.changes = SqlChangeWindowStore(self._session)
         self.audit = AuditChainWriter(self._session, clock=self._clock)
         return self
 
