@@ -388,3 +388,53 @@ whole capability while the manifest's `timeout_s` bounds each HTTP call inside i
 and never changes the status code. `GET /metrics` renders from a registry that rejects
 identifying label names at declaration time; connector gauges are keyed by adapter id and
 `signalforge_connector_bindings{state}` counts bindings without naming one.
+
+## What an onboarded application serves (REQ-038)
+
+This platform's API has a second half that is not served by this platform: the contract an
+application implements so that the generic adapters can read it. It is frozen in
+`contracts/observe.py`, it is what the `http-observe-*` adapters call, and an application that
+serves it needs no code written for it here.
+
+| Method and path | Returns | Credential scope the adapters bind with |
+|---|---|---|
+| `GET /observe/metrics` | Prometheus text exposition, `text/plain; version=0.0.4` | read_only |
+| `GET /observe/logs?query&start&end&limit` | `{records: LogRecord[], total?}` | read_only |
+| `GET /observe/traces?trace_id\|service\|operation\|errors_only&start&end&limit` | `{spans: TraceSpan[]}` | read_only |
+| `GET /observe/health` | `HealthReport` | read_only |
+| `GET /observe/topology` | `TopologySnapshot` | read_only |
+| `GET /observe/actions` | an action manifest document | remediation |
+| `POST /observe/actions/{action_id}/execute` | `ActionExecution` | remediation |
+| `GET /observe/actions/executions/{idempotency_key}` | `ActionExecution`, or **404 meaning "never ran"** | remediation |
+| `GET /observe/chaos` | a chaos manifest document | drill |
+| `POST /observe/chaos/{scenario_id}/inject` | `ChaosInjection` | drill |
+| `GET /observe/chaos/injections/{injection_id}` | `ChaosInjection` | drill |
+| `POST /observe/chaos/injections/{injection_id}/abort` | `ChaosInjection` | drill |
+
+Four requirements on the application, each of which an adapter depends on:
+
+- **`/observe/metrics` is a scrape, not a query API.** It carries the current sample and no
+  history, which is why `http-observe-metrics` declares `query_instant` and refuses
+  `query_range` rather than fabricating a range from one point.
+- **A repeated `idempotency_key` must not execute twice**, and the execution lookup must
+  distinguish "never ran" (404) from "ran and failed" (200 with `state: failed`). Reconcile
+  before retry is built on exactly that distinction.
+- **A timeout is not a failure.** If the application cannot answer in time, the adapter reports
+  `UNCERTAIN` and the platform reconciles; an application that reports success early or failure
+  late makes that unreliable.
+- **A guarded path should answer 401 or 403, not 404.** Auto-discovery reads either as "served,
+  and it wants a credential", which is what is true; a 404 is read as "this application does not
+  serve that", which would be a lie.
+
+The reference harness in `reference-app/` implements all twelve, and
+`signalforge/tests/reference/` asserts the set it maps is exactly the frozen set - neither short
+nor extended. A path missing means an adapter that cannot be bound; an extra path under
+`/observe` means a surface no adapter will ever call, which is how a private API starts.
+
+### What an application's deployment pipeline sends
+
+Nothing more than one signed POST to `/api/v1/ingest/changes`, described above. The reference
+pipeline is a shell script using `curl` and `openssl` and no library, which is the point: the
+ingest contract is small enough to implement from its documentation. Its `event_id` is derived
+from the release, the region and the status, so a re-triggered pipeline posts the same id and
+the platform answers `duplicates: 1` instead of recording a second deployment.

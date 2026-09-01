@@ -5,7 +5,7 @@ SQLAlchemy models Alembic also autogenerates migrations from, so this document
 cannot drift from the schema. The design notes below are authored; the ERD and
 the column tables are not.
 
-Generated: 2026-09-01T02:35:53+00:00
+Generated: 2026-09-01T03:32:41+00:00
 Tables: 27
 
 ## 1. Entity relationship diagram

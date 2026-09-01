@@ -28,3 +28,10 @@ observability/bin/
 
 # build output
 dist/
+
+# reference harness build and runtime state (the sources are committed, the jar is
+# not). Globbed rather than named, because the core - this file included - may not
+# name the reference application (CLAUDE.md rule 2).
+reference-app/*/target/
+reference-app/*/data/
+reference-app/*/logs/

@@ -9,6 +9,9 @@ echo "[reset] clearing runtime data (var/)"
 rm -rf "$ROOT/var"
 mkdir -p "$ROOT/var"
 
+echo "[reset] clearing reference harness databases and logs"
+rm -rf "$ROOT"/reference-app/*/data "$ROOT"/reference-app/*/logs
+
 echo "[reset] clearing caches"
 rm -rf "$ROOT/.pytest_cache"
 find "$ROOT/signalforge" -type d -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null || true

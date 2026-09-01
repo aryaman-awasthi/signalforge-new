@@ -6,6 +6,71 @@ graph" section at the bottom is the authored pre-build decision record
 (signalforge-memory-graph.md, provided and imported 2026-09-01) - every N-line there
 is treated as already decided.
 
+## DR-055 (2026-09-01, S3) The reference harness announces deployments with a derived event id
+`deploy.sh` computes `event_id` as a UUIDv5-shaped digest of (release, region, status)
+rather than generating one. Why: pipelines are re-triggered constantly, and a
+re-trigger that minted a new id would put a second deployment on the timeline that
+nobody performed - which corrupts the one question changes are recorded to answer.
+Consequence: a re-run is acknowledged as `duplicates: 1` and publishes nothing, and
+announcing a genuinely new deployment requires a new release or region. The
+application enforces the mirror rule from its own side: re-applying the same release
+with the same settings answers `changed: false` instead of creating a version.
+
+## DR-054 (2026-09-01, S3) A failure to announce never fails a deployment
+If the platform is unreachable, refuses the credential, or has no credential
+configured, `deploy.sh` warns on stderr, applies the change and exits 0 saying the
+deployment went unannounced. Why: monitoring does not get to gate shipping, and a
+pipeline that stops on a telemetry outage teaches application teams to remove the
+telemetry. Consequence: the platform can miss a deployment it was never told about,
+which is visible as a gap rather than as a wrong answer. The one reversal is a failed
+*apply*, announced as `deployment.failed` before the script exits non-zero, because an
+incident opened shortly afterwards is very likely about it.
+
+## DR-053 (2026-09-01, S3) The harness's manifests are documents, and drift is a startup failure
+The action and chaos manifests are JSON resources the harness serves verbatim, and the
+application refuses to start when a published id has no implementation or an
+implementation is not published. Why: the architecture sketched an annotation scan, but
+a generated manifest cannot be wrong, which means it also cannot be reviewed - and the
+manifest is exactly the document a change board should read before an action becomes
+executable. Consequence: adding an action is a two-file change by construction, and the
+suite asserts the same agreement by parsing both sides so drift fails a test rather
+than a demo.
+
+## DR-052 (2026-09-01, S3) The harness renders its own Prometheus exposition
+No Micrometer, despite the architecture's stack table naming it. Why: the platform's
+parser refuses a malformed exposition line rather than dropping it, so the harness has
+to control its output format exactly rather than inherit a library's defaults; and a
+registry that requires every metric to declare its label names is what keeps a payment
+id out of a metric label - the same rule the platform applies to its own scrape.
+Consequence: one fewer dependency and about 150 lines of harness code, and the harness's
+metric names and label sets are readable in one file.
+
+## DR-051 (2026-09-01, S3) A payment lost at the settlement rail is UNKNOWN, not FAILED
+The harness's ledger has five payment states and the fifth is `UNKNOWN`. Why: a request
+that reached the point where money moves and lost its answer has not failed - calling it
+failed is a guess, and a caller told "failed" retries and pays twice. Consequence: the
+harness can demonstrate uncertain external state, reconcile-before-retry and duplicate
+prevention against a real condition rather than a simulated one, and its reconciliation
+action has something real to resolve. A fault at the rail affects both regions by
+construction, because a payments business cannot route around the money.
+
+## DR-050 (2026-09-01, S3) The harness holds four credentials, not one
+Read-only, remediation, drill and deploy, each refused on any path that does not need
+it: telemetry is readable by all four, actions need remediation, chaos needs drill and
+the deploy endpoint needs deploy. Why: the platform's credential-scope floor is only a
+control if the far end enforces it too; with one shared key the floor would be a policy
+this platform applies to itself. Consequence: a read-only binding attempting a rollback
+is refused twice, and the platform is never given a way to deploy while the pipeline is
+never given a way to read telemetry.
+
+## DR-049 (2026-09-01, S3) run.sh, reset.sh and .gitignore find harnesses by glob
+The launcher iterates `reference-app/*/run.sh` and the ignore rules use
+`reference-app/*/target/`. Why: those three files are core, ground rule 2 forbids the
+reference application's name in core, and `check_clean.sh` caught the first version that
+named it. Consequence: adding a second harness needs no change to any of the three, and
+deleting `reference-app/` leaves all three working - which is the same property rule 7
+asks of demo assets.
+
 ## DR-048 (2026-09-01, S3) The cockpit's types are pinned to the API's response models
 Three tests read `ConnectorHealthOut`, `IngestKeyOut` and `ReadinessOut` field by
 field and require each name in the corresponding `api.ts`. Why: the S2 timeline did

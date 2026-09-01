@@ -303,7 +303,7 @@ requirements:
     area: integrations
     sprint: S3
     priority: must
-    status: planned
+    status: built
     acceptance: >
       The reference harness onboards fully through the UI using only public contracts;
       check_clean.sh stays green.

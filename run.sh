@@ -11,6 +11,23 @@ PY="$ROOT/.venv/Scripts/python.exe"
 started=0
 pids=()
 
+# Reference harnesses are demo data (CLAUDE.md rule 7). Each one owns a run.sh and
+# is started only once it has been built; deleting reference-app/ leaves this
+# script and the product working. Discovered by glob rather than by name, because
+# this file is core and may not name the reference application (rule 2).
+for harness in "$ROOT"/reference-app/*/run.sh; do
+  [ -f "$harness" ] || continue
+  harness_dir="$(dirname "$harness")"
+  if ls "$harness_dir"/target/*.jar >/dev/null 2>&1; then
+    echo "[run] starting reference harness $(basename "$harness_dir")"
+    (cd "$harness_dir" && bash run.sh) &
+    pids+=($!)
+    started=1
+  else
+    echo "[run] reference harness $(basename "$harness_dir"): not built (bash $harness builds and starts it)"
+  fi
+done
+
 if [ -f "$ROOT/signalforge/api/main.py" ]; then
   if [ -f "$ROOT/alembic.ini" ]; then
     echo "[run] applying database migrations"

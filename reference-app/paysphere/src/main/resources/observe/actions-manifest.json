@@ -1,0 +1,159 @@
+{
+  "schema_version": 1,
+  "app": "paysphere",
+  "actions": [
+    {
+      "action_id": "read-config",
+      "name": "Read runtime config",
+      "description": "Return the region's current runtime configuration and its version history. Changes nothing.",
+      "action_class": "diagnostic",
+      "risk": "low",
+      "target": "config-registry",
+      "params_schema": {
+        "type": "object",
+        "required": ["region"],
+        "additionalProperties": false,
+        "properties": {
+          "region": { "type": "string", "enum": ["region-a", "region-b"] }
+        }
+      },
+      "timeout_s": 10,
+      "idempotent": true,
+      "reversible": false,
+      "verification": ["config_version_unchanged"]
+    },
+    {
+      "action_id": "run-reconciliation-job",
+      "name": "Run reconciliation job",
+      "description": "Resolve payments left in UNKNOWN by asking the rail what actually happened, then settle or fail each one.",
+      "action_class": "other",
+      "risk": "medium",
+      "target": "ledger",
+      "params_schema": {
+        "type": "object",
+        "required": ["region"],
+        "additionalProperties": false,
+        "properties": {
+          "region": { "type": "string", "enum": ["region-a", "region-b"] },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 5000 }
+        }
+      },
+      "timeout_s": 120,
+      "idempotent": true,
+      "reversible": false,
+      "verification": ["unknown_payments_zero"]
+    },
+    {
+      "action_id": "rollback-config",
+      "name": "Roll back runtime config",
+      "description": "Re-apply an earlier configuration version to one region. Applying the same target version twice is one change, and the apply is recorded before it is attempted so a timed-out caller can still find out what happened.",
+      "action_class": "rollback",
+      "risk": "high",
+      "target": "config-registry",
+      "params_schema": {
+        "type": "object",
+        "required": ["region", "to_version"],
+        "additionalProperties": false,
+        "properties": {
+          "region": { "type": "string", "enum": ["region-a", "region-b"] },
+          "to_version": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "timeout_s": 60,
+      "idempotent": true,
+      "reversible": false,
+      "preconditions": ["target_version_exists"],
+      "verification": ["config_version_matches_target", "error_rate_recovering"],
+      "approver_roles": ["incident_commander", "tech_lead"]
+    },
+    {
+      "action_id": "failover-route",
+      "name": "Fail the region over to its secondary route",
+      "description": "Move a region's payment traffic onto its secondary fabric route, bypassing the shared fibre span.",
+      "action_class": "traffic_shift",
+      "risk": "high",
+      "target": "fabric",
+      "params_schema": {
+        "type": "object",
+        "required": ["region"],
+        "additionalProperties": false,
+        "properties": {
+          "region": { "type": "string", "enum": ["region-a", "region-b"] }
+        }
+      },
+      "timeout_s": 30,
+      "idempotent": true,
+      "reversible": true,
+      "reverse_action_id": "restore-route",
+      "verification": ["route_is_secondary", "success_ratio_recovering"],
+      "approver_roles": ["incident_commander", "tech_lead"]
+    },
+    {
+      "action_id": "restore-route",
+      "name": "Restore the region's primary route",
+      "description": "Move a region's payment traffic back onto its primary fabric route.",
+      "action_class": "traffic_shift",
+      "risk": "high",
+      "target": "fabric",
+      "params_schema": {
+        "type": "object",
+        "required": ["region"],
+        "additionalProperties": false,
+        "properties": {
+          "region": { "type": "string", "enum": ["region-a", "region-b"] }
+        }
+      },
+      "timeout_s": 30,
+      "idempotent": true,
+      "reversible": true,
+      "reverse_action_id": "failover-route",
+      "verification": ["route_is_primary"],
+      "approver_roles": ["incident_commander", "tech_lead"]
+    },
+    {
+      "action_id": "throttle-traffic",
+      "name": "Throttle inbound payments",
+      "description": "Shed a percentage of inbound payment requests in one region to protect the rail. Customer-visible while it is on, and reversed by the same action with percent 0.",
+      "action_class": "customer_impacting",
+      "risk": "high",
+      "target": "payments",
+      "params_schema": {
+        "type": "object",
+        "required": ["region", "percent"],
+        "additionalProperties": false,
+        "properties": {
+          "region": { "type": "string", "enum": ["region-a", "region-b"] },
+          "percent": { "type": "integer", "minimum": 0, "maximum": 90 }
+        }
+      },
+      "timeout_s": 30,
+      "idempotent": true,
+      "reversible": true,
+      "reverse_action_id": "throttle-traffic",
+      "verification": ["throttle_percent_matches"],
+      "approver_roles": ["incident_commander"]
+    },
+    {
+      "action_id": "restart-gateway",
+      "name": "Restart a regional gateway",
+      "description": "Bounce the region's payment gateway process. In flight payments are lost and land in UNKNOWN. It exists so that the policy floor has something genuinely dangerous to refuse.",
+      "action_class": "restart",
+      "risk": "high",
+      "target": "fabric",
+      "params_schema": {
+        "type": "object",
+        "required": ["region"],
+        "additionalProperties": false,
+        "properties": {
+          "region": { "type": "string", "enum": ["region-a", "region-b"] }
+        }
+      },
+      "timeout_s": 90,
+      "idempotent": false,
+      "reversible": false,
+      "preconditions": ["region_not_already_failed_over"],
+      "verification": ["gateway_link_up"],
+      "approver_roles": ["incident_commander"]
+    }
+  ]
+}

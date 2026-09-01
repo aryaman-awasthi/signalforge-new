@@ -669,3 +669,130 @@ The ingest section lists every credential a sending application holds with its e
 prefix, freshness, counters and last refusal, and offers rotate and revoke. The refusal reason
 is readable here and nowhere else on purpose: the sender gets a bare 401, because a caller that
 could tell "unknown token" from "bad signature" from "clock skew" has an oracle.
+
+## 5. The reference harness: what an onboardable application looks like (REQ-038)
+
+Everything in chapters 1 to 4 is written as though any application can be onboarded through
+the frozen contracts and no code in this platform ever learns which application it is. That is
+a claim, and a claim of that shape is worth exactly as much as the attempt to falsify it. So
+`reference-app/` holds a real second application - a payments system written in Java, with its
+own database, its own configuration repository and its own deployment pipeline - and the whole
+of chapters 1 to 4 is performed against it.
+
+It is demo data, not product (ground rule 7). Deleting `reference-app/` leaves a working
+platform; the only thing lost is the evidence. `scripts/check_clean.sh` fails the build if the
+harness's name ever appears in product code, and it is run by the suite with the harness
+present, so the two facts are asserted together.
+
+### 5.1 What the application has to do, and what it does not
+
+The harness takes no dependency on this platform: no library, no generated client, no shared
+package, no callback registration. A test walks every source file and fails on an `import` that
+names the platform. The coupling in each direction is a wire format and nothing else:
+
+| Direction | What crosses | Frozen in |
+|---|---|---|
+| Platform reads the application | the twelve `/observe/*` paths | `contracts/observe.py` |
+| Application declares its actions | an action manifest document | `schemas/action-manifest.schema.json` |
+| Application declares its faults | a chaos manifest document | `schemas/chaos-manifest.schema.json` |
+| Application's pipeline announces a change | one signed `POST` to an ingest path | `contracts/ingest.py` |
+
+Note what is *not* in that table. The platform is never given a way to deploy, and the pipeline
+is never given a way to read telemetry. The harness issues four separate credentials - read
+only, remediation, drill and deploy - and refuses each on any path that does not need it. That
+is what turns the platform's credential-scope floor from a policy into a control: a read-only
+binding attempting a rollback is refused twice, once here and once at the far end.
+
+### 5.2 What the harness is built to make possible
+
+A harness that always works proves nothing, and one that fails uniformly proves almost as
+little. Three properties were built in because the rest of the product needs them to exist:
+
+**A single-region incident with a healthy control region.** The application runs two regions
+whose routes share only the parts they genuinely must. One region's primary path crosses a
+shared fibre span the other's does not, so damaging that span degrades exactly one region while
+the other keeps serving. Blast radius, corroboration and "should we fail over" are only real
+questions when the answer could have been "no".
+
+**An outcome that is genuinely unknown.** Every route crosses the settlement rail, because a
+payments business cannot route around the thing that moves the money. A payment lost *at* the
+rail is recorded `UNKNOWN`, never `FAILED`: the request reached the point where money moves and
+the answer was lost, so failure would be a guess and a retry would be a second payment. That
+state is what the reconciliation action resolves, and it is why anything the platform says
+about uncertain external state can be demonstrated rather than described.
+
+**A timeout that hides a success.** The application's configuration registry accepts an
+injectable apply delay. With it set, a rollback takes longer than its caller is prepared to
+wait: the caller times out and the change lands anyway. That is not a simulated bug, it is the
+ordinary shape of a distributed change, and it is the only honest way to produce an execution
+whose outcome is genuinely uncertain rather than merely labelled so.
+
+### 5.3 Executions are written before they are attempted
+
+The application's ledger keys its `executions` table on the caller's own idempotency key, and
+the row is inserted *before* the side effect is attempted. Three things follow, and all three
+are what the platform's reconcile-before-retry depends on:
+
+- a caller that timed out can still find out what happened, by asking for its own key;
+- a retry under the same key returns the original execution instead of acting twice;
+- an application killed mid-action leaves a row reading `running` - an honest report of an
+  unknown outcome rather than a missing one.
+
+`GET /observe/actions/executions/{key}` answering 404 therefore means something precise: this
+key never ran. It has to be distinguishable from an execution that ran and failed, and it is.
+
+### 5.4 Manifests are documents, not a scan of the code
+
+The application publishes its actions and its faults as JSON documents that a human wrote and a
+human can review, and it refuses to start if a published action has no implementation or an
+implementation is not published. That is stricter than generating the manifest by annotation
+scan: a generated manifest cannot be wrong, which means it also cannot be reviewed. The suite
+asserts the same agreement without a JVM, so drift fails a test rather than a demo.
+
+Every high-risk action names approver roles, and the suite checks those roles against the frozen
+matrix rather than against plausible-looking names - naming a role that cannot approve makes an
+action unapprovable at exactly the moment it is needed. Every chaos scenario states a blast
+radius, states its abort conditions, is marked simulated, and carries a maximum duration the
+application enforces itself: an injection that outlives it is reverted by the application, so a
+drill that ends badly, a controller that crashes or an operator who goes home does not leave a
+fault behind.
+
+### 5.5 The deployment pipeline
+
+The configuration repository's `deploy.sh` needs `bash`, `curl` and `openssl` and nothing else.
+It applies a release to one region and announces it with a signed POST of a canonical
+`ChangeEvent`. Two behaviours are deliberate.
+
+The `event_id` is *derived* from the release, the region and the status rather than generated.
+Pipelines are re-triggered constantly - a retried job, a re-run stage, an operator making sure -
+and if each re-trigger became another deployment in the timeline, "what changed just before this
+incident" would be answered with noise. The repeat is acknowledged as a duplicate and applied
+once. The application enforces the same rule from its own side: re-applying the same release
+with the same settings reports `changed: false` rather than minting a configuration version
+nobody made.
+
+A failure to announce never fails the deploy. Unreachable platform, refused credential, no
+credential configured at all: the script warns on stderr, applies the change and exits
+successfully saying the deployment went unannounced. Monitoring does not get to gate shipping.
+The one reversal is a failed *apply*, which is announced as `deployment.failed` before the
+script exits non-zero, because an incident opened in the next five minutes is very likely about
+it.
+
+### 5.6 What was proven, and how
+
+The suite starts the built application as a subprocess and onboards it over the network through
+the same routes the wizard's screens call, with no seeds: discover finds the seven observe paths
+and reports each as served-and-guarded; seven connectors bind with three different credential
+scopes; every connection test passes in its own direction; five golden signals map onto the
+application's real metric selectors including a business counter that resolves per region; the
+seven manifest actions import with every high-risk class landing in approval mode and none
+automatable; the application's own topology exports, uploads and - re-exported a moment later
+with a new capture time and the same graph - re-uploads as one version and no second event;
+baselines learn from live traffic with nothing missed; every test passes; and readiness scores
+100 with `ready` true.
+
+The pipeline half is proven the same way. `deploy.sh` runs as a subprocess against a recording
+server, and the bytes and headers it actually sent - not a re-serialisation of them - are
+replayed at the real ingest endpoint. They are accepted; the same run repeated is a duplicate
+that publishes nothing; and a run signed with the wrong secret is refused with a bare 401, with
+the reason on the key row, in the tenant's timeline and in the audit chain.
