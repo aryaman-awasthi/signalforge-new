@@ -230,21 +230,21 @@ def test_an_unassigned_task_says_it_is_unassigned_rather_than_naming_a_guess():
 
 
 @pytest.mark.req("REQ-045")
-def test_the_unbuilt_agent_panels_are_rendered_with_their_reason():
+def test_the_one_unbuilt_panel_says_it_is_unbuilt_and_why():
     """A panel that quietly does not exist is indistinguishable from one that is
-    broken, and the layout an incident commander learns must not move under it
-    when the feature lands.
+    broken, and the layout an incident commander learns must not move under it.
 
-    Updated in S5-T05: three of the four panels Sprint 4 reserved are now filled,
-    which is what the placeholders were for. The two that remain still say which
-    sprint fills them, and both now name Sprint 6 - the sprint that actually
-    does, rather than the one that has just passed.
+    Updated in S6-T06. Sprint 4 reserved four placeholders; Sprint 5 filled
+    three and Sprint 6 filled Next Best Action. Team Chat is the one left, and
+    it is no longer a promise: it says it is not built, says it is not
+    scheduled, and says why - which is a more useful thing to read than a sprint
+    number that has already passed.
     """
     shell = read("features", "warroom", "components", "WarRoomShell.tsx")
-    for title in ("Next Best Action", "Team Chat"):
-        block = shell.split(f'title="{title}"')[1][:400]
-        assert "pending=" in block, f"{title} must say what will fill it"
-        assert "Sprint 6" in block, f"{title} must name the sprint that fills it"
+    block = shell.split('title="Team Chat"')[1][:600]
+    assert "pending=" in block, "an unbuilt panel says so"
+    assert "Not built" in block
+    assert "not scheduled" in block, "and does not promise a sprint that will not do it"
 
 
 @pytest.mark.req("REQ-050", "REQ-053", "REQ-055")

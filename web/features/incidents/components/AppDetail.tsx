@@ -80,6 +80,16 @@ export function AppDetail({ appId }: { appId: string }) {
         >
           Onboarding
         </Link>
+        {/* S6-T06. Beside Onboarding rather than inside it: what this
+            application publishes is a fact the wizard imports, and what the
+            platform will let anyone do with it is a decision somebody makes
+            afterwards and changes again during an incident. */}
+        <Link
+          href={`/apps/${encodeURIComponent(appId)}/policy`}
+          className="rounded-card border border-line px-2.5 py-1 text-xs hover:border-accent hover:text-accent-strong"
+        >
+          Execution policy
+        </Link>
         {incident && (
           <Link
             href={`/incidents/${incident.id}`}

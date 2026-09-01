@@ -10,6 +10,13 @@ import { CopilotPanel } from "@/features/brain/components/CopilotPanel";
 import { GuidancePanel } from "@/features/brain/components/GuidancePanel";
 import { TopologyPanel } from "@/features/brain/components/TopologyPanel";
 import { useBrain } from "@/features/brain/hooks/useBrain";
+import { ApprovalSheet } from "@/features/governance/components/ApprovalSheet";
+import { CommsPanel } from "@/features/governance/components/CommsPanel";
+import { ExecutionLedger } from "@/features/governance/components/ExecutionLedger";
+import { NextBestAction } from "@/features/governance/components/NextBestAction";
+import { PlanDiff } from "@/features/governance/components/PlanDiff";
+import { ValidationPanel } from "@/features/governance/components/ValidationPanel";
+import { useGovernance } from "@/features/governance/hooks/useGovernance";
 import { AckBoard } from "@/features/warroom/components/AckBoard";
 import { LiveBadge } from "@/features/warroom/components/LiveBadge";
 import { BridgePanel } from "@/features/warroom/components/BridgePanel";
@@ -46,6 +53,8 @@ import { getIncident, IncidentDetail } from "@/features/incidents/api";
 export function WarRoomShell({ incidentId }: { incidentId: string }) {
   const { state, reload, connected } = useWarRoom(incidentId);
   const { state: brainState, reload: reloadBrain } = useBrain(incidentId);
+  const { state: governanceState, reload: reloadGovernance } =
+    useGovernance(incidentId);
   const [me, setMe] = useState<{ user_id: string; permissions: string[] } | null>(
     null,
   );
@@ -81,6 +90,16 @@ export function WarRoomShell({ incidentId }: { incidentId: string }) {
     ? room.members.find((member) => member.user_id === me.user_id)
     : undefined;
   const canCommand = Boolean(me?.permissions.includes("declare_incident"));
+  const canApprove = Boolean(me?.permissions.includes("approve_high_risk"));
+  const governance =
+    governanceState.kind === "ready" ? governanceState : null;
+  // Approvals waiting for somebody. Rendered above the grid rather than inside
+  // the Next Best Action panel: an unanswered high-risk approval is the most
+  // time-critical thing on this screen, and it must not be a scroll away.
+  const awaitingApproval =
+    governance?.ledger.executions.filter(
+      (execution) => execution.state === "approval_required",
+    ) ?? [];
   const radius = room.blast_radius;
 
   async function join() {
@@ -331,8 +350,26 @@ export function WarRoomShell({ incidentId }: { incidentId: string }) {
 
         <Panel
           title="Next Best Action"
-          pending="Sprint 6 fills this: a ranked next action with its evidence, its risk class and who must approve it. Until then, high-risk actions can never auto-execute - that floor is already enforced in the domain, not by this panel."
-        />
+          subtitle={
+            governance?.nba
+              ? `${governance.nba.degraded ? "deterministic" : "model-explained"} · policy v${governance.nba.policy_version}`
+              : undefined
+          }
+        >
+          {/* There is no auto-execute control here for any action, at any risk
+              class. A high-risk action's only path is Request approval, and the
+              backend refuses `intent: auto` on the floor whether or not this
+              panel offers it. */}
+          <NextBestAction
+            incidentId={incidentId}
+            nba={governance?.nba ?? null}
+            canCommand={canCommand}
+            onChanged={() => {
+              reloadGovernance();
+              reload();
+            }}
+          />
+        </Panel>
 
         <Panel
           title="AI Copilot"
@@ -350,7 +387,23 @@ export function WarRoomShell({ incidentId }: { incidentId: string }) {
           />
         </Panel>
 
-        <Panel title="Team Chat" pending="Sprint 6 fills this: room chat separate from the bridge transcript, so notes to each other do not become part of the record of what was said on the call." />
+        <Panel title="Team Chat" pending="Not built, and not scheduled. Room chat separate from the bridge transcript was reserved here in Sprint 4 and Sprint 6 did not fill it: the bridge is the record of what was said, and a second channel that is not part of that record is a place decisions go missing. It stays visible rather than removed so the layout an incident commander learned does not move." />
+
+        <Panel
+          title="Response Plan"
+          subtitle={
+            governance?.nba?.plan
+              ? `version ${governance.nba.plan.version}`
+              : undefined
+          }
+        >
+          <PlanDiff
+            incidentId={incidentId}
+            nba={governance?.nba ?? null}
+            canCommand={canCommand}
+            onChanged={reloadGovernance}
+          />
+        </Panel>
 
         <Panel
           title="Live Bridge Transcript"
@@ -393,6 +446,87 @@ export function WarRoomShell({ incidentId }: { incidentId: string }) {
           )}
         </Panel>
       </div>
+
+      {awaitingApproval.length > 0 && (
+        <section aria-label="Approvals" className="space-y-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-muted">
+            Waiting for a person
+          </h2>
+          {awaitingApproval.map((execution) => (
+            <ApprovalSheet
+              key={execution.execution_id}
+              incidentId={incidentId}
+              execution={execution}
+              approval={
+                governance?.ledger.approvals.find(
+                  (approval) =>
+                    approval.execution_id === execution.execution_id &&
+                    approval.state !== "used",
+                ) ?? null
+              }
+              canApprove={canApprove && execution.requested_by !== me?.user_id}
+              onChanged={reloadGovernance}
+            />
+          ))}
+        </section>
+      )}
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        <Panel
+          title="Execution Ledger"
+          subtitle={
+            governance
+              ? `${governance.ledger.executions.length} attempt${governance.ledger.executions.length === 1 ? "" : "s"}`
+              : undefined
+          }
+        >
+          <ExecutionLedger
+            incidentId={incidentId}
+            ledger={governance?.ledger ?? { executions: [], approvals: [] }}
+            canCommand={canCommand}
+            onChanged={() => {
+              reloadGovernance();
+              reload();
+            }}
+          />
+        </Panel>
+
+        <Panel
+          title="Recovery Validation"
+          subtitle={
+            governance?.validation?.latest
+              ? `cycle ${governance.validation.latest.cycle}`
+              : "not validated"
+          }
+        >
+          <ValidationPanel
+            incidentId={incidentId}
+            validation={governance?.validation ?? null}
+            canCommand={canCommand}
+            onChanged={() => {
+              reloadGovernance();
+              reload();
+              reloadBrain();
+            }}
+          />
+        </Panel>
+      </div>
+
+      <Panel
+        title="Communications"
+        subtitle={
+          governance?.comms && governance.comms.contradicted.length > 0
+            ? `${governance.comms.contradicted.length} contradicted`
+            : "nothing sends itself"
+        }
+      >
+        <CommsPanel
+          incidentId={incidentId}
+          comms={governance?.comms ?? null}
+          permissions={me?.permissions ?? []}
+          onChanged={reloadGovernance}
+        />
+      </Panel>
 
       <section aria-label="Acknowledgement board" className="space-y-2">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-muted">
