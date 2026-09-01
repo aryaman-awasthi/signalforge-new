@@ -310,7 +310,7 @@ What the platform believes about an incident and why: a versioned graph of facts
 | POST | `/incidents/{incident_id}/brain/ask` | session | (session only) | Ask the copilot about this incident. |
 | GET | `/incidents/{incident_id}/brain/guidance` | session | (session only) | Similar prior incidents, mistake warnings, contradictions and any content that tried to instruct the assistant. |
 | GET | `/incidents/{incident_id}/brain/nodes/{derived_key:path}` | session | (session only) | Every version of one belief, oldest first. |
-| POST | `/incidents/{incident_id}/brain/refresh` | session | (session only) | Run a reasoning pass now. |
+| POST | `/incidents/{incident_id}/brain/refresh` | session | `declare_incident` | Run a reasoning pass now. |
 | GET | `/incidents/{incident_id}/brain/topology` | session | (session only) | The dependency map, what changed, and the impact split. |
 
 ### `platform`

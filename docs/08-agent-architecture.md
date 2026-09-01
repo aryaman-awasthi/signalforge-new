@@ -405,24 +405,36 @@ revoked key still looks "configured".
   the brain**, unlike the dispatcher and the escalation sweep: nothing about
   incident reasoning is a platform-wide work list, and one would be the shortest
   path from one customer's incident into another's brain.
-- **RBAC.** The brain routes carry no permission, on the same reasoning
+- **RBAC.** The brain **reads** carry no permission, on the same reasoning
   `GET /incidents/{id}/war-room` carries none (DR-071): `ROLE_PERMISSIONS[SME]` is
-  empty, and the SME is who gets paged.
+  empty, and the SME is who gets paged. `POST .../brain/ask` joins them, exempt
+  from the API-surface census under a **second, named justification** rather than
+  being quietly added to the self-scoped list: the war room's four unpermissioned
+  writes are exempt because they act only on the caller, and `ask` is exempt
+  because **it writes no state at all** (`STATE_FREE_WRITES` in
+  `tests/security/test_warroom_boundary.py`). That category carries its own test
+  obligation: a member holding no permission may ask, the incident's state,
+  severity, closure and transition count *and the graph itself* are unchanged
+  afterwards, and a second tenant gets a 404. A route that is neither
+  self-scoped nor state-free fails the build.
 
-  The two POSTs are exempt from the API-surface census under a **second, named
-  justification** rather than being quietly added to the self-scoped list. The
-  war room's four unpermissioned writes are exempt because they act only on the
-  caller; these two are exempt because **they change no incident state at all**
-  (`STATE_FREE_WRITES` in `tests/security/test_warroom_boundary.py`). The
-  category carries its own test obligation: a member holding no permission may
-  use both, the incident's state, severity, closure and transition count are
-  unchanged afterwards, and a second tenant gets a 404 from each. A route that
-  is neither self-scoped nor state-free fails the build.
+  **`POST .../brain/refresh` carries `declare_incident`** (DR-101). It was
+  briefly in the state-free category and did not belong there: a pass writes
+  graph nodes and versions, edges, evidence, hypotheses, confidence history,
+  snapshots and agent-run records, and spends the incident's token budget.
+  Forming a belief about a live incident and recording it permanently is
+  incident command work, and `declare_incident` is the frozen matrix's existing
+  name for that authority - no new permission was minted and the matrix is
+  untouched. The guard is `require_incident`, so it runs before the pass: a
+  denied call writes nothing, spends nothing and reaches no gateway.
 
   `POST .../refresh` returns 404 for an incident the caller cannot see rather
-  than a 200 saying "no such incident" - a route answers about an incident it
-  cannot show the way every other incident read does, even though the governor
-  underneath treats "not mine to reason about" as a normal background outcome.
+  than a 200 saying "no such incident" - and rather than a 403, which would
+  confirm the id. The incident is resolved inside the caller's own tenant before
+  the permission is evaluated, so a commander of another tenant, who does hold
+  `declare_incident`, gets the same answer an incident that does not exist
+  returns. The governor underneath still treats "not mine to reason about" as a
+  normal background outcome; a route may not.
 - **The policy floor is untouched.** Nothing here can execute, approve, page,
   send, or change a severity or a lifecycle state. Those remain human-only
   (CTL-HUM-04, FLOOR) and gateway-mediated from S6.

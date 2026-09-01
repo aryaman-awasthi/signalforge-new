@@ -46,7 +46,7 @@ NO_CREDENTIAL = {
 
 # A session with no permission may read what every member of a tenant may read.
 # The writes it may do are the ones a permission could not correctly guard, and
-# there are five.
+# there are seven.
 #
 # Ending your own session is the original: there is nobody else's session in the
 # request, so there is nothing for a permission to protect.
@@ -78,27 +78,26 @@ SESSION_ONLY_WRITES = {
     ("post", "/incidents/{incident_id}/war-room/join"),
     ("post", "/incidents/{incident_id}/bridge"),
     ("post", "/incidents/{incident_id}/tasks/{task_id}/done"),
-    # S5-T03. Two POSTs that write no incident state at all, added here
-    # deliberately rather than given a permission, because a permission would
-    # lock the SME - who holds none in the frozen matrix - out of the reasoning
-    # panels a paged expert most needs.
-    #
-    # `ask` reads one incident's graph in the caller's own tenant, asks a model
+    # The seventh is `POST /incidents/{id}/brain/ask` (S5-T03), and it is here
+    # for the third distinct reason on this list: it **writes no state at all**.
+    # It reads one incident's graph in the caller's own tenant, asks a model
     # about it, and returns an answer. It holds no invoker, no tool gateway and
-    # no write path, which is a stronger control than a permission: there is
-    # nothing for an answer - or an injected instruction inside one - to reach.
-    # It is a POST because it carries a question body and must not be cached,
-    # not because it mutates anything. It does write an audit entry, because
-    # "the assistant told me the pool was fine" is a sentence somebody will say
-    # at a review.
+    # no write path, which is a stronger control than a permission would be:
+    # there is nothing for an answer - or an injected instruction inside one - to
+    # reach. It is a POST because it carries a question body and must not be
+    # cached, not because it mutates anything. It does write an audit entry,
+    # because "the assistant told me the pool was fine" is a sentence somebody
+    # will say at a review.
     #
-    # `refresh` runs a reasoning pass the bus would have run on the next event
-    # anyway. It is idempotent - a pass against an unchanged world writes no new
-    # version - and doubly budgeted, by the per-hypothesis query budget and by
-    # the per-incident token ledger, which is the control that matters for a
-    # route that costs money.
+    # Its sibling `POST .../brain/refresh` is deliberately *not* here. It was,
+    # briefly, on the same justification; that was wrong and is corrected in
+    # DR-101. A refresh writes graph nodes and new versions, edges, evidence,
+    # hypotheses, confidence history, situation snapshots and agent-run records,
+    # and spends the incident's token budget. Persistent brain state is state.
+    # It now carries `declare_incident` - the frozen matrix's existing name for
+    # incident command authority - and is asserted in both directions in
+    # tests/security/test_brain_boundary.py.
     ("post", "/incidents/{incident_id}/brain/ask"),
-    ("post", "/incidents/{incident_id}/brain/refresh"),
 }
 
 WRITE_METHODS = {"post", "put", "patch", "delete"}

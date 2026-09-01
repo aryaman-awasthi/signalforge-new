@@ -1922,6 +1922,13 @@ The sparkline is fixed to the full range rather than scaled to the data: an
 auto-scaled one would make a wobble between 61% and 63% look identical to a
 collapse from 65% to 32%.
 
+Everyone in the tenant reads this panel; only incident command runs a pass.
+"Re-reason now" writes the platform's beliefs about a live incident, so it
+carries `declare_incident` (DR-101) and the button is hidden from anyone who does
+not hold it, with the panel saying who does. A control that exists and always
+answers 403 teaches a room that the product is broken; the pass still happens for
+everyone, on the next event that wakes the brain.
+
 **S13 - Affected Services.** A layered dependency graph laid out by hops from a
 confirmed fault, two impact lists under two legends, a version switcher over the
 kept maps, and a changed-since line.

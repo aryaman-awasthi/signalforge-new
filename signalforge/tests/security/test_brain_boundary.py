@@ -18,6 +18,12 @@ new attack surfaces:
   answer. The floor is that every citation must resolve to a node retrieval
   actually returned, and an answer that fails is discarded rather than
   annotated.
+
+And a third, added when the first classification of the brain's two POSTs turned
+out to be wrong: **who may cause the platform to reason authoritatively**. A
+refresh writes persistent brain state, so it is command work and carries
+`declare_incident`, while reading the brain and asking a grounded question stay
+open to every member of the tenant.
 """
 
 from __future__ import annotations
@@ -26,6 +32,24 @@ import inspect
 from datetime import datetime, timezone
 
 import pytest
+
+from signalforge.domain.llm.budget import budget_key
+from signalforge.tests.brain.conftest import (  # noqa: F401  (fixtures)
+    api_with_model,
+    gateway,
+)
+from signalforge.tests.brain.conftest import (
+    ask,
+    brain,
+    commander,
+    declare,
+    onboard,
+    owner,
+    read_incident,
+    refresh,
+    responder,
+    wire_paging,
+)
 
 from signalforge.application.brain.agents import copilot as copilot_module
 from signalforge.application.brain.agents.copilot import CopilotAgent
@@ -220,6 +244,178 @@ def test_no_brain_port_offers_a_cross_tenant_read():
                 f"{name}.{method} does not take a tenant_id; every read and write "
                 "in the brain is tenant-scoped"
             )
+
+
+# --- authorization: who may cause an authoritative reasoning pass ---------------
+#
+# Written failing-first, and written because the first answer was wrong.
+#
+# `POST .../brain/refresh` was shipped carrying no permission, justified as a
+# "state-free write" on the reasoning that it changes no *incident* state - no
+# declaration, no severity, no closure. That reasoning does not survive being
+# read carefully: a pass writes graph nodes and new versions, evidence, edges,
+# hypotheses, confidence-history rows, situation snapshots, historical guidance
+# and agent-run records, and it spends the incident's token budget. It is not
+# state-free; it is the act of the platform forming a belief about an incident,
+# recorded permanently, and that is command work.
+#
+# The guard is `declare_incident`, which is the frozen matrix's existing name for
+# incident command authority and is already what pages, escalations and task
+# assignment carry. No new permission was minted and the role matrix is untouched
+# (CLAUDE.md rule 3): incident commanders and tech leads hold it, and nobody else
+# does.
+#
+# Reading stays open. `GET /brain`, `/brain/topology`, `/brain/guidance`,
+# `/brain/nodes/{key}` and `POST /brain/ask` still carry no permission, because
+# `ROLE_PERMISSIONS[Role.SME]` is empty and a brain the paged expert cannot open
+# has failed at its only job. `ask` retrieves from what is already stored,
+# grounds every citation in it, and writes no brain state.
+
+
+@pytest.mark.req("REQ-012", "REQ-050", "REQ-052")
+async def test_only_incident_command_may_cause_a_reasoning_pass(api):
+    """Both directions, on one incident.
+
+    The SME reads everything and may ask - that is what the panel is for - and
+    cannot cause the platform to reason. The org owner cannot either: `manage_org`
+    is org administration, not incident command, and the difference matters most
+    for exactly the person who holds the most.
+    """
+    owner_token, _tenant = owner(api)
+    onboard(api, owner_token)
+    wire_paging(api, owner_token)
+    ic = commander(api, owner_token)
+    ic_token = ic["tokens"]["access_token"]
+    sme = responder(api, owner_token, email="sme@acme.io")
+    sme_token = sme["tokens"]["access_token"]
+    incident = declare(api, ic_token, severity="P0")
+
+    assert brain(api, sme_token, incident["id"])["incident_id"] == incident["id"]
+    assert ask(api, sme_token, incident["id"], "what do we know?")["verdict"]
+
+    refresh(api, sme_token, incident["id"], expect=403)
+    refresh(api, owner_token, incident["id"], expect=403)
+
+    assert refresh(api, ic_token, incident["id"])["ran"]
+
+
+@pytest.mark.req("REQ-012", "REQ-050", "REQ-053")
+async def test_a_denied_refresh_writes_no_brain_state_and_spends_no_budget(
+    api_with_model, gateway
+):
+    """The obligation the permission takes on.
+
+    A 403 that had already run the pass would be a permission in the response
+    code only. Asserted against a *credentialled* provider - over a mock socket,
+    never the network - so that "no tokens were spent" is a measurement rather
+    than a consequence of there being no model to spend them on: the authorized
+    pass moves the meter first, and the denied one must not move it again.
+    """
+    api = api_with_model
+    gateway.queue(
+        "hypothesis-narrative",
+        {"narratives": [{"key": "hypothesis:saturation", "narrative": "measured."}]},
+    )
+    owner_token, _tenant = owner(api)
+    onboard(api, owner_token)
+    wire_paging(api, owner_token)
+    ic = commander(api, owner_token)
+    ic_token = ic["tokens"]["access_token"]
+    sme = responder(api, owner_token, email="sme@acme.io")
+    sme_token = sme["tokens"]["access_token"]
+    incident = declare(api, ic_token, severity="P0")
+
+    # Command runs one pass, so every counter below is non-trivially non-zero.
+    refresh(api, ic_token, incident["id"])
+    before = brain(api, ic_token, incident["id"])
+    lane = budget_key(incident["id"])
+    spent = api.container.token_ledger.spent(lane).total
+    calls = len(gateway.calls)
+    assert before["nodes"] and before["runs"], "the pass must have written something"
+    assert spent > 0 and calls > 0, "and must have reached the gateway"
+
+    refresh(api, sme_token, incident["id"], expect=403)
+    refresh(api, owner_token, incident["id"], expect=403)
+
+    after = brain(api, ic_token, incident["id"])
+    for field in ("nodes", "edges", "hypotheses", "snapshots", "runs"):
+        assert len(after[field]) == len(before[field]), (
+            f"a denied refresh added {field}; the guard runs before the pass, or "
+            "it is not a guard"
+        )
+    assert after["counts"] == before["counts"]
+    assert [card["confidence"] for card in after["hypotheses"]] == [
+        card["confidence"] for card in before["hypotheses"]
+    ], "a denied refresh moved a confidence"
+    assert api.container.token_ledger.spent(lane).total == spent, (
+        "a denied refresh spent the incident's token budget"
+    )
+    assert len(gateway.calls) == calls, "a denied refresh reached the model gateway"
+
+
+@pytest.mark.req("REQ-013", "REQ-050")
+async def test_another_tenants_refresh_is_not_found_rather_than_forbidden(api):
+    """Tenant isolation outranks the permission, and answers first.
+
+    A commander of another tenant holds `declare_incident` in their own tenant,
+    so a permission check alone would let them past. The incident is resolved
+    inside the caller's own tenant *before* the permission is evaluated, so what
+    comes back is the same 404 an incident that does not exist returns - and the
+    guard never learns enough to say "forbidden", which would itself confirm the
+    id.
+    """
+    owner_a, _tenant_a = owner(api)
+    onboard(api, owner_a)
+    wire_paging(api, owner_a)
+    ic_a = commander(api, owner_a)
+    incident = declare(api, ic_a["tokens"]["access_token"], severity="P0")
+
+    signed = api.client.post(
+        "/auth/signup",
+        json={
+            "org_name": "Other Corp",
+            "email": "other@other.io",
+            "password": "another-strong-password",
+            "display_name": "Other",
+        },
+    )
+    assert signed.status_code == 201, signed.text
+    owner_b = signed.json()["tokens"]["access_token"]
+    ic_b = commander(api, owner_b, email="ic@other.io")
+    token_b = ic_b["tokens"]["access_token"]
+
+    refresh(api, token_b, incident["id"], expect=404)
+    ask(api, token_b, incident["id"], "what do we know?", expect=404)
+    brain(api, token_b, incident["id"], expect=404)
+
+    # And nothing about A's incident moved.
+    mine = brain(api, ic_a["tokens"]["access_token"], incident["id"])
+    assert mine["incident_id"] == incident["id"]
+
+
+@pytest.mark.req("REQ-012", "REQ-050")
+async def test_an_authorized_pass_still_cannot_touch_the_incident_itself(api):
+    """The permission answers "who may reason", not "what reasoning may do".
+
+    `declare_incident` on this route buys a pass, and a pass remains unable to
+    declare, re-grade or close anything - the floor that keeps a model's output a
+    recommendation (CTL-HUM-04).
+    """
+    owner_token, _tenant = owner(api)
+    onboard(api, owner_token)
+    wire_paging(api, owner_token)
+    ic = commander(api, owner_token)
+    ic_token = ic["tokens"]["access_token"]
+    incident = declare(api, ic_token, severity="P1")
+
+    before = read_incident(api, ic_token, incident["id"])
+    refresh(api, ic_token, incident["id"])
+    after = read_incident(api, ic_token, incident["id"])
+
+    assert after["state"] == before["state"]
+    assert after["severity"] == before["severity"]
+    assert after["closed_at"] == before["closed_at"]
+    assert len(after["transitions"]) == len(before["transitions"])
 
 
 # --- the prompt-injection floor -------------------------------------------------

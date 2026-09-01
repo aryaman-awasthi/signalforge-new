@@ -1,7 +1,7 @@
 """The Incident Brain surface (S5-T05, REQ-050, REQ-053, REQ-055).
 
-Every route here is scoped to one incident in the caller's own tenant and none
-carries a permission, on exactly the reasoning `GET /incidents/{id}/war-room`
+Every route here is scoped to one incident in the caller's own tenant. The reads
+carry no permission, on exactly the reasoning `GET /incidents/{id}/war-room`
 carries none (DR-071): `ROLE_PERMISSIONS[Role.SME]` is empty, and the SME is the
 person most likely to be paged and most likely to need the reasoning. A brain
 the paged expert cannot open has failed at its only job.
@@ -13,22 +13,32 @@ the paged expert cannot open has failed at its only job.
     GET  /incidents/{id}/brain/topology          tenant-scoped read
     GET  /incidents/{id}/brain/guidance          tenant-scoped read
     POST /incidents/{id}/brain/ask               tenant-scoped, no tools
-    POST /incidents/{id}/brain/refresh           tenant-scoped, budgeted
+    POST /incidents/{id}/brain/refresh           declare_incident, budgeted
 
-The two POSTs deserve their own sentence, because a POST that carries no
-permission usually deserves suspicion.
+The two POSTs deserve their own sentences, because they are guarded differently
+and the difference is the whole authorization decision on this surface.
 
-`ask` writes no incident state. It reads one incident's graph, asks a model a
+`ask` writes no state at all. It reads one incident's graph, asks a model a
 question about it, and returns an answer whose citations must resolve to nodes
 that retrieval produced. It holds no tool, no invoker and no write path, so
 there is nothing for an injected instruction to reach - a structural control
 rather than a filter. It does write an audit entry, because "the assistant told
-me the pool was fine" is a sentence somebody will say at a review.
+me the pool was fine" is a sentence somebody will say at a review. So it stays
+open to every member of the tenant, like the reads.
 
-`refresh` runs a reasoning pass that would have run anyway when the bus woke it.
-It is idempotent - a pass against an unchanged world writes no new version - and
-it spends against the incident's own token budget, which is the control that
-matters for a route that costs money.
+`refresh` is command work and carries `declare_incident` (DR-101). It writes
+persistent brain state - graph nodes and new versions, edges, evidence,
+hypotheses, confidence history, situation snapshots, agent-run records - and
+spends the incident's token budget, so calling it "state-free" was wrong: it is
+the act of the platform forming a belief about an incident, on the record. The
+permission is the frozen matrix's existing name for incident command authority,
+already carried by pages, escalations and task assignment; no new permission was
+minted and the role matrix is untouched.
+
+The guard is `require_incident`, so the incident is resolved inside the caller's
+own tenant *before* the permission is evaluated: another tenant's incident is a
+404 rather than a 403, and a denial happens before any pass runs, so a refused
+call writes nothing and spends nothing.
 """
 
 from __future__ import annotations
@@ -38,6 +48,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 
 from signalforge.api import deps
+from signalforge.contracts.roles import Permission
 from signalforge.api.schemas.brain import (
     AnswerOut,
     AskIn,
@@ -146,12 +157,18 @@ async def ask_copilot(
 @router.post("/incidents/{incident_id}/brain/refresh", response_model=RefreshOut)
 async def refresh_brain(
     incident_id: str,
-    principal: Principal = Depends(deps.get_principal),
+    principal: Principal = Depends(
+        deps.require_incident(Permission.DECLARE_INCIDENT)
+    ),
     container: deps.Container = Depends(deps.get_container),
 ):
-    """Run a reasoning pass now.
+    """Run a reasoning pass now. Incident command only.
 
-    Idempotent and budgeted: a pass against an unchanged world writes nothing,
-    and every model call inside it spends against this incident's token budget.
+    Idempotent and budgeted: a pass against an unchanged world writes no new
+    version, and every model call inside it spends against this incident's token
+    budget. Both still matter - they bound what a *permitted* caller can spend -
+    but neither is why the route is guarded. It is guarded because the pass
+    writes the platform's beliefs about a live incident, and a belief the
+    platform records is command work.
     """
     return refresh_out(await container.brain.refresh(principal, incident_id))

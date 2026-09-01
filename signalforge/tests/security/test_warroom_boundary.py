@@ -60,6 +60,12 @@ WRITE_ROUTES = {
     ),
     ("POST", "/incidents/{incident_id}/tasks"): Permission.DECLARE_INCIDENT,
     ("PATCH", "/incidents/{incident_id}/tasks/{task_id}"): Permission.DECLARE_INCIDENT,
+    # S5, corrected in DR-101. A reasoning pass writes the platform's beliefs
+    # about a live incident - graph versions, evidence, hypotheses, confidence
+    # history, snapshots, agent runs - and spends the incident's token budget.
+    # That is incident command work and it carries the same permission the rest
+    # of command does. Both directions are asserted in test_brain_boundary.py.
+    ("POST", "/incidents/{incident_id}/brain/refresh"): Permission.DECLARE_INCIDENT,
 }
 
 SELF_SCOPED_WRITES = {
@@ -73,21 +79,27 @@ deciding, in this file, that it is genuinely self-scoped."""
 
 STATE_FREE_WRITES = {
     ("POST", "/incidents/{incident_id}/brain/ask"),
-    ("POST", "/incidents/{incident_id}/brain/refresh"),
 }
 """The other reason an incident write may carry no permission (S5-T03).
 
-These two are not self-scoped - there is no "yourself" in them - and they do not
-need to be, because **they change no incident state at all**. `ask` reads one
-incident's graph and returns an answer; `refresh` recomputes reasoning the bus
-would have recomputed on the next event. Neither can declare, re-grade, close,
-page, approve, execute or send, and neither holds a path to anything that can.
+`ask` is not self-scoped - there is no "yourself" in it - and does not need to
+be, because it **writes no state at all**. It reads one incident's graph and
+returns an answer grounded in what is already there. It cannot declare, re-grade,
+close, page, approve, execute or send, and holds no path to anything that can.
 
-They are POSTs because one carries a question body and must not be cached and
-the other costs tokens - not because either mutates the incident. Both are
-tenant-scoped by the repositories they read through, which the tests below
-assert in the same direction as the self-scoped four: somebody holding every
-permission in the matrix still cannot reach another tenant's incident."""
+It is a POST because it carries a question body and must not be cached, not
+because it mutates anything. It is tenant-scoped by the repositories it reads
+through, which the test below asserts in the same direction as the self-scoped
+four: somebody holding every permission in the matrix still cannot reach another
+tenant's incident.
+
+`POST .../brain/refresh` sat here too, and should not have. Writing no *incident
+lifecycle* state is not the same as writing no state: a pass writes graph nodes
+and versions, edges, evidence, hypotheses, confidence history, snapshots and
+agent-run records, and spends the incident's token budget. It moved to
+`WRITE_ROUTES` above under `declare_incident` (DR-101). The category kept its
+meaning by losing the member that did not fit it, which is what a closed list is
+for."""
 
 READ_ROUTES = {
     ("GET", "/incidents/{incident_id}/war-room"),
@@ -150,8 +162,8 @@ async def test_the_unpermissioned_write_exemption_is_justified_route_by_route(ap
 
     - `SELF_SCOPED_WRITES` - it acts only on the caller, and the entity refuses
       everyone else. Tested in both directions below.
-    - `STATE_FREE_WRITES` - it changes no incident state at all. Tested below for
-      tenant scoping and for leaving the incident untouched.
+    - `STATE_FREE_WRITES` - it writes no state at all, incident or brain.
+      Tested below for tenant scoping and for leaving both untouched.
 
     Without this join, an unpermissioned write could be added to the exemption
     and quietly become a route every member of every tenant may perform on
@@ -178,12 +190,17 @@ async def test_the_state_free_writes_change_no_incident_state_and_cross_no_tenan
     """The obligation `STATE_FREE_WRITES` takes on.
 
     Written failing-first for the two categories that matter here: tenant
-    isolation, and the claim that these routes are exempt from a permission
-    *because* they mutate nothing. If either stopped being true, an unguarded
+    isolation, and the claim that this route is exempt from a permission
+    *because* it mutates nothing. If either stopped being true, an unguarded
     POST would have become a way for any member of any tenant to change an
     incident.
+
+    "Mutates nothing" is asserted against the brain as well as the incident,
+    which is the check that would have caught `refresh` being put in this
+    category: the graph an SME asks a question of must look identical
+    afterwards.
     """
-    from signalforge.tests.brain.conftest import ask, refresh
+    from signalforge.tests.brain.conftest import ask, brain, refresh
     from signalforge.tests.incidents.conftest import read_incident
 
     owner_token, _tenant = owner(api)
@@ -194,11 +211,13 @@ async def test_the_state_free_writes_change_no_incident_state_and_cross_no_tenan
     sme = responder(api, owner_token, email="sme@acme.io")
     sme_token = sme["tokens"]["access_token"]
     incident = declare(api, ic_token, severity="P0")
+    # A pass has run, so there is a graph for a question to change if it could.
+    refresh(api, ic_token, incident["id"])
 
     before = read_incident(api, ic_token, incident["id"])
+    brain_before = brain(api, ic_token, incident["id"])
 
-    # The SME - holding no permission at all - may use both, which is the point.
-    refresh(api, sme_token, incident["id"])
+    # The SME - holding no permission at all - may ask, which is the point.
     answer = ask(api, sme_token, incident["id"], "what do we know?")
     assert answer["verdict"] in (
         "grounded",
@@ -206,14 +225,24 @@ async def test_the_state_free_writes_change_no_incident_state_and_cross_no_tenan
         "ungrounded",
         "degraded",
     )
+    # And may not cause a reasoning pass: that is command work (DR-101).
+    refresh(api, sme_token, incident["id"], expect=403)
 
-    # And the incident is untouched: same state, same severity, same closure,
-    # and no transition was added.
+    # The incident is untouched: same state, same severity, same closure, and no
+    # transition was added.
     after = read_incident(api, ic_token, incident["id"])
     assert after["state"] == before["state"]
     assert after["severity"] == before["severity"]
     assert after["closed_at"] == before["closed_at"]
     assert len(after["transitions"]) == len(before["transitions"])
+
+    # So is the brain, which is the state this category was too loose about.
+    brain_after = brain(api, ic_token, incident["id"])
+    assert brain_after["counts"] == brain_before["counts"]
+    for field in ("nodes", "edges", "hypotheses", "snapshots", "runs"):
+        assert len(brain_after[field]) == len(brain_before[field]), (
+            f"a state-free write added {field}"
+        )
 
     # A second tenant cannot reach this incident through either route. The
     # boundary is the repository, so both answer the way a read of nothing does.

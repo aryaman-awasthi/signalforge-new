@@ -6,6 +6,29 @@ graph" section at the bottom is the authored pre-build decision record
 (signalforge-memory-graph.md, provided and imported 2026-09-01) - every N-line there
 is treated as already decided.
 
+## DR-101 (2026-09-01, S5) A reasoning pass is incident command work, not a state-free write
+`POST /incidents/{id}/brain/refresh` now carries `Permission.DECLARE_INCIDENT` via
+`deps.require_incident`. It shipped carrying no permission, exempted from the API-surface census
+under a category named `STATE_FREE_WRITES` on the reasoning that it changes no *incident* state - no
+declaration, no severity, no closure. That reasoning does not survive being read carefully. A pass
+writes graph nodes and new versions, edges, evidence, hypotheses, confidence-history rows, situation
+snapshots, historical guidance and agent-run records, and spends the incident's token budget:
+persistent brain state is state, and forming a belief about a live incident and recording it
+permanently is exactly the authority the frozen matrix already calls `declare_incident`. Why that
+permission rather than a new one: CLAUDE.md rule 3 freezes the roles matrix, `declare_incident` is
+already the name for incident command authority (pages, escalations, task assignment carry it), and
+minting a permission for one Sprint 5 route would have changed a frozen contract to say something
+the matrix already said. Why `require_incident` rather than `require`: it resolves the incident
+inside the caller's own tenant *before* evaluating the permission, so another tenant's incident is a
+404 rather than a 403 that would confirm the id, and per-app role bindings apply. Consequence: the
+reads stay open - `GET /brain`, `/topology`, `/guidance`, `/nodes/{key}` and `POST /brain/ask` carry
+no permission, because `ROLE_PERMISSIONS[SME]` is empty and a brain the paged expert cannot open has
+failed at its only job - while an SME can no longer cause the platform to reason authoritatively.
+The guard runs before the pass, so a denied call writes nothing and reaches no gateway, asserted
+against a credentialled provider over a mock socket rather than against the absence of one.
+`STATE_FREE_WRITES` keeps its meaning by losing the member that did not fit it, and the cockpit
+hides the button rather than offering one that can only answer 403.
+
 ## DR-100 (2026-09-01, S5-T03) The Incident Governor is written in-house rather than on LangGraph
 `application/brain/governor.py` is a two-phase orchestrator of ~350 lines with an explicit agent
 roster, an in-process wake set and a scheduled drain. The sprint plan and N11 both name LangGraph.

@@ -18,14 +18,23 @@ import { BrainState } from "@/features/brain/hooks/useBrain";
  * what still works rather than only what does not. "The model is unavailable" on
  * its own reads as "this panel is broken"; the useful sentence is that the
  * evidence, the confidences and the history below were all computed without one.
+ *
+ * Everything here is readable by everyone in the tenant. Running a pass is not:
+ * it writes the platform's beliefs about a live incident, so it carries
+ * `declare_incident` on the API (DR-101). The button is hidden rather than shown
+ * and refused - a control that only answers 403 teaches people the product is
+ * broken - and the panel says who can, so a paged SME knows what to ask for
+ * rather than wondering where the button went.
  */
 export function BrainPanel({
   incidentId,
   state,
+  canRefresh,
   onRefreshed,
 }: {
   incidentId: string;
   state: BrainState;
+  canRefresh: boolean;
   onRefreshed: () => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -79,22 +88,29 @@ export function BrainPanel({
           confidence is computed from weighted evidence, never written by a model
         </span>
         <span className="flex-1" />
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void think()}
-          className="rounded-card border border-line px-2 py-1 text-[11px] hover:border-accent hover:text-accent-strong disabled:opacity-60"
-        >
-          {busy ? "thinking…" : "re-reason now"}
-        </button>
+        {canRefresh ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void think()}
+            className="rounded-card border border-line px-2 py-1 text-[11px] hover:border-accent hover:text-accent-strong disabled:opacity-60"
+          >
+            {busy ? "thinking…" : "re-reason now"}
+          </button>
+        ) : (
+          <span className="text-[11px] text-ink-muted">
+            incident command runs the reasoning
+          </span>
+        )}
       </div>
 
       {error && <p className="text-[11px] text-danger">{error}</p>}
 
       {brain.hypotheses.length === 0 ? (
         <p className="text-xs text-ink-muted">
-          No hypothesis has been raised yet. Press “re-reason now”, or wait for
-          the next event to wake the brain.
+          No hypothesis has been raised yet.{" "}
+          {canRefresh ? "Press “re-reason now”, or wait" : "Waiting"} for the
+          next event to wake the brain.
         </p>
       ) : (
         <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">

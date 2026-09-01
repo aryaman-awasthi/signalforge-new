@@ -165,6 +165,7 @@ export function WarRoomShell({ incidentId }: { incidentId: string }) {
         <BrainPanel
           incidentId={incidentId}
           state={brainState}
+          canRefresh={canCommand}
           onRefreshed={() => {
             reloadBrain();
             reload();

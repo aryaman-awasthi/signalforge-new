@@ -13954,7 +13954,7 @@
     },
     "/incidents/{incident_id}/brain/refresh": {
       "post": {
-        "description": "Run a reasoning pass now.\n\nIdempotent and budgeted: a pass against an unchanged world writes nothing,\nand every model call inside it spends against this incident's token budget.",
+        "description": "Run a reasoning pass now. Incident command only.\n\nIdempotent and budgeted: a pass against an unchanged world writes no new\nversion, and every model call inside it spends against this incident's token\nbudget. Both still matter - they bound what a *permitted* caller can spend -\nbut neither is why the route is guarded. It is guarded because the pass\nwrites the platform's beliefs about a live incident, and a belief the\nplatform records is command work.",
         "operationId": "refresh_brain_incidents__incident_id__brain_refresh_post",
         "parameters": [
           {
@@ -13998,7 +13998,9 @@
         "tags": [
           "incident-brain"
         ],
-        "x-signalforge-auth": "session"
+        "x-signalforge-app-scope": "incident",
+        "x-signalforge-auth": "session",
+        "x-signalforge-permission": "declare_incident"
       }
     },
     "/incidents/{incident_id}/brain/topology": {

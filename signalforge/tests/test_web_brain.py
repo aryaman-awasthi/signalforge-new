@@ -205,3 +205,29 @@ def test_the_degraded_state_says_what_still_works():
     assert "AI degraded" in panel
     assert "Everything below was still computed" in panel
     assert "confidences are arithmetic" in panel
+
+
+@pytest.mark.req("REQ-012", "REQ-050")
+def test_the_reasoning_button_is_hidden_from_people_who_may_not_press_it():
+    """The screen agrees with the guard (DR-101).
+
+    `POST .../brain/refresh` carries `declare_incident`, so a button offered to
+    an SME could only ever answer 403 - and a control that exists and always
+    refuses teaches people the product is broken. It is hidden, and the panel
+    says who does it instead, so a paged expert knows what to ask for.
+
+    The permission is read from the session the same way the rest of the war
+    room reads it; the cockpit decides nothing about authority on its own.
+    """
+    panel = read("features", "brain", "components", "BrainPanel.tsx")
+    shell = read("features", "warroom", "components", "WarRoomShell.tsx")
+
+    assert "canRefresh" in panel, "the panel must be told whether to offer it"
+    assert "canRefresh ? (" in panel, "hidden rather than disabled-and-refusing"
+    assert "incident command runs the reasoning" in panel, (
+        "and it must say who can, not just remove the button"
+    )
+    assert "canRefresh={canCommand}" in shell
+    assert 'me?.permissions.includes("declare_incident")' in shell, (
+        "the answer comes from the session's own permissions"
+    )

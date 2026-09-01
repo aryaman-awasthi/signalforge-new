@@ -151,6 +151,39 @@ Goal: the reasoning core with explainable, versioned intelligence and LLM discip
   "relevance movement" S14 is specified to show would always have read as zero. The
   agent's memory is now the graph itself, read back each pass.
 
+- **A fourth defect, found by review after the sprint's own verification had passed, in
+  the authorization of `POST .../brain/refresh`** (DR-101). It shipped carrying no
+  permission, exempted from the API-surface census under a category this sprint invented
+  for it - `STATE_FREE_WRITES`, "changes no incident state at all". The category is
+  sound; the membership was not. A pass writes graph nodes and new versions, edges,
+  evidence, hypotheses, confidence-history rows, situation snapshots, historical guidance
+  and agent-run records, and spends the incident's token budget. Writing no *incident
+  lifecycle* state is not the same as writing no state, and the sentence that made the
+  exemption read as reasonable ("it recomputes what the bus would have recomputed
+  anyway") is an argument about *timing*, not about authority.
+
+  The route now carries `Permission.DECLARE_INCIDENT` through `deps.require_incident`.
+  No new permission was minted and the frozen matrix is untouched: `declare_incident` is
+  already this platform's name for incident command authority, held by the incident
+  commander and the tech lead and already carried by pages, escalations and task
+  assignment. `require_incident` resolves the incident inside the caller's own tenant
+  *before* evaluating the permission, so a commander of another tenant - who does hold
+  the permission - still gets the 404 an incident that does not exist returns, and the
+  guard runs before the pass, so a refusal writes nothing and reaches no gateway.
+
+  Reading did not change. `GET /brain`, `/brain/topology`, `/brain/guidance`,
+  `/brain/nodes/{key}` and `POST /brain/ask` still carry no permission, because
+  `ROLE_PERMISSIONS[Role.SME]` is empty and a brain the paged expert cannot open has
+  failed at its only job. The cockpit hides "re-reason now" from anyone who cannot press
+  it and says who can, rather than offering a button that only ever answers 403.
+
+  Four tests were written failing-first for it, and the state-free category gained the
+  assertion that would have caught the mistake at the time: the graph an SME asks a
+  question of must be identical afterwards, not merely the incident's lifecycle fields.
+  The token assertion runs against a *credentialled* provider over a mock socket, so
+  "a denied refresh spent nothing" is a measurement rather than a consequence of there
+  being no model to spend on - the authorized pass moves the meter first.
+
 - [S5-T04][REQ-054] **Progressive evidence.** `domain/brain/evidence.py`,
   `application/brain/evidence.py`.
 
@@ -269,15 +302,18 @@ Goal: the reasoning core with explainable, versioned intelligence and LLM discip
 
 ## Tests
 
-- added: **151** offline, plus 2 opt-in live AI evaluations that skip unless a key is
+- added: **156** offline, plus 2 opt-in live AI evaluations that skip unless a key is
   deliberately enabled. By kind: 73 pure-domain (graph, confidence, statements,
   topology, evidence budgets, similarity), 18 end-to-end over the real API and stores
-  including the full acceptance scenario and the historical-guidance path, 26 security
+  including the full acceptance scenario and the historical-guidance path, 30 security
   (tenant isolation at the repository, the prompt-injection floor, the grounding floor,
-  the state-free write category), 22 ai-eval cases + 11 parametrised injection payloads,
-  12 web structural.
-- suite result: **1116 passed, 5 skipped, 0 failed** (`docs/21-test-report.md`). The
+  the state-free write category, and the four written failing-first for the refresh
+  guard), 22 ai-eval cases + 11 parametrised injection payloads, 13 web structural.
+- suite result: **1121 passed, 5 skipped, 0 failed** (`docs/21-test-report.md`). The
   five skips are the opt-in live gateway checks - three from S5-T02, two from S5-T06.
+  Run twice: once at the close of S5-T06, and once more after the refresh guard was
+  corrected, because changing an authorization boundary is worth a full regression
+  rather than a targeted one.
 
 ## Artifacts updated
 
@@ -286,7 +322,8 @@ Goal: the reasoning core with explainable, versioned intelligence and LLM discip
   budgets, merge rules, provenance, the injection floor, degradation, metrics)
 - `docs/10-data-design.md` (regenerated: four brain tables)
 - `docs/11-api-spec.md`, `docs/11-openapi.json` (regenerated: six brain routes, the
-  `incident-brain` group described)
+  `incident-brain` group described, and `POST .../brain/refresh` publishing the
+  `declare_incident` its own guard enforces)
 - `docs/12-threat-model.md` (AI-1 and AI-2 moved from "design frozen" to enforced, with
   what enforces them)
 - `docs/13-controls-matrix.md` (CTL-ALW-01, CTL-ALW-02, CTL-ESC-02, CTL-ESC-04,
@@ -294,7 +331,7 @@ Goal: the reasoning core with explainable, versioned intelligence and LLM discip
 - `docs/15-ai-eval.md` (authored in full: the eighteen controls, their results, the
   injection payload table, and what is deliberately not covered)
 - `docs/20-RTM.md`, `docs/21-test-report.md` (regenerated)
-- `docs/decision-record.md` (DR-095 to DR-100)
+- `docs/decision-record.md` (DR-095 to DR-101)
 - `specs/requirements.yaml` (five status flips)
 
 ## Security notes
@@ -310,16 +347,25 @@ Goal: the reasoning core with explainable, versioned intelligence and LLM discip
   citation must resolve to a node retrieval returned; an answer citing anything else, or
   asserting a fact with none, is discarded rather than annotated. A join brief cannot
   drop a caveat the deterministic one carried.
-- **Two new unpermissioned POSTs, exempted under a named second justification.** The API
-  surface census (`test_api_surface.py`) refuses any session write that names no
+- **Two new POSTs, guarded differently, and the difference was got wrong once** (DR-101).
+  The API surface census (`test_api_surface.py`) refuses any session write that names no
   permission unless it is on a closed, justified list. Sprint 4's four war-room entries
-  are there because they act only on the caller. `brain/ask` and `brain/refresh` are not
-  self-scoped - there is no "yourself" in them - so rather than stretch that word they
-  are exempted under `STATE_FREE_WRITES`: **they change no incident state at all**. The
-  category takes its own test obligation, asserted failing-first: a member holding no
-  permission may use both, the incident's state, severity, closure and transition count
-  are identical afterwards, and a second tenant gets a 404 from each. A route that is
-  neither self-scoped nor state-free still fails the build.
+  are there because they act only on the caller.
+
+  `brain/ask` is not self-scoped - there is no "yourself" in it - so rather than stretch
+  that word it is exempted under `STATE_FREE_WRITES`: **it writes no state at all**. It
+  retrieves from what is already stored, grounds every citation in it, and returns prose.
+  The category takes its own test obligation, asserted failing-first: a member holding no
+  permission may ask; the incident's state, severity, closure and transition count *and
+  the graph itself* are identical afterwards; and a second tenant gets a 404.
+
+  `brain/refresh` was put in that category too, and did not belong. It writes persistent
+  brain state and spends the incident's token budget, so it now carries
+  **`declare_incident`**, the frozen matrix's existing name for incident command
+  authority - matrix unchanged, no new permission. The reads and `ask` stay open to every
+  member of the tenant, so the SME the frozen matrix gives nothing to can still open the
+  reasoning they were paged for. A route that is neither self-scoped, state-free, nor
+  behind a permission still fails the build.
 - **New stored data**: four brain tables, all tenant-scoped at the repository, all
   carrying provenance. The agent-run trace holds no prompt and no answer - which agent,
   on what, which model, tokens, degraded - because content belongs on the graph nodes,
