@@ -1330,3 +1330,195 @@ rather than collapsed: a rolled-back deployment is *more* interesting as evidenc
 | **Model / adapter failure** | a person can declare while the detector cannot be read at all - the refusal names the reason and asks for a severity, and the incident records `proposal.unavailable` | `test_incident_lifecycle.py` |
 | **Human override** | declaring against a steady stance, and choosing a severity the matrix did not propose, are both recorded as overrides with the proposal kept beside the decision | `test_lifecycle_floor.py`, `test_incident_lifecycle.py` |
 | **Permission change mid-flow** | a commander re-bound to another application is refused on the next write and what was already declared is intact; a connector disabled mid-incident leaves the incident closable | `test_incident_boundary.py`, `test_itsm_sync.py` |
+
+## 9. The war room: a decision becomes a response (REQ-045)
+
+Declaring an incident answers *whether*. The war room answers *who* - and it answers it without
+asking, because the person who declares a P0 at 03:00 should not also have to work out who to
+wake.
+
+### 9.1 The room opens because the incident was declared
+
+There is no "open a war room" button. `IncidentService.declare` fires a hook after its commit and
+the room assembles itself. That ordering carries the whole failure design of the chapter: the
+room is opened *after* the declaration is committed and cannot roll it back, and every failure
+inside it - a topology that will not parse, a notification connector that is down, a bridge that
+does not exist - is caught, recorded and survived. A P0 with a room that failed to assemble is
+bad; a P0 that could not be declared because the room failed to assemble is unforgivable.
+
+One incident has one room, enforced by a unique constraint on `(tenant, incident)`. The lifecycle
+already refuses a second open incident per application, so the two guards together mean two
+commanders pressing Declare seconds apart produce one incident, one room and one set of pages.
+
+### 9.2 Membership is derived in three separate steps
+
+The steps are kept apart on purpose, because each is a different kind of claim and only one of
+them needs a database:
+
+1. **`BlastRadius`** - what is affected. Read from the incident's own declaration snapshot (the
+   severity, the regions and journeys detection named, whether a customer is feeling it) and from
+   the application's stored topology. Facts about the incident, with no notion of people.
+2. **`required_roles`** - which roles that calls for. A pure function of the radius: a table,
+   arguable, testable without a database, and the place to have the argument.
+3. **Resolving roles to people** - role bindings scoped to this application, or tenant-wide.
+
+The radius is a *snapshot*, copied onto the room rather than recomputed on read. Re-deriving it
+would make membership drift as the topology is re-imported and the telemetry moves, and "why was
+I paged" has to have a stable answer.
+
+**Blast radius walks to dependents, not to dependencies.** Edge direction in the canonical
+topology reads source-depends-on-target, so the walk goes backwards: from the broken node to the
+things that named it. Walking forwards would answer "what does this application need", which is a
+different and equally interesting question, and answering it here by accident is exactly the sort
+of quiet wrongness a war room cannot afford. An application with no matching node produces an
+empty radius rather than seeding from every node, because calling the whole estate a blast radius
+reads as a catastrophe on every incident and therefore on none.
+
+### 9.3 The role table
+
+| Role | When | Paged |
+|---|---|---|
+| incident commander | always | yes |
+| tech lead | always | yes |
+| SME | anything downstream, any journey named, or P0/P1 | yes |
+| comms lead | a customer is feeling it | yes |
+| executive | P0, or P1 across the whole estate | **no - present, not woken** |
+
+Being in the room and being paged are different things, and the table says which is which. An
+executive is in the room for a P0 and is not woken by a pager for one; conflating the two is how
+executives stop reading their notifications.
+
+Two roles are deliberately never required. The **auditor** is read-only by the frozen matrix and
+can change nothing during an incident, so paging one is noise - and they may join any room they
+can read. The **org owner** is an administrative role; anybody who should be in the room
+operationally holds an operational role, and the binding says so.
+
+### 9.4 A role nobody holds is a stated gap
+
+If a customer-facing P0 calls for a comms lead and nobody is bound to one, the room says so - on
+its face, on the incident timeline as `warroom.membership.gap`, and in the audit chain. It is not
+an error; a war room with no comms lead still runs. It is a fact somebody has to be able to see
+while they can still do something about it, and the failure it prevents is the expensive one:
+nobody notices the customer was never told until the post-incident review.
+
+### 9.5 Paging, and what happens when nobody answers
+
+A page is a question put to one person, and the design is about the case where they do not
+answer.
+
+- **Channels come from severity, not from a per-page choice.** A P0 rings a phone (voice, SMS,
+  in-app, push, DM); a P3 does not. Waking somebody at 03:00 for a P3 is how a pager gets muted,
+  and a muted pager is how the next P0 is missed.
+- **The countdown is arithmetic over stored times.** A page holds `paged_at` and
+  `ack_deadline_at`; how long is left is computed against the caller's clock. No timer is held
+  anywhere. A restart loses nothing, a screen closed for ten minutes reopens on the right number,
+  and a drill on a virtual clock at 100x escalates at 100x with no drill-aware code.
+- **A page nobody could be reached through fails immediately** rather than counting down. A
+  countdown there would be a lie: five minutes of a timer nobody is watching, followed by an
+  escalation to a channel that also does not exist.
+- **Acknowledgement is terminal, idempotent and self-scoped.** A double-tapped button on a train,
+  a redelivered socket frame and a retried request are one act. Only the person the page names may
+  answer it - not their commander, not the org owner - because "I have this" is a claim only the
+  person who has it can make.
+- **Escalation is bounded and never silent.** The next target is the next person in the rotation
+  who has not already been paged for this chain, then the escalation policy's next step, then any
+  other holder of the required role. Running out raises rather than stopping quietly, publishing
+  `warroom.page.escalation.exhausted` with `needs_human: true` - because the moment nobody is
+  left to page is the moment a human has to be told, and a quiet no-op is how that becomes
+  nobody's problem.
+
+**The sweep reconciles before it escalates.** An acknowledgement can arrive two ways: the war
+room's own ack route, or the `/ws` socket the S3 notification inbox already serves. Both are a
+real person really answering, so the sweep reads the delivery receipt back before escalating -
+the same shape as the ITSM sync asking the queue what it holds before creating a second ticket.
+
+**One page is one notification, however many times the code runs.** Notification ids are derived
+from `(page, binding, channel)`, so a retried declare, a restarted process and two workers racing
+all hand the same id to the notification adapter, which returns the first receipt without
+transmitting again. A responder paged twice for one thing stops trusting the pager.
+
+### 9.6 The join brief
+
+What somebody walking in at minute forty needs: what is happening, the impact, what we know, what
+has been done, recent changes, and what is being asked of *them*. Sections rather than a
+paragraph, because the reader is on a phone with one hand.
+
+Template now, model in S5 (REQ-051), and the ordering is deliberate rather than a shortcut. The
+brief is the first thing a paged responder reads while still deciding whether to get out of bed,
+so the version that exists when the model is down has to be genuinely useful. `source` is stamped
+on every brief - `template`, `model` or `degraded` - so a reader can calibrate how much to trust
+it, and the field exists before there is a model so no screen changes when there is one.
+
+The section that matters most is `caveats`. A brief drawn from a declaration made while the
+detector was down knows far less than one drawn from a corroborated proposal, and it says so:
+"drawn from the declaration alone", "not corroborated - one signal family, not two - so the cause
+named above is a hypothesis", "no topology is mapped". Confidence the evidence does not support is
+the failure mode of every incident summary and the one a model will be most tempted to produce, so
+the deterministic version sets the standard the model has to meet.
+
+### 9.7 Bridge commitments become tasks
+
+Bridges lose commitments. Somebody says "I'll roll back region-b in ten minutes", four other
+things happen, and forty minutes later nobody has and everybody assumed somebody had. The harvest
+turns those sentences into tasks with an owner and a due time.
+
+It is deterministic and conservative, and both choices are load-bearing. Deterministic, because
+S5's model will do it better and this has to keep working when the model is down. Conservative,
+because a false positive is worse than a miss: a task nobody agreed to sits on the board with
+somebody's name against it, and arguing about it during a P0 costs more than catching one more
+commitment. So a question is not a commitment ("should we roll back?"), an option is not a
+commitment ("we can roll back if this gets worse"), and a forecast about a service is not a
+commitment by a person ("Payments will be down for a while").
+
+**It never guesses an owner.** A commitment naming somebody the platform cannot resolve becomes an
+*unassigned* task carrying the name as a label. Two users called Sam means no match, not a coin
+toss. An unowned task on the board is fixable in one click; a task owned by the wrong Sam is how
+the wrong person gets paged at 03:00.
+
+Authorship is settled where it is certain. The frozen collaboration SPI's `post(channel, text,
+thread_id)` carries no author - the adapter writes the transcript under the connector's identity,
+which is correct, since that is who the far side sees posting. So a commitment said through
+SignalForge is harvested at the moment it is posted, where the session *is* the author and nothing
+has to be inferred. The background sweep reads the same transcript afterwards and creates nothing,
+because commitment keys are derived from the message id: the two paths compose through one
+idempotency guard rather than knowing about each other. What the sweep alone finds - scripted
+lines, anybody posting from the far side - genuinely has no SignalForge author and stays
+unassigned, which is the honest answer.
+
+### 9.8 What carries a permission, and what carries something stronger
+
+The frozen roles matrix gives the SME no permissions at all. The person most likely to be paged
+holds nothing, so the acts that *are* that person cannot sit behind a permission without locking
+the war room out of the people it exists to reach.
+
+| Write | Guard |
+|---|---|
+| `POST /incidents/{id}/pages` | `declare_incident` |
+| `POST /incidents/{id}/pages/{pid}/escalate` | `declare_incident` |
+| `POST /incidents/{id}/tasks` | `declare_incident` |
+| `PATCH /incidents/{id}/tasks/{tid}` | `declare_incident` |
+| `POST /incidents/{id}/pages/{pid}/ack` | **self-scoped** |
+| `POST /incidents/{id}/war-room/join` | **self-scoped** |
+| `POST /incidents/{id}/bridge` | **self-scoped** |
+| `POST /incidents/{id}/tasks/{tid}/done` | **self-scoped** |
+
+Self-scoped means the actor is the session and can never be a parameter, and the entity refuses
+the act when it names somebody else. That is *stronger* than a permission, not weaker:
+`declare_incident` would let any holder acknowledge anybody's page, whereas the page refuses
+everyone but its addressee. Putting work on somebody else's board stays command work; ticking your
+own task does not. An unassigned task is completable by anybody in the tenant, because somebody has
+to be able to close out work that was actually done, and refusing until a commander assigns it
+first is how a board fills with things everybody knows are finished.
+
+### 9.9 Where every war-room failure lands
+
+| Failure | Where it lands | Held by |
+|---|---|---|
+| **Timeout** | a notification channel that times out is recorded `failed` on that channel's row; the other channels still carried the page and the countdown runs normally | `test_paging_idempotency.py` |
+| **Uncertain external state** | a page answered over the `/ws` socket rather than the ack route is reconciled from the delivery receipt before the sweep escalates past it | `test_paging_idempotency.py` |
+| **Partial completion** | a P0 whose install has no SMS connector goes out on the channels it has, is `sent`, and says which carried it; a room whose bridge is absent still pages and still tracks tasks | `test_paging_idempotency.py`, `test_bridge_commitments.py` |
+| **Duplicates** | derived notification ids mean one page is one notification; derived commitment keys mean one sentence is one task across both harvest paths; a second declare is refused | `test_paging_idempotency.py`, `test_bridge_commitments.py` |
+| **Model / adapter failure** | no notification connector at all is a `failed` page with the reason on the row, not a silent countdown; a topology that will not parse opens the room without downstream services and the brief says none is mapped | `test_paging_escalation.py` |
+| **Human override** | acknowledgement is terminal against any machine, and a commander can escalate before the countdown ends - recorded as a human act with their id on it | `test_paging_escalation.py` |
+| **Permission change mid-flow** | the ack path depends on no permission, so a re-bound responder can still answer the page they were sent; command writes are refused on the next call and what was already acknowledged stands | `test_warroom_boundary.py` |
+| **Nobody answers at all** | the chain exhausts loudly - `warroom.page.escalation.exhausted` with `needs_human: true` on the timeline and in the audit chain - and the page keeps saying it went unanswered | `test_paging_escalation.py` |

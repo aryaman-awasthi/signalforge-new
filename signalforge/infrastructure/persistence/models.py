@@ -770,6 +770,186 @@ class ChangeWindowRow(Base):
     announced_completed: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
+# --- the war room (S4-T03) ----------------------------------------------------
+
+
+class WarRoomRow(Base):
+    """The room an incident is run from (REQ-045).
+
+    Keyed on the incident rather than on its own id, uniquely, because one
+    incident has one room. That constraint is the duplicate guard: opening is
+    called from declare and again from any retry, and a second room would be a
+    second set of pages to the same people.
+
+    `radius` is a JSON snapshot of the blast radius as it was when the room
+    opened, copied rather than recomputed. Re-deriving it on every read would
+    make the room's membership drift as the topology is re-imported and the
+    telemetry moves, and "why was I paged" has to have a stable answer.
+
+    `last_harvest_at` is the bridge cursor. It is what makes the commitment
+    harvest resumable rather than re-reading a six-hour transcript every minute.
+    """
+
+    __tablename__ = "war_rooms"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "incident_id", name="uq_war_rooms_incident"),
+        Index("ix_war_rooms_open", "closed_at", "bridge_binding_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    incident_id: Mapped[str] = mapped_column(String(36))
+    app_id: Mapped[str] = mapped_column(String(100))
+    opened_at: Mapped[datetime] = mapped_column(TZDateTime)
+    opened_by: Mapped[str] = mapped_column(String(36))
+    severity: Mapped[str] = mapped_column(String(4))
+    radius: Mapped[dict] = mapped_column(JSON, default=dict)
+    gaps: Mapped[list] = mapped_column(JSON, default=list)
+    bridge_channel: Mapped[str] = mapped_column(String(200), default="")
+    bridge_adapter_id: Mapped[str] = mapped_column(String(64), default="")
+    bridge_binding_id: Mapped[str] = mapped_column(String(36), default="")
+    closed_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, nullable=True)
+    last_harvest_at: Mapped[Optional[datetime]] = mapped_column(
+        TZDateTime, nullable=True
+    )
+
+
+class RoomMemberRow(Base):
+    """Who is in the room, and why (REQ-045).
+
+    `required`, `paged` and `present` are three separate columns rather than one
+    status, because they are three separate facts and the difference between them
+    is the useful thing on the screen. A room where all three agree went well; a
+    room where four were required, four were paged and two are present is a room
+    that needs somebody to notice.
+    """
+
+    __tablename__ = "war_room_members"
+    __table_args__ = (
+        Index("ix_war_room_members_incident", "tenant_id", "incident_id"),
+    )
+
+    tenant_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    incident_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    role: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    reason: Mapped[str] = mapped_column(Text, default="")
+    source: Mapped[str] = mapped_column(String(20))
+    display_name: Mapped[str] = mapped_column(String(200), default="")
+    added_at: Mapped[datetime] = mapped_column(TZDateTime)
+    required: Mapped[bool] = mapped_column(Boolean, default=False)
+    paged: Mapped[bool] = mapped_column(Boolean, default=False)
+    present: Mapped[bool] = mapped_column(Boolean, default=False)
+    joined_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, nullable=True)
+    last_seen_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, nullable=True)
+
+
+class IncidentPageRow(Base):
+    """One page: a question put to one person, and what happened to it (REQ-045).
+
+    `ack_deadline_at` is stored rather than a timer being held in memory, and
+    that single choice is what makes the countdown survive a restart, agree
+    between the ack board and the escalation sweep, and run at 100x on a drill's
+    virtual clock with no drill-aware code.
+
+    `deliveries` links to the S3 receipts by notification id rather than copying
+    their status. `notification_deliveries` stays the system of record for
+    whether a person was told; a page that kept its own copy would eventually
+    disagree with it, and the disagreement would be discovered during an
+    incident.
+    """
+
+    __tablename__ = "incident_pages"
+    __table_args__ = (
+        Index("ix_incident_pages_incident", "tenant_id", "incident_id", "created_at"),
+        Index("ix_incident_pages_recipient", "tenant_id", "recipient", "state"),
+        # The escalation sweep's cross-tenant work list: still awaiting an
+        # answer, and past its deadline.
+        Index("ix_incident_pages_deadline", "state", "ack_deadline_at"),
+        Index("ix_incident_pages_chain", "tenant_id", "escalated_from_page_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    incident_id: Mapped[str] = mapped_column(String(36))
+    app_id: Mapped[str] = mapped_column(String(100))
+    recipient: Mapped[str] = mapped_column(String(36))
+    recipient_display: Mapped[str] = mapped_column(String(200), default="")
+    role: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    reason: Mapped[str] = mapped_column(Text, default="")
+    severity: Mapped[str] = mapped_column(String(4), default="P2")
+    state: Mapped[str] = mapped_column(String(20))
+    created_at: Mapped[datetime] = mapped_column(TZDateTime)
+    ack_timeout_s: Mapped[int] = mapped_column(Integer, default=300)
+    paged_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, nullable=True)
+    ack_deadline_at: Mapped[Optional[datetime]] = mapped_column(
+        TZDateTime, nullable=True
+    )
+    acked_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, nullable=True)
+    acked_by: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    ack_note: Mapped[str] = mapped_column(Text, default="")
+    escalated_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, nullable=True)
+    escalated_to_page_id: Mapped[Optional[str]] = mapped_column(
+        String(36), nullable=True
+    )
+    escalated_from_page_id: Mapped[Optional[str]] = mapped_column(
+        String(36), nullable=True
+    )
+    hop: Mapped[int] = mapped_column(Integer, default=0)
+    rotation_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    policy_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    policy_step: Mapped[int] = mapped_column(Integer, default=0)
+    detail: Mapped[str] = mapped_column(Text, default="")
+    deliveries: Mapped[list] = mapped_column(JSON, default=list)
+    requested_by: Mapped[str] = mapped_column(String(36), default="")
+    requested_by_type: Mapped[str] = mapped_column(String(20), default="system")
+
+
+class IncidentTaskRow(Base):
+    """A commitment with an owner and a due time (REQ-045).
+
+    `owner_user_id` is nullable and `owner_label` exists beside it because a
+    commitment harvested from a bridge often names somebody this platform cannot
+    resolve. An unassigned task carrying the name as typed is honest and fixable
+    in one click; a task assigned to a user id guessed from a first name is how
+    the wrong person gets paged.
+
+    `harvest_key` is the derived idempotency key from the bridge. Unique per
+    incident, which is what makes re-reading the transcript produce one task
+    rather than one per sweep.
+    """
+
+    __tablename__ = "incident_tasks"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "incident_id", "harvest_key", name="uq_incident_tasks_harvest"
+        ),
+        Index("ix_incident_tasks_incident", "tenant_id", "incident_id", "created_at"),
+        Index("ix_incident_tasks_owner", "tenant_id", "owner_user_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    incident_id: Mapped[str] = mapped_column(String(36))
+    app_id: Mapped[str] = mapped_column(String(100))
+    title: Mapped[str] = mapped_column(String(200))
+    status: Mapped[str] = mapped_column(String(20))
+    source: Mapped[str] = mapped_column(String(20))
+    created_at: Mapped[datetime] = mapped_column(TZDateTime)
+    created_by: Mapped[str] = mapped_column(String(200), default="")
+    owner_user_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    owner_label: Mapped[str] = mapped_column(String(200), default="")
+    due_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, nullable=True)
+    due_label: Mapped[str] = mapped_column(String(60), default="")
+    note: Mapped[str] = mapped_column(Text, default="")
+    evidence_ref: Mapped[str] = mapped_column(Text, default="")
+    harvest_key: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, nullable=True)
+    completed_by: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    updated_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, nullable=True)
+    detail: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
 class EventSealRow(Base):
     __tablename__ = "event_seals"
     __table_args__ = (Index("ix_event_seals_tenant", "tenant_id", "sealed_at"),)

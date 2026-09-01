@@ -28,6 +28,19 @@
         "title": "AcceptInviteRequest",
         "type": "object"
       },
+      "AckIn": {
+        "properties": {
+          "note": {
+            "default": "",
+            "description": "Optional: what you are picking up. The acknowledgement is valid without it.",
+            "maxLength": 500,
+            "title": "Note",
+            "type": "string"
+          }
+        },
+        "title": "AckIn",
+        "type": "object"
+      },
       "ActionClass": {
         "description": "The first six are the high-risk classes the policy floor can never auto-execute.",
         "enum": [
@@ -1425,6 +1438,273 @@
           "missed"
         ],
         "title": "BaselineRunOut",
+        "type": "object"
+      },
+      "BlastRadiusOut": {
+        "properties": {
+          "customer_facing": {
+            "default": false,
+            "title": "Customer Facing",
+            "type": "boolean"
+          },
+          "journey_tier": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journey Tier"
+          },
+          "journeys": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Journeys",
+            "type": "array"
+          },
+          "regions": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Regions",
+            "type": "array"
+          },
+          "regions_total": {
+            "default": 0,
+            "title": "Regions Total",
+            "type": "integer"
+          },
+          "services": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Services",
+            "type": "array"
+          },
+          "source": {
+            "description": "`proposal` when detection had a verdict at declare time, `declaration` when only the severity a person typed was available.",
+            "title": "Source",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "summary",
+          "source"
+        ],
+        "title": "BlastRadiusOut",
+        "type": "object"
+      },
+      "BridgeMessageOut": {
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "author_display": {
+            "default": "",
+            "title": "Author Display",
+            "type": "string"
+          },
+          "message_id": {
+            "title": "Message Id",
+            "type": "string"
+          },
+          "simulated": {
+            "default": false,
+            "title": "Simulated",
+            "type": "boolean"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
+          }
+        },
+        "required": [
+          "message_id",
+          "author",
+          "text",
+          "at"
+        ],
+        "title": "BridgeMessageOut",
+        "type": "object"
+      },
+      "BridgeOut": {
+        "properties": {
+          "channel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel"
+          },
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "has_bridge": {
+            "default": false,
+            "title": "Has Bridge",
+            "type": "boolean"
+          },
+          "incident_id": {
+            "title": "Incident Id",
+            "type": "string"
+          },
+          "messages": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/BridgeMessageOut"
+            },
+            "title": "Messages",
+            "type": "array"
+          }
+        },
+        "required": [
+          "incident_id"
+        ],
+        "title": "BridgeOut",
+        "type": "object"
+      },
+      "BridgePostIn": {
+        "properties": {
+          "text": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "BridgePostIn",
+        "type": "object"
+      },
+      "BriefOut": {
+        "properties": {
+          "caveats": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Caveats",
+            "type": "array"
+          },
+          "change_context": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Change Context",
+            "type": "array"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "headline": {
+            "title": "Headline",
+            "type": "string"
+          },
+          "impact": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Impact",
+            "type": "array"
+          },
+          "incident_id": {
+            "title": "Incident Id",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "text": {
+            "description": "The same brief flattened, for a channel with no structure - an SMS, a voice call, a bridge post. Built in one place so the phone and the screen cannot drift.",
+            "title": "Text",
+            "type": "string"
+          },
+          "what_has_been_done": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "What Has Been Done",
+            "type": "array"
+          },
+          "what_is_happening": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "What Is Happening",
+            "type": "array"
+          },
+          "what_we_know": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "What We Know",
+            "type": "array"
+          },
+          "what_we_need": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "What We Need",
+            "type": "array"
+          }
+        },
+        "required": [
+          "incident_id",
+          "generated_at",
+          "source",
+          "headline",
+          "text"
+        ],
+        "title": "BriefOut",
         "type": "object"
       },
       "BurnWindowOut": {
@@ -4722,6 +5002,19 @@
         "title": "IssuedKeyOut",
         "type": "object"
       },
+      "JoinIn": {
+        "properties": {
+          "note": {
+            "default": "",
+            "description": "Optional: what you are here for. You always join as yourself - there is no field for joining somebody else.",
+            "maxLength": 200,
+            "title": "Note",
+            "type": "string"
+          }
+        },
+        "title": "JoinIn",
+        "type": "object"
+      },
       "JourneyHealthOut": {
         "properties": {
           "failed": {
@@ -5203,6 +5496,95 @@
         "title": "MeOut",
         "type": "object"
       },
+      "MemberOut": {
+        "properties": {
+          "display_name": {
+            "default": "",
+            "title": "Display Name",
+            "type": "string"
+          },
+          "joined_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Joined At"
+          },
+          "paged": {
+            "default": false,
+            "title": "Paged",
+            "type": "boolean"
+          },
+          "present": {
+            "default": false,
+            "title": "Present",
+            "type": "boolean"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          },
+          "required": {
+            "default": false,
+            "title": "Required",
+            "type": "boolean"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "source"
+        ],
+        "title": "MemberOut",
+        "type": "object"
+      },
+      "MembershipGapOut": {
+        "properties": {
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "reason"
+        ],
+        "title": "MembershipGapOut",
+        "type": "object"
+      },
       "OrgOut": {
         "properties": {
           "created_at": {
@@ -5246,6 +5628,291 @@
           "name"
         ],
         "title": "OrgRenameRequest",
+        "type": "object"
+      },
+      "PageDeliveryOut": {
+        "properties": {
+          "adapter_id": {
+            "title": "Adapter Id",
+            "type": "string"
+          },
+          "channel": {
+            "title": "Channel",
+            "type": "string"
+          },
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "notification_id": {
+            "title": "Notification Id",
+            "type": "string"
+          },
+          "simulated": {
+            "default": false,
+            "title": "Simulated",
+            "type": "boolean"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "notification_id",
+          "adapter_id",
+          "channel",
+          "status"
+        ],
+        "title": "PageDeliveryOut",
+        "type": "object"
+      },
+      "PageIn": {
+        "properties": {
+          "ack_timeout_s": {
+            "anyOf": [
+              {
+                "maximum": 3600.0,
+                "minimum": 30.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How long they have before this escalates. Left out, the application's escalation policy decides, and failing that five minutes.",
+            "title": "Ack Timeout S"
+          },
+          "reason": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Reason",
+            "type": "string"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The role they are being paged as, if any.",
+            "title": "Role"
+          },
+          "user_id": {
+            "description": "Who to page. They must be in this tenant.",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id"
+        ],
+        "title": "PageIn",
+        "type": "object"
+      },
+      "PageListOut": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "pages": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PageOut"
+            },
+            "title": "Pages",
+            "type": "array"
+          }
+        },
+        "required": [
+          "count"
+        ],
+        "title": "PageListOut",
+        "type": "object"
+      },
+      "PageOut": {
+        "properties": {
+          "ack_deadline_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ack Deadline At"
+          },
+          "ack_note": {
+            "default": "",
+            "title": "Ack Note",
+            "type": "string"
+          },
+          "ack_timeout_s": {
+            "title": "Ack Timeout S",
+            "type": "integer"
+          },
+          "acked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acked At"
+          },
+          "acked_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acked By"
+          },
+          "countdown_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Seconds left to answer, computed against the server clock at the moment of this read. Negative once overdue, null once settled.",
+            "title": "Countdown S"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "deliveries": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PageDeliveryOut"
+            },
+            "title": "Deliveries",
+            "type": "array"
+          },
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "escalated_from_page_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Escalated From Page Id"
+          },
+          "escalated_to_page_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Escalated To Page Id"
+          },
+          "hop": {
+            "default": 0,
+            "title": "Hop",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "incident_id": {
+            "title": "Incident Id",
+            "type": "string"
+          },
+          "overdue": {
+            "default": false,
+            "title": "Overdue",
+            "type": "boolean"
+          },
+          "paged_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paged At"
+          },
+          "reached": {
+            "default": false,
+            "description": "At least one channel took it. False means nobody was reached, which escalates rather than waiting out a countdown.",
+            "title": "Reached",
+            "type": "boolean"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          },
+          "recipient": {
+            "title": "Recipient",
+            "type": "string"
+          },
+          "recipient_display": {
+            "default": "",
+            "title": "Recipient Display",
+            "type": "string"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "incident_id",
+          "recipient",
+          "state",
+          "severity",
+          "ack_timeout_s",
+          "created_at"
+        ],
+        "title": "PageOut",
         "type": "object"
       },
       "PagePlanEntryOut": {
@@ -6190,6 +6857,30 @@
           "role"
         ],
         "title": "RoleBindingOut",
+        "type": "object"
+      },
+      "RoleRequirementOut": {
+        "properties": {
+          "paged": {
+            "description": "False means present rather than woken. An executive is in the room for a P0; they are not paged for one.",
+            "title": "Paged",
+            "type": "boolean"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "reason",
+          "paged"
+        ],
+        "title": "RoleRequirementOut",
         "type": "object"
       },
       "RolesMatrixOut": {
@@ -7358,6 +8049,251 @@
         "title": "StormOut",
         "type": "object"
       },
+      "TaskDoneIn": {
+        "properties": {
+          "note": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Note",
+            "type": "string"
+          }
+        },
+        "title": "TaskDoneIn",
+        "type": "object"
+      },
+      "TaskIn": {
+        "properties": {
+          "due_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due At"
+          },
+          "note": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Note",
+            "type": "string"
+          },
+          "owner_label": {
+            "default": "",
+            "description": "A name for an owner this platform cannot resolve to a user. The task stays visibly unassigned rather than being given to a guess.",
+            "maxLength": 200,
+            "title": "Owner Label",
+            "type": "string"
+          },
+          "owner_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner User Id"
+          },
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "TaskIn",
+        "type": "object"
+      },
+      "TaskListOut": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "tasks": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TaskOut"
+            },
+            "title": "Tasks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "count"
+        ],
+        "title": "TaskListOut",
+        "type": "object"
+      },
+      "TaskOut": {
+        "properties": {
+          "assigned": {
+            "default": false,
+            "title": "Assigned",
+            "type": "boolean"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "completed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed By"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "default": "",
+            "title": "Created By",
+            "type": "string"
+          },
+          "due_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due At"
+          },
+          "due_label": {
+            "default": "",
+            "title": "Due Label",
+            "type": "string"
+          },
+          "evidence_ref": {
+            "default": "",
+            "description": "For a harvested commitment, what was actually said on the bridge. A task nobody remembers agreeing to is settled by reading it.",
+            "title": "Evidence Ref",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "incident_id": {
+            "title": "Incident Id",
+            "type": "string"
+          },
+          "note": {
+            "default": "",
+            "title": "Note",
+            "type": "string"
+          },
+          "overdue": {
+            "default": false,
+            "title": "Overdue",
+            "type": "boolean"
+          },
+          "owner_label": {
+            "default": "",
+            "title": "Owner Label",
+            "type": "string"
+          },
+          "owner_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner User Id"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "incident_id",
+          "title",
+          "status",
+          "source",
+          "created_at"
+        ],
+        "title": "TaskOut",
+        "type": "object"
+      },
+      "TaskPatchIn": {
+        "properties": {
+          "cancel": {
+            "default": false,
+            "title": "Cancel",
+            "type": "boolean"
+          },
+          "due_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due At"
+          },
+          "note": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Note",
+            "type": "string"
+          },
+          "owner_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner User Id"
+          }
+        },
+        "title": "TaskPatchIn",
+        "type": "object"
+      },
       "TestFireOut": {
         "properties": {
           "plan": {
@@ -8063,6 +8999,149 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "WarRoomOut": {
+        "properties": {
+          "app_id": {
+            "title": "App Id",
+            "type": "string"
+          },
+          "blast_radius": {
+            "$ref": "#/components/schemas/BlastRadiusOut"
+          },
+          "bridge_adapter_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bridge Adapter Id"
+          },
+          "bridge_channel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bridge Channel"
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At"
+          },
+          "gaps": {
+            "default": [],
+            "description": "Required roles nobody holds for this application. Stated rather than silently omitted: a P0 with an empty comms lead seat is something to find out at minute two.",
+            "items": {
+              "$ref": "#/components/schemas/MembershipGapOut"
+            },
+            "title": "Gaps",
+            "type": "array"
+          },
+          "has_bridge": {
+            "default": false,
+            "title": "Has Bridge",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "incident_id": {
+            "title": "Incident Id",
+            "type": "string"
+          },
+          "members": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/MemberOut"
+            },
+            "title": "Members",
+            "type": "array"
+          },
+          "opened_at": {
+            "format": "date-time",
+            "title": "Opened At",
+            "type": "string"
+          },
+          "opened_by": {
+            "title": "Opened By",
+            "type": "string"
+          },
+          "pages": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PageOut"
+            },
+            "title": "Pages",
+            "type": "array"
+          },
+          "present_count": {
+            "default": 0,
+            "title": "Present Count",
+            "type": "integer"
+          },
+          "reference": {
+            "title": "Reference",
+            "type": "string"
+          },
+          "required_roles": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RoleRequirementOut"
+            },
+            "title": "Required Roles",
+            "type": "array"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "tasks": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TaskOut"
+            },
+            "title": "Tasks",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "incident_id",
+          "reference",
+          "app_id",
+          "severity",
+          "state",
+          "title",
+          "opened_at",
+          "opened_by",
+          "blast_radius"
+        ],
+        "title": "WarRoomOut",
         "type": "object"
       },
       "signalforge__api__schemas__identity__PolicyIn": {
@@ -11587,6 +12666,173 @@
         "x-signalforge-auth": "session"
       }
     },
+    "/incidents/{incident_id}/bridge": {
+      "get": {
+        "description": "The live transcript. Says so plainly when no bridge is bound rather than\nrendering an empty panel that looks like silence.",
+        "operationId": "read_bridge_incidents__incident_id__bridge_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BridgeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Read Bridge",
+        "tags": [
+          "war-room"
+        ],
+        "x-signalforge-auth": "session"
+      },
+      "post": {
+        "description": "Say something. Self-scoped: the author is the session and cannot be\nanybody else, and speaking marks you present in the room.",
+        "operationId": "post_to_bridge_incidents__incident_id__bridge_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BridgePostIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BridgeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Post To Bridge",
+        "tags": [
+          "war-room"
+        ],
+        "x-signalforge-auth": "session"
+      }
+    },
+    "/incidents/{incident_id}/brief": {
+      "get": {
+        "description": "What somebody walking in at minute forty needs to know.\n\nAddressed to the caller when they are in the room: what is being asked of\n*them* is the part a responder reads first. `source` says who wrote it -\n`template` today, `model` when S5's writer lands.",
+        "operationId": "get_join_brief_incidents__incident_id__brief_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BriefOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Get Join Brief",
+        "tags": [
+          "war-room"
+        ],
+        "x-signalforge-auth": "session"
+      }
+    },
     "/incidents/{incident_id}/close": {
       "post": {
         "description": "Close an incident. Terminal: a regression afterwards is a new declaration\nby a person at a new time, which is what the record should say.",
@@ -11693,6 +12939,242 @@
         "summary": "Resync Ticket",
         "tags": [
           "incidents"
+        ],
+        "x-signalforge-app-scope": "incident",
+        "x-signalforge-auth": "session",
+        "x-signalforge-permission": "declare_incident"
+      }
+    },
+    "/incidents/{incident_id}/pages": {
+      "get": {
+        "description": "The ack board, oldest first, each row carrying its own countdown.",
+        "operationId": "list_pages_incidents__incident_id__pages_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "List Pages",
+        "tags": [
+          "war-room"
+        ],
+        "x-signalforge-auth": "session"
+      },
+      "post": {
+        "description": "Page somebody who was not in the blast radius.\n\nCommand work: putting a phone call into somebody's night is a decision about\nanother person's time, so it carries `declare_incident`.",
+        "operationId": "raise_page_incidents__incident_id__pages_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PageIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Raise Page",
+        "tags": [
+          "war-room"
+        ],
+        "x-signalforge-app-scope": "incident",
+        "x-signalforge-auth": "session",
+        "x-signalforge-permission": "declare_incident"
+      }
+    },
+    "/incidents/{incident_id}/pages/{page_id}/ack": {
+      "post": {
+        "description": "\"I have this.\"\n\nSelf-scoped and carries no permission, because the role that answers a page\nholds none. The control is that the page names its recipient and the session\nnames itself: acknowledging anybody else's page is a 403 from the entity,\nwhatever the caller's roles say. Idempotent and terminal.",
+        "operationId": "acknowledge_page_incidents__incident_id__pages__page_id__ack_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "page_id",
+            "required": true,
+            "schema": {
+              "title": "Page Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AckIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Acknowledge Page",
+        "tags": [
+          "war-room"
+        ],
+        "x-signalforge-auth": "session"
+      }
+    },
+    "/incidents/{incident_id}/pages/{page_id}/escalate": {
+      "post": {
+        "description": "Escalate now rather than waiting out the countdown.\n\nReturns the *successor* page - the one now ringing - because that is the row\nthe board needs to start counting down.",
+        "operationId": "escalate_page_incidents__incident_id__pages__page_id__escalate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "page_id",
+            "required": true,
+            "schema": {
+              "title": "Page Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Escalate Page",
+        "tags": [
+          "war-room"
         ],
         "x-signalforge-app-scope": "incident",
         "x-signalforge-auth": "session",
@@ -11819,6 +13301,360 @@
         "x-signalforge-app-scope": "incident",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "declare_incident"
+      }
+    },
+    "/incidents/{incident_id}/tasks": {
+      "get": {
+        "description": "Commitments with an owner and a due time, harvested or typed.",
+        "operationId": "list_tasks_incidents__incident_id__tasks_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "List Tasks",
+        "tags": [
+          "war-room"
+        ],
+        "x-signalforge-auth": "session"
+      },
+      "post": {
+        "description": "Put work on the board. Command work, so it carries a permission.",
+        "operationId": "create_task_incidents__incident_id__tasks_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Create Task",
+        "tags": [
+          "war-room"
+        ],
+        "x-signalforge-app-scope": "incident",
+        "x-signalforge-auth": "session",
+        "x-signalforge-permission": "declare_incident"
+      }
+    },
+    "/incidents/{incident_id}/tasks/{task_id}": {
+      "patch": {
+        "description": "Reassign, re-time or cancel - all decisions about somebody else's work.",
+        "operationId": "update_task_incidents__incident_id__tasks__task_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskPatchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Update Task",
+        "tags": [
+          "war-room"
+        ],
+        "x-signalforge-app-scope": "incident",
+        "x-signalforge-auth": "session",
+        "x-signalforge-permission": "declare_incident"
+      }
+    },
+    "/incidents/{incident_id}/tasks/{task_id}/done": {
+      "post": {
+        "description": "Tick your own task.\n\nSelf-scoped: an owned task is completed by its owner and nobody else, because\n\"done\" is a claim about work somebody did. An *unassigned* task is completable\nby anybody in the tenant - somebody has to be able to close out work that was\nactually done, and refusing until a commander assigns it first is how a board\nfills with things everybody knows are finished.",
+        "operationId": "complete_task_incidents__incident_id__tasks__task_id__done_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskDoneIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Complete Task",
+        "tags": [
+          "war-room"
+        ],
+        "x-signalforge-auth": "session"
+      }
+    },
+    "/incidents/{incident_id}/war-room": {
+      "get": {
+        "description": "The room: who should be there, who was paged, who turned up, and the\nroles nobody holds.\n\nReadable by every member of the tenant, on the same reasoning the incident\nreads carry no permission (DR-071): a war room that the paged SME cannot open\nis a war room that has failed at the one thing it exists for.",
+        "operationId": "get_war_room_incidents__incident_id__war_room_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WarRoomOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Get War Room",
+        "tags": [
+          "war-room"
+        ],
+        "x-signalforge-auth": "session"
+      }
+    },
+    "/incidents/{incident_id}/war-room/join": {
+      "post": {
+        "description": "Turn up. Self-scoped: you join yourself, into a room in your own tenant.\n\nThere is no field for joining somebody else, so there is nothing a\npermission would protect that the session does not already decide.",
+        "operationId": "join_war_room_incidents__incident_id__war_room_join_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JoinIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WarRoomOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Join War Room",
+        "tags": [
+          "war-room"
+        ],
+        "x-signalforge-auth": "session"
       }
     },
     "/ingest-keys": {
@@ -12376,6 +14212,68 @@
           "platform"
         ],
         "x-signalforge-auth": "none"
+      }
+    },
+    "/my/pages": {
+      "get": {
+        "description": "What is on this person's phone. The S22 mobile paging page reads this.\n\nSelf-scoped by construction: the recipient is the session and there is no\nparameter for anybody else, which is what lets it carry no permission.",
+        "operationId": "my_pages_my_pages_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "open_only",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Open Only",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "My Pages",
+        "tags": [
+          "war-room"
+        ],
+        "x-signalforge-auth": "session"
       }
     },
     "/oncall/rotations": {
@@ -13269,6 +15167,10 @@
     {
       "description": "Ingest keys, and the five frozen push endpoints a sending application posts to.",
       "name": "ingest"
+    },
+    {
+      "description": "The room an incident is run from: membership derived from the blast radius, paging with per-row acknowledgement countdowns and next-in-rotation escalation, the join brief, the live bridge and the task board. Four writes here carry no permission and are self-scoped instead - acknowledging, joining, speaking and completing your own task - because the frozen roles matrix gives the SME none, and the entity refusing to act on anybody else's behalf is a tighter control than a permission any holder could use on anybody's page.",
+      "name": "war-room"
     },
     {
       "description": "The cockpit notification socket. A WebSocket is not expressible in OpenAPI; its frame protocol is in docs/11-api-spec.md.",

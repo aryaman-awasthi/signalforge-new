@@ -159,6 +159,26 @@ class IncidentService:
         # most, not the one to fail on.
         self._detection = detection
         self._metrics = metrics
+        self._on_declared: list = []
+        self._on_closed: list = []
+
+    @property
+    def on_declared(self) -> list:
+        """Hooks the composition root fills - the war room (S4-T03).
+
+        Hooks rather than a call, so the arrow keeps pointing one way: the
+        lifecycle has no import of the war room, and a node could run incidents
+        with the room switched off without changing a line here. Each runs after
+        the declaration commits and each survives its own failure, on exactly the
+        rule the ITSM sync follows: a room that could not be assembled must never
+        be able to un-declare an incident a person declared.
+        """
+        return self._on_declared
+
+    @property
+    def on_closed(self) -> list:
+        """Hooks run after an incident closes - standing the war room down."""
+        return self._on_closed
 
     # -- reads ---------------------------------------------------------------
 
@@ -282,7 +302,29 @@ class IncidentService:
         # After the commit, never inside it: a ticket queue that is down must not
         # be able to un-declare an incident a person declared.
         incident = await self._tickets.sync(incident)
+        await self._fire(self._on_declared, incident, principal)
         return await self.get(principal, incident.id)
+
+    async def _fire(self, hooks: Sequence, incident: Incident, *args) -> None:
+        """Run the composition root's hooks, each surviving its own failure.
+
+        The declaration is already committed by the time this runs, and nothing
+        here may undo it. A war room that could not be assembled is a war room
+        that could not be assembled; it is not a reason for a P0 to have failed
+        to be declared.
+        """
+        for hook in hooks:
+            try:
+                await hook(incident, *args)
+            except Exception as exc:  # pragma: no cover - defensive by design
+                logger.warning(
+                    "a lifecycle hook failed; the incident stands",
+                    extra={
+                        "incident_id": incident.id,
+                        "hook": getattr(hook, "__qualname__", repr(hook)),
+                        "error": f"{type(exc).__name__}: {exc}",
+                    },
+                )
 
     async def _insert(
         self,
@@ -504,6 +546,8 @@ class IncidentService:
             await uow.commit()
         self._transition_metric(incident.state, updated.state, ActorType.HUMAN)
         await self._tickets.sync(updated)
+        if target is LifecycleState.CLOSED:
+            await self._fire(self._on_closed, updated)
         return await self.get(principal, incident_id)
 
     async def resync_ticket(

@@ -364,7 +364,7 @@ requirements:
     area: war-room
     sprint: S4
     priority: must
-    status: planned
+    status: built
     acceptance: >
       War room on declare; membership by blast radius; paging with ack; per-row
       countdowns escalate to next-in-rotation; join brief; bridge commitments become

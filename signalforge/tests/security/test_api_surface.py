@@ -45,8 +45,34 @@ NO_CREDENTIAL = {
 }
 
 # A session with no permission may read what every member of a tenant may read.
-# The only *write* it may do is end itself.
-SESSION_ONLY_WRITES = {("post", "/auth/logout")}
+# The writes it may do are the ones a permission could not correctly guard, and
+# there are five.
+#
+# Ending your own session is the original: there is nobody else's session in the
+# request, so there is nothing for a permission to protect.
+#
+# The other four are the war room's (S4-T03), and they exist because of a fact in
+# the frozen roles matrix rather than a convenience: `ROLE_PERMISSIONS[Role.SME]`
+# is empty, so the person most likely to be paged holds nothing. Acknowledging a
+# page, joining the room, speaking on the bridge and ticking your own task *are*
+# that person, and a permission on any of them would lock the war room out of the
+# people it exists to reach - the same reasoning `/ws` records as DR-031.
+#
+# They are not unguarded. Each is **self-scoped**: the actor is the session and
+# can never be a parameter, and the entity refuses the act when it names somebody
+# else. That is stronger than a permission would be, not weaker -
+# `declare_incident` would let any holder acknowledge anybody's page, whereas
+# `Page.acknowledged` refuses everyone but the addressee. Every one of the four is
+# asserted in both directions in tests/security/test_warroom_boundary.py, which
+# also pins this same list, so an entry added here without a self-scoping test
+# fails that file instead of passing quietly here.
+SESSION_ONLY_WRITES = {
+    ("post", "/auth/logout"),
+    ("post", "/incidents/{incident_id}/pages/{page_id}/ack"),
+    ("post", "/incidents/{incident_id}/war-room/join"),
+    ("post", "/incidents/{incident_id}/bridge"),
+    ("post", "/incidents/{incident_id}/tasks/{task_id}/done"),
+}
 
 WRITE_METHODS = {"post", "put", "patch", "delete"}
 

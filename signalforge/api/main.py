@@ -35,6 +35,7 @@ from signalforge.api.routers import (
     platform,
     roles,
     users,
+    warroom,
     ws,
 )
 from signalforge.infrastructure.config import VERSION, load_settings
@@ -103,6 +104,7 @@ app.include_router(onboarding.router)
 app.include_router(detection.router)
 app.include_router(incidents.router)
 app.include_router(incidents.apps_router)
+app.include_router(warroom.router)
 app.include_router(ingest_keys.router)
 app.include_router(ingest.router)
 app.include_router(platform.router)

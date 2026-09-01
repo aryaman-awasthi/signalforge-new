@@ -14,6 +14,12 @@ from signalforge.domain.incidents.ports import (
     IncidentTransitionRepository,
 )
 from signalforge.domain.ingest.ports import IngestKeyRepository, IngestReceiptStore
+from signalforge.domain.warroom.ports import (
+    IncidentTaskRepository,
+    PageRepository,
+    RoomMemberRepository,
+    WarRoomRepository,
+)
 from signalforge.domain.integrations.ports import NotificationStore
 from signalforge.domain.onboarding.ports import (
     ApplicationRepository,
@@ -78,6 +84,17 @@ class IdentityUnitOfWork(ABC):
     for reads and from the event one for writes, exactly as delivery receipts
     are: the bus consumer folds a deployment event inside the dispatcher's
     transaction, and a screen reads it without joining that transaction."""
+    war_rooms: WarRoomRepository
+    room_members: RoomMemberRepository
+    incident_pages: PageRepository
+    incident_tasks: IncidentTaskRepository
+    """The war room (S4-T03). On this unit of work because every act in a room is
+    one commit of the row, its audit entry and its incident-plane event -
+    acknowledging a page in particular, where the receipt, the audit chain and
+    the escalation timer must never be able to disagree about whether somebody
+    answered. `incident_pages` sits beside `notifications` for the same reason:
+    a page links to the delivery receipts it produced, and a link written without
+    its receipt would be a countdown nobody could stop."""
     audit: AuditWriter
     events: EventStore
     """The outbox: an event published here shares the use case's transaction."""

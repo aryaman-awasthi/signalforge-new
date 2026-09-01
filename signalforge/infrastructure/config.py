@@ -86,6 +86,11 @@ class Settings:
     # incidents whose ticket is pending, failed or - the one that matters -
     # uncertain after a timeout.
     itsm_sync_interval_s: float = 30.0
+    # The war room (S4-T03). The escalation sweep is the tighter of the two
+    # because it is the one somebody is waiting on: it decides how much later
+    # than its deadline an unanswered page actually escalates.
+    escalation_interval_s: float = 15.0
+    bridge_harvest_interval_s: float = 30.0
 
 
 def load_settings() -> Settings:
@@ -194,5 +199,14 @@ def load_settings() -> Settings:
         # recovery path is for.
         itsm_sync_interval_s=max(
             float(os.environ.get("SIGNALFORGE_ITSM_SYNC_INTERVAL_S", 30)), 5.0
+        ),
+        # At least a second. The escalation sweep is arithmetic over an indexed
+        # work list, so a tight cadence is cheap, but a sub-second one would burn
+        # a core to shave milliseconds off a countdown measured in minutes.
+        escalation_interval_s=max(
+            float(os.environ.get("SIGNALFORGE_ESCALATION_INTERVAL_S", 15)), 1.0
+        ),
+        bridge_harvest_interval_s=max(
+            float(os.environ.get("SIGNALFORGE_BRIDGE_HARVEST_INTERVAL_S", 30)), 5.0
         ),
     )

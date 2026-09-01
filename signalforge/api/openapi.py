@@ -113,6 +113,15 @@ TAGS: list[dict[str, str]] = [
     {"name": "ingest", "description":
         "Ingest keys, and the five frozen push endpoints a sending application "
         "posts to."},
+    {"name": "war-room", "description":
+        "The room an incident is run from: membership derived from the blast "
+        "radius, paging with per-row acknowledgement countdowns and "
+        "next-in-rotation escalation, the join brief, the live bridge and the "
+        "task board. Four writes here carry no permission and are self-scoped "
+        "instead - acknowledging, joining, speaking and completing your own "
+        "task - because the frozen roles matrix gives the SME none, and the "
+        "entity refusing to act on anybody else's behalf is a tighter control "
+        "than a permission any holder could use on anybody's page."},
     {"name": "notifications", "description":
         "The cockpit notification socket. A WebSocket is not expressible in "
         "OpenAPI; its frame protocol is in docs/11-api-spec.md."},

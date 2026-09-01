@@ -107,7 +107,7 @@ catalogue below and its frame protocol is written out later in this document.
 
 <!-- BEGIN GENERATED ROUTE CATALOGUE (scripts/gen_openapi.py) -->
 
-84 routes: 73 need a human session, 5 a sending application's ingest key, and 6 no credential at all - and that last number is the one the security suite pins to a closed list.
+98 routes: 87 need a human session, 5 a sending application's ingest key, and 6 no credential at all - and that last number is the one the security suite pins to a closed list.
 
 The permission column is read from each route's own RBAC dependency, so a route guarded by the wrong permission is documented as guarded by the wrong permission. It also says where a per-application role binding is evaluated from: `?app_id=`, the optional query parameter every route guarded by `deps.require` accepts, or `path`, the application named in the URL on the wizard's own routes.
 
@@ -277,6 +277,27 @@ Ingest keys, and the five frozen push endpoints a sending application posts to.
 | DELETE | `/ingest-keys/{key_id}` | session | `manage_apps` (`?app_id=`) | Revoke ingest key |
 | GET | `/ingest-keys/{key_id}` | session | `manage_apps` (`?app_id=`) | Get ingest key |
 | POST | `/ingest-keys/{key_id}/rotate` | session | `manage_apps` (`?app_id=`) | Issue a successor. |
+
+### `war-room`
+
+The room an incident is run from: membership derived from the blast radius, paging with per-row acknowledgement countdowns and next-in-rotation escalation, the join brief, the live bridge and the task board. Four writes here carry no permission and are self-scoped instead - acknowledging, joining, speaking and completing your own task - because the frozen roles matrix gives the SME none, and the entity refusing to act on anybody else's behalf is a tighter control than a permission any holder could use on anybody's page.
+
+| Method | Path | Credential | Permission | Purpose |
+|---|---|---|---|---|
+| GET | `/incidents/{incident_id}/bridge` | session | (session only) | The live transcript. |
+| POST | `/incidents/{incident_id}/bridge` | session | (session only) | Say something. |
+| GET | `/incidents/{incident_id}/brief` | session | (session only) | What somebody walking in at minute forty needs to know. |
+| GET | `/incidents/{incident_id}/pages` | session | (session only) | The ack board, oldest first, each row carrying its own countdown. |
+| POST | `/incidents/{incident_id}/pages` | session | `declare_incident` | Page somebody who was not in the blast radius. |
+| POST | `/incidents/{incident_id}/pages/{page_id}/ack` | session | (session only) | "I have this." Self-scoped and carries no permission, because the role that answers a page holds none. |
+| POST | `/incidents/{incident_id}/pages/{page_id}/escalate` | session | `declare_incident` | Escalate now rather than waiting out the countdown. |
+| GET | `/incidents/{incident_id}/tasks` | session | (session only) | Commitments with an owner and a due time, harvested or typed. |
+| POST | `/incidents/{incident_id}/tasks` | session | `declare_incident` | Put work on the board. |
+| PATCH | `/incidents/{incident_id}/tasks/{task_id}` | session | `declare_incident` | Reassign, re-time or cancel - all decisions about somebody else's work. |
+| POST | `/incidents/{incident_id}/tasks/{task_id}/done` | session | (session only) | Tick your own task. |
+| GET | `/incidents/{incident_id}/war-room` | session | (session only) | The room: who should be there, who was paged, who turned up, and the roles nobody holds. |
+| POST | `/incidents/{incident_id}/war-room/join` | session | (session only) | Turn up. |
+| GET | `/my/pages` | session | (session only) | What is on this person's phone. |
 
 ### `platform`
 
@@ -632,6 +653,117 @@ always true.
 | 409 | a second declaration while one is open; a move the lifecycle refuses from the state it is in; closing an incident that is closed |
 | 422 | a severity that is not P0-P3, a state this route may not set, or a declaration with neither a proposal nor a severity |
 
+## The war room: `/incidents/{id}/war-room`, `/my/pages` (REQ-045)
+
+The room opens because the incident was declared - there is no route that creates one. Everything
+here reads or acts on a room that already exists.
+
+The guard split is the sharpest in this API and it comes from the frozen roles matrix rather than
+from preference: `ROLE_PERMISSIONS[Role.SME]` is empty, so the person most likely to be paged
+holds nothing.
+
+| Route | Credential | Permission |
+|---|---|---|
+| `GET /incidents/{id}/war-room` | session | **none** |
+| `GET /incidents/{id}/brief` | session | **none** |
+| `GET /incidents/{id}/pages` · `GET /incidents/{id}/tasks` · `GET /incidents/{id}/bridge` | session | **none** |
+| `GET /my/pages` | session | **none** |
+| `POST /incidents/{id}/pages` | session | `declare_incident` |
+| `POST /incidents/{id}/pages/{pid}/escalate` | session | `declare_incident` |
+| `POST /incidents/{id}/tasks` · `PATCH /incidents/{id}/tasks/{tid}` | session | `declare_incident` |
+| `POST /incidents/{id}/pages/{pid}/ack` | session | **none - self-scoped** |
+| `POST /incidents/{id}/war-room/join` | session | **none - self-scoped** |
+| `POST /incidents/{id}/bridge` | session | **none - self-scoped** |
+| `POST /incidents/{id}/tasks/{tid}/done` | session | **none - self-scoped** |
+
+**Self-scoped** is a stronger control than a permission, not a weaker one. The actor is the
+session and can never be a request parameter, and the entity refuses the act when it names
+somebody else: `declare_incident` would let any holder acknowledge anybody's page, whereas
+`Page.acknowledged` refuses everyone but the addressee. `/my/pages` has no recipient parameter at
+all, which is what lets the S22 mobile paging page carry no permission. The four exemptions are
+pinned by name in `signalforge/tests/security/test_warroom_boundary.py`, in both directions, and
+joined to the `SESSION_ONLY_WRITES` list in `test_api_surface.py` so neither can drift.
+
+### `GET /incidents/{id}/war-room`
+
+Returns the room, its blast radius, the roles it required, the roles nobody held, its members, its
+pages and its tasks in one read - the S9 shell is one screen and should be one request.
+
+Three member fields are separate on purpose. `required` is what the blast radius called for,
+`paged` is whether a page went out, `present` is whether they turned up. "Four were required, four
+were paged, two are here" is the sentence an incident commander needs at minute ten, and one
+status field cannot say it.
+
+`gaps` lists required roles nobody is bound to for this application. A war room with no comms lead
+still runs; the gap is stated rather than rendered as a shorter member list that looks complete.
+
+`blast_radius.source` is `proposal` when detection had a verdict at declare time and `declaration`
+when only the severity a person typed was available.
+
+### `GET /incidents/{id}/pages` and `GET /my/pages`
+
+The ack board and one person's pager. Every row carries `ack_deadline_at` (the stored fact) and
+`countdown_s` (the same fact against the server's clock at the moment of the read), so a client
+with a skewed clock still shows a timer that agrees with the escalation sweep. `countdown_s` is
+negative once overdue and null once the page is settled; `reached` is false when no channel took
+it, which is a page that fails at once rather than counting down toward an escalation to channels
+that also do not exist.
+
+### `POST /incidents/{id}/pages/{pid}/ack`
+
+Idempotent and terminal. A second call returns the same page with the same `acked_at` and writes
+no second event; the first note is the record and a later one does not rewrite it. Answering also
+marks the answerer present in the room.
+
+| Code | When |
+|---|---|
+| 403 | the page names somebody else - a bare "permission denied"; the reason goes to the audit chain, not to the caller |
+| 404 | the page is not in this tenant |
+| 409 | the page is failed, escalated or cancelled, and none of those can be answered |
+
+### `POST /incidents/{id}/pages/{pid}/escalate`
+
+A commander deciding not to wait. Returns the **successor** page - the one now ringing - because
+that is the row the board needs to start counting down. Escalating an acknowledged or already
+escalated page is 409; running out of people to page is 409 with `warroom.page.escalation.exhausted`
+published on the timeline first, because the moment nobody is left is the moment somebody has to
+be told.
+
+### `GET /incidents/{id}/brief`
+
+The join brief, addressed to the caller when they are in the room. `source` says who wrote it:
+`template` today, `model` when S5's writer lands, `degraded` when a model failed back to the
+template. `text` is the same brief flattened for a channel with no structure - an SMS, a voice
+call, a bridge post - built in one place so the phone and the screen cannot drift apart.
+
+`caveats` is always populated. A brief drawn from a declaration made while the detector was down
+says so rather than reading like one drawn from corroborated evidence.
+
+### `GET` / `POST /incidents/{id}/bridge`
+
+The live transcript, and speaking on it. With no collaboration connector bound, the read returns
+`has_bridge: false` with a reason and an empty list - the panel says there is no bridge rather
+than rendering silence - and the post is 404. Speaking marks the speaker present, and a commitment
+in what was said becomes a task at that moment, while the author is known with certainty.
+
+### `GET` / `POST` / `PATCH` / `POST …/done` on `/incidents/{id}/tasks`
+
+Commitments with an owner and a due time, harvested from the bridge or typed. `owner_user_id` is
+nullable and `owner_label` sits beside it: a commitment naming somebody the platform cannot
+resolve to exactly one user is a visibly unassigned task carrying the name as typed, never a task
+owned by a guess. `evidence_ref` holds what was actually said, which is how a disputed task is
+settled.
+
+Creating and reassigning are command work and carry `declare_incident`. Completing is self-scoped:
+an owned task is completed by its owner, and an unassigned one by anybody in the tenant - because
+somebody has to be able to close out work that was actually done.
+
+| Code | When |
+|---|---|
+| 403 | completing somebody else's task |
+| 404 | the task or the incident is not in this tenant |
+| 422 | assigning to a user outside the organisation, completing a cancelled task, or reassigning a settled one |
+
 ## Ingest keys (REQ-032)
 
 All `manage_apps`. An ingest key is the credential a *sending application* holds: a bearer
@@ -778,6 +910,16 @@ fix the payload and resend with the same one.
 | `incident.closed` | **incident** | owning tenant | a person closed it. Terminal: nothing reopens a closed incident |
 | `incident.itsm.synced` | **incident** | owning tenant | the ticket now matches the incident. System actor, `observed` authority - the ticket queue is the system of record for tickets |
 | `incident.itsm.sync.failed` / `.uncertain` | **incident** | owning tenant | the ITSM refused with a reason, or a call timed out and the ticket may or may not exist. Published on a *change* of sync state, never once per retry |
+| `warroom.opened` | **incident** | owning tenant | the room assembled on declare. Carries the blast radius, the roles it required and who it resolved them to |
+| `warroom.membership.gap` | **incident** | owning tenant | one event per required role nobody is bound to. Separate events rather than a list, so a gap reaches somebody who is not looking at the room |
+| `warroom.member.joined` | **incident** | owning tenant | a person turned up. Human actor. Only the *first* arrival, so a polling screen cannot fill a timeline people are reading |
+| `warroom.page.sent` | **incident** | owning tenant | a page went out, naming the channels that carried it and the deadline it must be answered by |
+| `warroom.page.failed` | **incident** | owning tenant | no bound channel could carry it. Nobody was reached, and the row says so instead of counting down |
+| `warroom.page.acknowledged` | **incident** | owning tenant | somebody answered. Human actor, and carries `answered_in_s` |
+| `warroom.page.escalated` | **incident** | owning tenant | the countdown ran out, or a commander escalated by hand. `by_human` distinguishes them |
+| `warroom.page.escalation.exhausted` | **incident** | owning tenant | every rotation member and policy step has been paged and nobody answered. Carries `needs_human: true` |
+| `warroom.bridge.posted` | **incident** | owning tenant | somebody spoke on the bridge. Human actor; the text is not repeated in the payload, only its length |
+| `warroom.task.created` / `.updated` | **incident** | owning tenant | a commitment became work, or was reassigned, completed or cancelled. System actor when harvested from the bridge, human when typed |
 
 Every `detection.*` event except `detection.evaluation.forced` carries an `actor.type` of
 `system` and a `source.authority` of `observed`: the platform measured this, it is not the

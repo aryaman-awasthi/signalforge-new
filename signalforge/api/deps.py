@@ -36,6 +36,10 @@ from signalforge.application.incidents.common import (
 from signalforge.application.incidents.itsm import IncidentTicketSync
 from signalforge.application.incidents.service import IncidentService
 from signalforge.application.notifications.inbox import NotificationInbox
+from signalforge.application.warroom.bridge import BridgeService
+from signalforge.application.warroom.paging import PagingService
+from signalforge.application.warroom.service import WarRoomService
+from signalforge.application.warroom.tasks import IncidentTaskService
 from signalforge.application.onboarding.apps import ApplicationService
 from signalforge.application.onboarding.discovery import DiscoveryService
 from signalforge.application.onboarding.testing import (
@@ -88,6 +92,7 @@ from signalforge.infrastructure.persistence.rollups import (
 )
 from signalforge.infrastructure.persistence.uow import SqlIdentityUnitOfWork
 from signalforge.workers.lifecycle import lifecycle_jobs
+from signalforge.workers.warroom import warroom_jobs
 from signalforge.workers.pollers import detection_jobs
 from signalforge.workers.runner import PlatformWorker, ScheduledJob
 from signalforge.infrastructure.security.hmac_verify import IngestHmacVerifier
@@ -339,6 +344,45 @@ class Container:
             metrics=self.metrics,
         )
 
+        # The war room (S4-T03). Assembled here rather than by the incident
+        # service importing it, so the dependency keeps pointing one way: the
+        # lifecycle knows nothing about paging, and a node could run incidents
+        # with the room disabled without changing a line of the lifecycle.
+        self.war_rooms = WarRoomService(
+            self.uow_factory,
+            self.bus,
+            self.clock,
+            self.adapter_registry,
+            metrics=self.metrics,
+        )
+        self.paging = PagingService(
+            self.uow_factory,
+            self.bus,
+            self.clock,
+            self.adapter_registry,
+            self.invoker,
+            rooms=self.war_rooms,
+            metrics=self.metrics,
+        )
+        self.bridge = BridgeService(
+            self.uow_factory,
+            self.bus,
+            self.clock,
+            self.invoker,
+            rooms=self.war_rooms,
+            metrics=self.metrics,
+        )
+        self.incident_tasks = IncidentTaskService(
+            self.uow_factory, self.bus, self.clock, metrics=self.metrics
+        )
+        # Declaring opens the room; opening it pages the room. Both are hooks
+        # rather than calls, and both survive their own failure: a P0 that could
+        # not be declared because a pager was down would be the worst bug in
+        # this product.
+        self.war_rooms.on_opened.append(self.paging.page_room)
+        self.incidents.on_declared.append(self.war_rooms.open_for)
+        self.incidents.on_closed.append(self._stand_down)
+
         # Self-observability (S2-T03).
         self.health = ConnectorHealthService(
             self.event_uow_factory, self.bus, clock=self.wall_clock, metrics=self.metrics
@@ -408,7 +452,25 @@ class Container:
             self.incident_tickets,
             interval_s=self.settings.itsm_sync_interval_s,
         )
+        # Escalation and the commitment harvest, for the same reason: a page that
+        # nobody answered has to escalate on a node with no detector.
+        jobs += warroom_jobs(
+            self.paging,
+            self.bridge,
+            escalation_interval_s=self.settings.escalation_interval_s,
+            harvest_interval_s=self.settings.bridge_harvest_interval_s,
+        )
         return jobs
+
+    async def _stand_down(self, incident) -> None:
+        """The incident closed: stop ringing phones, and close the room.
+
+        Acknowledged pages are left alone - what somebody took responsibility for
+        is not un-taken by the incident ending - and the room stays readable,
+        because what was decided in it is what a post-incident review reads.
+        """
+        await self.paging.cancel_open_pages(incident)
+        await self.war_rooms.close_for(incident)
 
     async def prepare_rollup_store(self) -> None:
         """Create `rollups.db`'s tables if they are not there.
@@ -436,8 +498,9 @@ class Container:
                 {"connector": f"job:{status.name}"},
             )
         # Install-wide counts only: an incident id and an app_id belong to one
-        # tenant, and this scrape has no session (S4-T02).
+        # tenant, and this scrape has no session (S4-T02, S4-T03).
         await self.incidents.refresh_gauges()
+        await self.paging.refresh_gauges()
 
 
 _container: Optional[Container] = None

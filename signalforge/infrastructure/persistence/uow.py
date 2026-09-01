@@ -32,6 +32,12 @@ from signalforge.infrastructure.persistence.ingest import (
     SqlIngestKeyRepository,
     SqlIngestReceiptStore,
 )
+from signalforge.infrastructure.persistence.warroom import (
+    SqlIncidentTaskRepository,
+    SqlPageRepository,
+    SqlRoomMemberRepository,
+    SqlWarRoomRepository,
+)
 from signalforge.infrastructure.persistence.integrations import SqlNotificationStore
 from signalforge.infrastructure.persistence.onboarding import (
     SqlApplicationRepository,
@@ -74,6 +80,10 @@ class SqlIdentityUnitOfWork(IdentityUnitOfWork):
         self.incidents = SqlIncidentRepository(self._session)
         self.incident_transitions = SqlIncidentTransitionRepository(self._session)
         self.changes = SqlChangeWindowStore(self._session)
+        self.war_rooms = SqlWarRoomRepository(self._session)
+        self.room_members = SqlRoomMemberRepository(self._session)
+        self.incident_pages = SqlPageRepository(self._session)
+        self.incident_tasks = SqlIncidentTaskRepository(self._session)
         self.audit = AuditChainWriter(self._session, clock=self._clock)
         self.events = SqlEventStore(self._session, clock=self._clock)
         return self

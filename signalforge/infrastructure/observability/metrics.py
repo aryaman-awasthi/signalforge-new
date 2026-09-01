@@ -330,4 +330,39 @@ def build_registry() -> MetricsRegistry:
         "signalforge_change_windows_open", MetricType.GAUGE,
         "Changes announced as started and never announced as completed", (),
     )
+    # The war room (S4-T03). Every label is a closed vocabulary - a state, a
+    # severity, a role from the frozen matrix - so an unauthenticated scrape can
+    # show that a P0 has an unanswered page without being able to say whose.
+    registry.declare(
+        "signalforge_war_rooms_total", MetricType.COUNTER,
+        "War rooms opened, by the severity they were declared at", ("severity",),
+    )
+    registry.declare(
+        "signalforge_war_room_membership_gaps_total", MetricType.COUNTER,
+        "Required roles nobody was bound to when a room opened", ("role",),
+    )
+    registry.declare(
+        "signalforge_pages_total", MetricType.COUNTER,
+        "Pages, by the state they reached and the severity they carried",
+        ("state", "severity"),
+    )
+    registry.declare(
+        "signalforge_page_escalations_total", MetricType.COUNTER,
+        "Escalations, by outcome - `exhausted` means nobody was left to page",
+        ("outcome",),
+    )
+    registry.declare(
+        "signalforge_pages_overdue", MetricType.GAUGE,
+        "Pages past their acknowledgement deadline and still unanswered", (),
+    )
+    registry.declare(
+        "signalforge_incident_tasks_total", MetricType.COUNTER,
+        "Incident tasks raised, by where they came from and whether an owner "
+        "could be resolved",
+        ("source", "assigned"),
+    )
+    registry.declare(
+        "signalforge_incident_tasks_completed_total", MetricType.COUNTER,
+        "Incident tasks completed, by where they came from", ("source",),
+    )
     return registry

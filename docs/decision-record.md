@@ -6,6 +6,98 @@ graph" section at the bottom is the authored pre-build decision record
 (signalforge-memory-graph.md, provided and imported 2026-09-01) - every N-line there
 is treated as already decided.
 
+## DR-085 (2026-09-01, S4) A commitment key is derived from the message, not from who said it
+`_key(message_id, title)` deliberately excludes the author. Why: the same message is read by two
+paths that legitimately disagree about who said it - the poster knows the session, and a later
+sweep sees only the connector's own identity, because the frozen collaboration SPI carries no
+author on `post`. Hashing the author in would give one sentence two keys and raise the same
+commitment twice, which is the exact failure the key exists to prevent. A message id already
+identifies one utterance uniquely, so the author bought no uniqueness in the first place.
+Consequence: the two harvest paths compose through one idempotency guard rather than having to
+know about each other, and either can be removed without the other double-writing.
+
+## DR-084 (2026-09-01, S4) A commitment said through SignalForge is harvested where authorship is certain
+`BridgeService.post` harvests its own message immediately; the background sweep harvests
+everything else. Why: the frozen SPI's `post(channel, text, thread_id)` has no author parameter,
+so the adapter writes the transcript under the *connector's* identity - correct, because that is
+who the far side sees posting, but it means a sweep reading the transcript back cannot tell that
+"I'll roll back region-b" was this session. Harvesting at post time is the only place the answer
+is known rather than inferred; re-parsing our own `"<name>: <text>"` prefix would be inventing a
+protocol on top of a frozen one. Consequence: a commitment becomes a task the moment it is said
+rather than up to a sweep later, and what the sweep alone finds - scripted lines, anybody posting
+from the far side - genuinely has no SignalForge author and stays unassigned, which is honest.
+
+## DR-083 (2026-09-01, S4) The bridge window opens one second before the room does
+`OPENING_SLACK_S = 1`. Why: the frozen collaboration SPI's `fetch(channel, since, limit)` is
+exclusive (`sent_at > since`), so a message sent in the same instant the room opened is invisible
+to a read starting exactly at `opened_at`. On wall-clock time that is a millisecond-wide race; on
+a **virtual clock** it is a certainty - a drill can open a room and play its first scripted line
+without the clock moving at all, and the entire transcript would read as silence. Fixed in the war
+room rather than in the adapter, because the SPI's `since` semantics are frozen and already have
+tests. Consequence: one second of slack, which cannot reach back before the incident existed, and
+the boundary is inclusive on every clock.
+
+## DR-082 (2026-09-01, S4) An owner is resolved only when it is unambiguous, and never guessed
+A harvested commitment resolves to a user id in exactly three cases: the speaker committed
+themselves and the bridge author is a user this tenant holds; the name matches exactly one display
+name; the name matches exactly one email local part. Two matches is no match. Why: a room with a
+Sam Patel and a Sam Okafor would otherwise get a coin toss, and the losing outcome is paging the
+wrong person at 03:00 for work they never agreed to. An unassigned task carrying the name as a
+label is fixable in one click; a wrongly-owned one is discovered at the review. The domain also
+takes a `not_people` list from the caller - the application id and its topology's service names -
+because it cannot know which capitalised words are systems and inventing that list would be the
+same guess one level down. Consequence: the board shows unowned work, visibly, rather than work
+owned by a guess.
+
+## DR-081 (2026-09-01, S4) An executive is present for a P0 and is not paged for one
+`RoleRequirement.paged` is a separate field from membership. Why: being in the room and being woken
+are different acts, and a platform that conflates them teaches executives to ignore their
+notifications - after which the one page that mattered is ignored too. Consequence: `required`,
+`paged` and `present` are three columns on a member row rather than one status. "Four were
+required, four were paged, two are here" is the sentence an incident commander needs at minute
+ten, and a single status cannot say it.
+
+## DR-080 (2026-09-01, S4) A required role nobody holds is published, not omitted
+A `MembershipGap` is written onto the room, published as `warroom.membership.gap` and audited. Why:
+a room that quietly rendered a shorter member list would look complete. The failure that prevents
+is the expensive one - nobody notices the customer was never told until the post-incident review -
+and it is cheap to prevent because the required roles are already computed. Consequence: a war room
+can open in a visibly incomplete state, which is correct: it still runs, and somebody can act on
+the gap while there is still time.
+
+## DR-079 (2026-09-01, S4) Blast radius walks to dependents, and an unmapped application has none
+`downstream_services` walks topology edges backwards - source-depends-on-target means dependents
+are found by walking from the broken node to the things that named it. Why: walking forwards would
+answer "what does this application need", a different and equally plausible-looking question, and
+getting it silently backwards would put the wrong people in the room every time. An application
+with no matching node yields an empty radius rather than seeding from every node, because calling
+the whole estate a blast radius reads as a catastrophe on every incident and therefore on none.
+Consequence: an unmapped application produces a room assembled from severity alone, and both the
+room and the brief say so rather than implying the estate is unaffected.
+
+## DR-078 (2026-09-01, S4) The countdown is stored arithmetic, never a timer
+A page holds `paged_at` and `ack_deadline_at`; `countdown_s` is computed against a clock the
+caller passes in, and the escalation sweep asks the repository for rows whose stored deadline has
+passed. Why: a timer held in memory is lost on restart, is wrong on a node that was asleep, and
+cannot be made to run at 100x for a drill without drill-aware code. Storing the deadline instead
+means the ack board, the sweep and a phone opened ten minutes later all compute the same number
+from the same two columns. Consequence: escalation latency is bounded by the sweep's cadence
+(15s, configurable with a one-second floor) rather than being exact, which is the right trade for
+a countdown measured in minutes.
+
+## DR-077 (2026-09-01, S4) Four session writes carry no permission, because self-scoping is stronger than one
+Acknowledging a page, joining the room, speaking on the bridge and completing your own task are
+guarded by the entity refusing to act on anybody else's behalf, not by a permission. Why:
+`ROLE_PERMISSIONS[Role.SME]` is empty in the frozen matrix, so the person most likely to be paged
+holds nothing, and any permission on these paths would exclude exactly the people a war room
+exists to reach - the same reasoning `/ws` records as DR-031. The control that replaces it is
+strictly tighter: `declare_incident` would let *any* holder acknowledge *anybody's* page, whereas
+`Page.acknowledged` refuses everyone but the addressee. Consequence: `SESSION_ONLY_WRITES` in the
+security suite grows from one entry to five, and the two lists are joined by a test - a war-room
+write added to the exemption without a self-scoping test beside it fails the build. Command work
+(paging somebody, putting work on their board, reassigning it) keeps its permission, because those
+are decisions about other people's time.
+
 ## DR-076 (2026-09-01, S4) A change window is a projection, not a scan of the timeline
 `change_windows` is a table keyed on (tenant, app, change_id), filled by a bus consumer group
 that folds every `deployment.*` and `change.*` event. Why: "is a change in flight right now" is

@@ -10,8 +10,8 @@ integrations and onboarding, and is the one Alembic migrates. `rollups.db`
 holds derived detection telemetry, is created from its models at startup, and
 can be deleted without losing any record of anything that happened.
 
-Generated: 2026-09-01T06:57:23+00:00
-Tables: 30 in signalforge.db, 4 in rollups.db
+Generated: 2026-09-01T08:14:48+00:00
+Tables: 34 in signalforge.db, 4 in rollups.db
 
 ## 1. Entity relationship diagram
 
@@ -464,6 +464,97 @@ erDiagram
         boolean simulated
         boolean announced_started
         boolean announced_completed
+    }
+```
+
+### The war room (S4)
+
+Who was in the room, who was asked, and what was committed. `war_rooms` is unique on the incident, so one declaration produces one room and one set of pages; `war_room_members` keeps required, paged and present as three separate facts, because the difference between them is what an incident commander reads at minute ten. `incident_pages` stores its own `ack_deadline_at` rather than holding a timer, which is what makes a countdown survive a restart and run at 100x on a drill's virtual clock. `incident_tasks` has a nullable owner beside the label a bridge actually said, and a unique harvest key so re-reading a transcript produces one task rather than one per sweep.
+
+```mermaid
+erDiagram
+    war_rooms {
+        string id "PK"
+        string tenant_id
+        string incident_id
+        string app_id
+        datetime opened_at
+        string opened_by
+        string severity
+        json radius
+        json gaps
+        string bridge_channel
+        string bridge_adapter_id
+        string bridge_binding_id
+        datetime closed_at
+        datetime last_harvest_at
+    }
+    war_room_members {
+        string tenant_id "PK"
+        string incident_id "PK"
+        string user_id "PK"
+        string role
+        text reason
+        string source
+        string display_name
+        datetime added_at
+        boolean required
+        boolean paged
+        boolean present
+        datetime joined_at
+        datetime last_seen_at
+    }
+    incident_pages {
+        string id "PK"
+        string tenant_id
+        string incident_id
+        string app_id
+        string recipient
+        string recipient_display
+        string role
+        text reason
+        string severity
+        string state
+        datetime created_at
+        integer ack_timeout_s
+        datetime paged_at
+        datetime ack_deadline_at
+        datetime acked_at
+        string acked_by
+        text ack_note
+        datetime escalated_at
+        string escalated_to_page_id
+        string escalated_from_page_id
+        integer hop
+        string rotation_id
+        string policy_id
+        integer policy_step
+        text detail
+        json deliveries
+        string requested_by
+        string requested_by_type
+    }
+    incident_tasks {
+        string id "PK"
+        string tenant_id
+        string incident_id
+        string app_id
+        string title
+        string status
+        string source
+        datetime created_at
+        string created_by
+        string owner_user_id
+        string owner_label
+        datetime due_at
+        string due_label
+        text note
+        text evidence_ref
+        string harvest_key
+        datetime completed_at
+        string completed_by
+        datetime updated_at
+        json detail
     }
 ```
 
@@ -1152,6 +1243,117 @@ Indexes: `ix_incident_transitions_incident`, `ix_incident_transitions_tenant_id`
 | `announced_completed` | boolean | no |  |
 
 Indexes: `ix_change_windows_app_started`, `ix_change_windows_open`
+
+
+### The war room (S4)
+
+#### `war_rooms`
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | string | no | primary key |
+| `tenant_id` | string | no |  |
+| `incident_id` | string | no |  |
+| `app_id` | string | no |  |
+| `opened_at` | datetime | no |  |
+| `opened_by` | string | no |  |
+| `severity` | string | no |  |
+| `radius` | json | no |  |
+| `gaps` | json | no |  |
+| `bridge_channel` | string | no |  |
+| `bridge_adapter_id` | string | no |  |
+| `bridge_binding_id` | string | no |  |
+| `closed_at` | datetime | yes |  |
+| `last_harvest_at` | datetime | yes |  |
+
+Indexes: `ix_war_rooms_open`, `ix_war_rooms_tenant_id`  
+Constraints: unique (tenant_id, incident_id)
+
+
+#### `war_room_members`
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `tenant_id` | string | no | primary key |
+| `incident_id` | string | no | primary key |
+| `user_id` | string | no | primary key |
+| `role` | string | yes |  |
+| `reason` | text | no |  |
+| `source` | string | no |  |
+| `display_name` | string | no |  |
+| `added_at` | datetime | no |  |
+| `required` | boolean | no |  |
+| `paged` | boolean | no |  |
+| `present` | boolean | no |  |
+| `joined_at` | datetime | yes |  |
+| `last_seen_at` | datetime | yes |  |
+
+Indexes: `ix_war_room_members_incident`
+
+
+#### `incident_pages`
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | string | no | primary key |
+| `tenant_id` | string | no |  |
+| `incident_id` | string | no |  |
+| `app_id` | string | no |  |
+| `recipient` | string | no |  |
+| `recipient_display` | string | no |  |
+| `role` | string | yes |  |
+| `reason` | text | no |  |
+| `severity` | string | no |  |
+| `state` | string | no |  |
+| `created_at` | datetime | no |  |
+| `ack_timeout_s` | integer | no |  |
+| `paged_at` | datetime | yes |  |
+| `ack_deadline_at` | datetime | yes |  |
+| `acked_at` | datetime | yes |  |
+| `acked_by` | string | yes |  |
+| `ack_note` | text | no |  |
+| `escalated_at` | datetime | yes |  |
+| `escalated_to_page_id` | string | yes |  |
+| `escalated_from_page_id` | string | yes |  |
+| `hop` | integer | no |  |
+| `rotation_id` | string | yes |  |
+| `policy_id` | string | yes |  |
+| `policy_step` | integer | no |  |
+| `detail` | text | no |  |
+| `deliveries` | json | no |  |
+| `requested_by` | string | no |  |
+| `requested_by_type` | string | no |  |
+
+Indexes: `ix_incident_pages_chain`, `ix_incident_pages_deadline`, `ix_incident_pages_incident`, `ix_incident_pages_recipient`, `ix_incident_pages_tenant_id`
+
+
+#### `incident_tasks`
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | string | no | primary key |
+| `tenant_id` | string | no |  |
+| `incident_id` | string | no |  |
+| `app_id` | string | no |  |
+| `title` | string | no |  |
+| `status` | string | no |  |
+| `source` | string | no |  |
+| `created_at` | datetime | no |  |
+| `created_by` | string | no |  |
+| `owner_user_id` | string | yes |  |
+| `owner_label` | string | no |  |
+| `due_at` | datetime | yes |  |
+| `due_label` | string | no |  |
+| `note` | text | no |  |
+| `evidence_ref` | text | no |  |
+| `harvest_key` | string | yes |  |
+| `completed_at` | datetime | yes |  |
+| `completed_by` | string | yes |  |
+| `updated_at` | datetime | yes |  |
+| `detail` | json | no |  |
+
+Indexes: `ix_incident_tasks_incident`, `ix_incident_tasks_owner`, `ix_incident_tasks_tenant_id`  
+Constraints: unique (tenant_id, incident_id, harvest_key)
 
 
 ### Agent traces (S2, filled S5)

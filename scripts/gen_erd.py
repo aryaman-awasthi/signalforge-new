@@ -84,6 +84,20 @@ GROUPS: list[tuple[str, str, tuple[str, ...]]] = [
         ("incidents", "incident_transitions", "change_windows"),
     ),
     (
+        "The war room (S4)",
+        "Who was in the room, who was asked, and what was committed. "
+        "`war_rooms` is unique on the incident, so one declaration produces one "
+        "room and one set of pages; `war_room_members` keeps required, paged and "
+        "present as three separate facts, because the difference between them is "
+        "what an incident commander reads at minute ten. `incident_pages` stores "
+        "its own `ack_deadline_at` rather than holding a timer, which is what "
+        "makes a countdown survive a restart and run at 100x on a drill's "
+        "virtual clock. `incident_tasks` has a nullable owner beside the label a "
+        "bridge actually said, and a unique harvest key so re-reading a "
+        "transcript produces one task rather than one per sweep.",
+        ("war_rooms", "war_room_members", "incident_pages", "incident_tasks"),
+    ),
+    (
         "Agent traces (S2, filled S5)",
         "Written from Sprint 5 by the agent suite; shipped now so agents are born "
         "observable rather than instrumented afterwards.",
