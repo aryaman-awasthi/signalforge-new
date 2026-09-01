@@ -16,9 +16,28 @@ from typing import Any, Mapping, Optional
 
 from signalforge.application.drills.ports import (
     DrillResponse,
+    DrillScheduler,
     DrillTransport,
     DrillWorld,
 )
+
+
+class WorkerScheduler(DrillScheduler):
+    """The container's own worker group, run one job at a time.
+
+    The worker swallows a failing job on purpose - a broken poller must never
+    stop incident traffic - so this reads the job's status afterwards and fails
+    the drill loudly. A game day that passed because the detector crashed
+    quietly would be the worst possible artefact.
+    """
+
+    def __init__(self, container):
+        self._worker = container.worker
+
+    async def run_job(self, name: str) -> None:
+        status = await self._worker.run_job_once(name)
+        if status.last_error:
+            raise AssertionError(f"platform job {name!r} failed: {status.last_error}")
 
 
 class InProcessTransport(DrillTransport):
@@ -36,13 +55,18 @@ class InProcessTransport(DrillTransport):
         token: Optional[str] = None,
         json: Optional[Mapping[str, Any]] = None,
         params: Optional[Mapping[str, Any]] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        content: Optional[bytes] = None,
     ) -> DrillResponse:
-        headers = {"Authorization": f"Bearer {token}"} if token else {}
+        sent = dict(headers or {})
+        if token:
+            sent["Authorization"] = f"Bearer {token}"
         response = self._client.request(
             method,
             path,
-            headers=headers,
-            json=dict(json) if json is not None else None,
+            headers=sent,
+            json=dict(json) if json is not None and content is None else None,
+            content=content,
             params=dict(params) if params is not None else None,
         )
         self.calls.append((method, path, response.status_code))

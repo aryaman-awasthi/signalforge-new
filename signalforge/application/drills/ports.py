@@ -48,7 +48,15 @@ class DrillTransport(ABC):
         token: Optional[str] = None,
         json: Optional[Mapping[str, Any]] = None,
         params: Optional[Mapping[str, Any]] = None,
-    ) -> DrillResponse: ...
+        headers: Optional[Mapping[str, str]] = None,
+        content: Optional[bytes] = None,
+    ) -> DrillResponse:
+        """``content`` and ``headers`` exist for one case: a signed ingest call.
+
+        The HMAC covers the exact bytes, so a drill that let the client
+        re-serialise its body would be testing a signature over a document
+        nobody sent.
+        """
 
 
 class DrillWorld(ABC):
@@ -68,6 +76,22 @@ class DrillWorld(ABC):
         refuses anything else, which is what keeps a game day's faults inside a
         game day.
         """
+
+
+class DrillScheduler(ABC):
+    """The platform's own scheduled work, run when the scenario says.
+
+    In production a worker group runs the pollers, the evaluator, the probe
+    runner, the escalation sweep and the brain on timers. A drill compresses an
+    afternoon into a second, so it runs the *same jobs from the same composition
+    root* at moments it chooses. This port controls when the platform looks. It
+    has no way to influence what the platform concludes, which is the line that
+    keeps a drill evidence rather than a puppet show.
+    """
+
+    @abstractmethod
+    async def run_job(self, name: str) -> None:
+        """Run one named job now; raise if the job failed."""
 
 
 class DrillClock(ABC):

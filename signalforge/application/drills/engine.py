@@ -23,6 +23,9 @@ previous step created" without the runner knowing what an execution is.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -31,6 +34,7 @@ from typing import Any, Mapping, Optional
 from signalforge.application.drills.ports import (
     DrillClock,
     DrillResponse,
+    DrillScheduler,
     DrillTransport,
     DrillWorld,
 )
@@ -104,11 +108,13 @@ class DrillEngine:
         transport: DrillTransport,
         world: DrillWorld,
         clock: DrillClock,
+        scheduler: Optional[DrillScheduler] = None,
         on_step=None,
     ):
         self._transport = transport
         self._world = world
         self._clock = clock
+        self._scheduler = scheduler
         self._on_step = on_step
 
     async def run(
@@ -155,24 +161,55 @@ class DrillEngine:
         if step.kind is StepKind.CHECKPOINT:
             return self._checkpoint(step, run=run)
         if step.kind is StepKind.WORLD:
-            return self._world_step(step)
+            return self._world_step(step, run=run)
         if step.kind is StepKind.CLOCK:
             return self._clock_step(step)
         if step.kind is StepKind.INJECT:
             return await self._inject_step(step, scenario=scenario, run=run)
+        if step.kind is StepKind.PLATFORM:
+            return await self._platform_step(step)
         return await self._call_step(step, run=run)
+
+    async def _platform_step(self, step: Step) -> StepRecord:
+        if self._scheduler is None:
+            raise StepError(
+                step.id,
+                "this run has no scheduler, so the platform's own jobs cannot be run",
+            )
+        for _ in range(step.repeat):
+            if step.clock:
+                self._clock_step(step)
+            for name in step.jobs:
+                await self._scheduler.run_job(name)
+        return StepRecord(
+            step_id=step.id,
+            kind=step.kind.value,
+            label=step.label,
+            actor=step.actor,
+            at=self._clock.now(),
+            detail=f"{', '.join(step.jobs)} x{step.repeat}",
+        )
 
     async def _call_step(self, step: Step, *, run: DrillRun) -> StepRecord:
         call = step.call
         assert call is not None  # guaranteed by the scenario loader
         token = None if call.unauthenticated else self._token_for(step, run=run)
-        path = _substitute(call.path, run.captures)
-        body = _substitute(call.body, run.captures) if call.body is not None else None
-        params = (
-            _substitute(call.params, run.captures) if call.params is not None else None
-        )
+        scope = _scope(run)
+        path = _substitute(call.path, scope)
+        body = _substitute(call.body, scope) if call.body is not None else None
+        params = _substitute(call.params, scope) if call.params is not None else None
+        headers: Optional[dict[str, str]] = None
+        content: Optional[bytes] = None
+        if call.sign_with:
+            token, headers, content = self._sign(step, call, body=body, run=run)
         response = await self._transport.request(
-            call.method, path, token=token, json=body, params=params
+            call.method,
+            path,
+            token=token,
+            json=body,
+            params=params,
+            headers=headers,
+            content=content,
         )
         if response.status not in call.expect_status:
             raise StepError(
@@ -196,6 +233,40 @@ class DrillEngine:
         record.checks = self._evaluate(step, run=run, immediate=response.body)
         return record
 
+    def _sign(
+        self, step: Step, call: Call, *, body: Any, run: DrillRun
+    ) -> tuple[str, dict[str, str], bytes]:
+        """Sign an ingest batch the way a pipeline's deploy hook does.
+
+        The signature covers the exact bytes and a timestamp taken from
+        *scenario* time, which is also the clock the ingest guard compares
+        against - so a drill that compresses an afternoon does not fall outside
+        the replay window.
+        """
+        key = run.captures.get(str(call.sign_with))
+        if not isinstance(key, dict) or "secret" not in key:
+            raise StepError(
+                step.id,
+                f"sign_with names capture {call.sign_with!r}, which holds no ingest key",
+            )
+        raw = json.dumps(body, separators=(",", ":"), sort_keys=False).encode("utf-8")
+        stamp = str(int(self._clock.now().timestamp()))
+        signature = hmac.new(
+            str(key["secret"]).encode("utf-8"),
+            f"{stamp}.".encode("utf-8") + raw,
+            hashlib.sha256,
+        ).hexdigest()
+        return (
+            str(key["token"]),
+            {
+                "Content-Type": "application/json",
+                "X-SignalForge-Signature": signature,
+                "X-SignalForge-Timestamp": stamp,
+                "X-SignalForge-Key-Id": str(key["id"]),
+            },
+            raw,
+        )
+
     def _checkpoint(self, step: Step, *, run: DrillRun) -> StepRecord:
         return StepRecord(
             step_id=step.id,
@@ -207,8 +278,11 @@ class DrillEngine:
             checks=self._evaluate(step, run=run, immediate=None),
         )
 
-    def _world_step(self, step: Step) -> StepRecord:
-        for verb, argument in step.world.items():
+    def _world_step(self, step: Step, *, run: DrillRun) -> StepRecord:
+        # Substituted like a call body: "the application turns out to have
+        # applied the rollback under the key the gateway derived" is a sentence
+        # about a value the platform produced a moment earlier.
+        for verb, argument in _substitute(dict(step.world), _scope(run)).items():
             self._world.apply(verb, argument)
         return StepRecord(
             step_id=step.id,
@@ -242,7 +316,7 @@ class DrillEngine:
         self, step: Step, *, scenario: Scenario, run: DrillRun
     ) -> StepRecord:
         scenario_id = str(step.inject["scenario_id"])
-        params = _substitute(dict(step.inject.get("params") or {}), run.captures)
+        params = _substitute(dict(step.inject.get("params") or {}), _scope(run))
         key = str(step.inject.get("idempotency_key") or f"{scenario.drill_id}-{step.id}")
         result = await self._world.inject(
             scenario_id=scenario_id, params=params, scope=scenario.scope, key=key
@@ -304,11 +378,22 @@ class DrillEngine:
     ) -> tuple[CheckResult, ...]:
         if not step.expect:
             return ()
-        root = dict(run.captures)
+        root = _scope(run)
         root["_"] = immediate
-        root["identities"] = dict(run.identities)
-        root["users"] = dict(run.user_ids)
         return tuple(evaluate(root, expectation) for expectation in step.expect)
+
+
+def _scope(run: DrillRun) -> dict[str, Any]:
+    """Everything a scenario may name: captured responses, and who is who.
+
+    `users.<name>` and `identities.<name>` are here rather than in the captures
+    because a scenario says "page the SME", not "page the user id in field three
+    of the response to step nineteen".
+    """
+    scope = dict(run.captures)
+    scope["users"] = dict(run.user_ids)
+    scope["identities"] = dict(run.identities)
+    return scope
 
 
 def _substitute(value: Any, captures: Mapping[str, Any]) -> Any:

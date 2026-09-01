@@ -21,7 +21,11 @@ from signalforge.tests.adapters.conftest import (  # noqa: F401  (re-exported)
     default_config,
     observe,
 )
-from signalforge.tests.drills.harness import InProcessTransport, ObserveWorld
+from signalforge.tests.drills.harness import (
+    InProcessTransport,
+    ObserveWorld,
+    WorkerScheduler,
+)
 
 DRILLS_DIR = Path(__file__).resolve().parents[3] / "drills"
 
@@ -42,6 +46,7 @@ def drill_engine(api, drill_world, drill_clock):
         transport=InProcessTransport(api.client),
         world=drill_world,
         clock=drill_clock,
+        scheduler=WorkerScheduler(api.container),
     )
 
 

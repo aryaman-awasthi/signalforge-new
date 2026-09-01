@@ -42,7 +42,23 @@ OPERATORS: tuple[str, ...] = (
     "absent",
     "each_equals",
     "each_in",
+    "equals_path",
+    "not_equals_path",
+    "gt_path",
+    "lt_path",
+    "contains_path",
 )
+
+PATH_OPERATORS = frozenset(
+    {"equals_path", "not_equals_path", "gt_path", "lt_path", "contains_path"}
+)
+"""Operators whose operand is another path rather than a literal.
+
+"this hypothesis is more confident than it was before the measurement arrived"
+is a claim about two real observations, and writing it as a literal threshold
+would turn it into a claim about a number somebody typed. Both sides are still
+values the product returned; the drill only says which is expected to be larger.
+"""
 
 
 @dataclass(frozen=True)
@@ -97,6 +113,16 @@ def resolve(root: Any, path: str) -> Any:
 
 def evaluate(root: Any, expectation: Expectation) -> CheckResult:
     observed = resolve(root, expectation.path)
+    if expectation.operator in PATH_OPERATORS:
+        other = resolve(root, str(expectation.operand))
+        if other is MISSING:
+            return CheckResult(expectation=expectation, observed=observed, ok=False)
+        operator = expectation.operator[: -len("_path")]
+        return CheckResult(
+            expectation=expectation,
+            observed=observed,
+            ok=_compare(observed, operator, other),
+        )
     return CheckResult(
         expectation=expectation,
         observed=observed,

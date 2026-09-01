@@ -63,6 +63,32 @@ conclusions itself.
 
 CLOCK_VERBS = frozenset({"advance_s", "pause", "resume", "set_speed", "step_s"})
 
+PLATFORM_JOBS = frozenset(
+    {
+        "metric-rollups",
+        "detection",
+        "probes",
+        "rollup-retention",
+        "incident-brain",
+        "page-escalation",
+        "bridge-harvest",
+        "approval-expiry",
+        "uncertain-executions",
+        "dispatcher",
+        "connector-health",
+        "retention",
+        "incident-itsm-sync",
+    }
+)
+"""The platform's own scheduled work, named.
+
+In production a worker group runs these on timers. A drill runs the same jobs,
+built by the same composition root, at moments the scenario chooses - which is
+what a virtual clock is *for*. A drill therefore controls when the platform
+looks, and never what it concludes: a scenario cannot name a job that does not
+exist, and there is no job here that writes a verdict.
+"""
+
 
 class StepKind(str, Enum):
     HUMAN = "human"
@@ -70,6 +96,7 @@ class StepKind(str, Enum):
     WORLD = "world"
     INJECT = "inject"
     CLOCK = "clock"
+    PLATFORM = "platform"
     CHECKPOINT = "checkpoint"
 
 
@@ -94,6 +121,13 @@ class Call:
     params: Optional[Mapping[str, Any]] = None
     expect_status: tuple[int, ...] = (200, 201)
     unauthenticated: bool = False
+    sign_with: Optional[str] = None
+    """Name of a capture holding an ingest key (id, token, secret).
+
+    A pipeline announcing a deployment presents an HMAC over the exact bytes it
+    sent, and the ingest contract refuses anything else. A drill that skipped
+    the signature would be rehearsing a path the product does not have.
+    """
 
 
 @dataclass(frozen=True)
@@ -109,6 +143,8 @@ class Step:
     world: Mapping[str, Any] = field(default_factory=dict)
     clock: Mapping[str, Any] = field(default_factory=dict)
     inject: Mapping[str, Any] = field(default_factory=dict)
+    jobs: tuple[str, ...] = ()
+    repeat: int = 1
     expect: tuple[Expectation, ...] = ()
     note: str = ""
 
@@ -257,6 +293,20 @@ def _load_step(raw: Any, *, drill_id: str, index: int) -> Step:  # noqa: C901
     if kind is StepKind.INJECT and not inject.get("scenario_id"):
         raise ScenarioError(f"{where}: an inject step must name a chaos scenario_id")
 
+    jobs = tuple(str(name) for name in (raw.get("jobs") or ()))
+    if kind is StepKind.PLATFORM:
+        if not jobs:
+            raise ScenarioError(f"{where}: a platform step must name at least one job")
+        unknown = set(jobs) - PLATFORM_JOBS
+        if unknown:
+            raise ScenarioError(
+                f"{where}: unknown platform job(s) {sorted(unknown)}; "
+                f"allowed: {sorted(PLATFORM_JOBS)}"
+            )
+    repeat = int(raw.get("repeat", 1))
+    if repeat < 1:
+        raise ScenarioError(f"{where}: repeat must be at least 1")
+
     try:
         expect = parse_expectations(raw.get("expect"), where=where)
     except ValueError as exc:
@@ -276,6 +326,8 @@ def _load_step(raw: Any, *, drill_id: str, index: int) -> Step:  # noqa: C901
         world=world,
         clock=clock,
         inject=inject,
+        jobs=jobs,
+        repeat=repeat,
         expect=expect,
         note=str(raw.get("note") or ""),
     )
@@ -305,6 +357,7 @@ def _load_call(raw: Any, *, where: str) -> Optional[Call]:
         params=raw.get("params"),
         expect_status=expect_status,
         unauthenticated=bool(raw.get("unauthenticated", False)),
+        sign_with=raw.get("sign_with"),
     )
 
 

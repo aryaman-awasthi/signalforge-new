@@ -32,10 +32,19 @@ class HttpDrillTransport(DrillTransport):
         token: Optional[str] = None,
         json: Optional[Mapping[str, Any]] = None,
         params: Optional[Mapping[str, Any]] = None,
+        headers: Optional[Mapping[str, str]] = None,
+        content: Optional[bytes] = None,
     ) -> DrillResponse:
-        headers = {"Authorization": f"Bearer {token}"} if token else {}
+        sent = dict(headers or {})
+        if token:
+            sent["Authorization"] = f"Bearer {token}"
         response = await self._client.request(
-            method, path, headers=headers, json=json, params=params
+            method,
+            path,
+            headers=sent,
+            json=json if content is None else None,
+            content=content,
+            params=params,
         )
         body: Any
         try:

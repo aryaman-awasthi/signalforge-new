@@ -1,0 +1,1530 @@
+# Recovery Collision - the Sprint 7 flagship drill (REQ-071).
+#
+# WHAT THIS FILE IS
+#
+# A whole incident, written down. Nothing here is product code: every step is a
+# call on SignalForge's own public API, a change to the *watched application*
+# over the frozen observe contract, a move of scenario time, or a run of the
+# platform's own scheduled jobs. Every conclusion in it - the stance, the
+# severity, the policy outcome, the hypothesis confidences, the validation
+# verdicts, the closure lock - is reached by the platform. This file only says
+# what happened in the world and writes down what must then be true.
+#
+# WHY "COLLISION"
+#
+# Because the failures overlap rather than queue politely:
+#
+#   * the rollback that was approved times out, so nobody knows whether it
+#     landed - and the drill proves the platform refuses to retry until it asks;
+#   * the technical estate recovers while the customer journey does not, so the
+#     closure gate holds against four people who would like to go to bed;
+#   * a customer statement issued in good faith is contradicted by evidence that
+#     arrives afterwards, and the correction needs its own approval.
+#
+# Any one of those is a demo. All three at once is an incident.
+#
+# NO LIVE MODEL
+#
+# `requires_model: false`, and the drill runs with no GENAILAB_API_KEY at all.
+# Where a model would add narrative, the deterministic path produces the same
+# structure with `degraded: true`, and the checkpoints read the structure. A
+# drill whose green depended on a gateway being up would be evidence about the
+# gateway.
+#
+# DELETING THIS FILE LEAVES A WORKING PRODUCT (CLAUDE.md rule 7). The suite that
+# runs it skips and says why.
+
+schema_version: 1
+drill_id: recovery-collision
+name: Recovery Collision
+scope: drill:recovery-collision
+requires_model: false
+app_id: payments
+description: >-
+  A deployment degrades payments in both regions; the platform proposes P0 and a
+  person declares it; a paged responder does not answer and escalation happens;
+  three hypotheses are ranked and re-ranked as evidence arrives and is then
+  contradicted; a high-risk rollback is refused auto-execution, approved by a
+  second person, times out, lands UNCERTAIN, is refused a retry, reconciles to
+  COMPLETED_LATE and refuses to run twice; technical health returns while the
+  customer journey does not, so closure is blocked; an issued customer statement
+  is contradicted and corrected; and only after the customer path recovers and a
+  stability window completes does a person close it.
+
+clock:
+  starts_at: "2026-09-01T12:00:00+00:00"
+  speed: 1.0
+
+metadata:
+  sprint: 7
+  families_expected: [business, errors]
+  severity_expected: P0
+
+steps:
+
+  # ==========================================================================
+  # 0. The estate. An organisation, an application, its connectors, its people.
+  # ==========================================================================
+
+  - id: signup
+    kind: machine
+    label: "The organisation signs up"
+    at_s: 0
+    call:
+      method: POST
+      path: /auth/signup
+      body:
+        org_name: Northwind Payments
+        email: owner@northwind.test
+        password: drill-strong-password
+        display_name: Olivia Owner
+      expect_status: [201]
+    capture: owner
+    identity:
+      name: owner
+      token_path: tokens.access_token
+      user_id_path: user.id
+
+  - id: register-app
+    kind: machine
+    actor: owner
+    label: "The application is registered"
+    call:
+      method: POST
+      path: /apps
+      body:
+        app_id: payments
+        name: Payments
+        tier: tier_1
+        base_url: http://app.test
+      expect_status: [201]
+    capture: app
+
+  - id: connect-metrics
+    kind: machine
+    actor: owner
+    label: "Metrics connector bound"
+    call:
+      method: POST
+      path: /connectors
+      body:
+        app_id: payments
+        adapter_id: http-observe-metrics
+        name: payments metrics
+        credential_scope: read_only
+        config: {base_url: "http://app.test"}
+        credentials: {token: app-token}
+      expect_status: [201]
+
+  - id: connect-health
+    kind: machine
+    actor: owner
+    label: "Health connector bound"
+    call:
+      method: POST
+      path: /connectors
+      body:
+        app_id: payments
+        adapter_id: http-observe-health
+        name: payments health
+        credential_scope: read_only
+        config: {base_url: "http://app.test"}
+        credentials: {token: app-token}
+      expect_status: [201]
+
+  - id: connect-actions
+    kind: machine
+    actor: owner
+    label: "Remediation connector bound"
+    call:
+      method: POST
+      path: /connectors
+      body:
+        app_id: payments
+        adapter_id: http-observe-actions
+        name: payments actions
+        credential_scope: remediation
+        config: {base_url: "http://app.test"}
+        credentials: {token: app-token}
+      expect_status: [201]
+
+  - id: connect-chaos
+    kind: machine
+    actor: owner
+    label: "Chaos connector bound - drill credential scope, and nothing else"
+    note: >-
+      The chaos adapter's manifest offers `drill` alone. Binding it on a
+      read-only or remediation credential is refused by the contract, which is
+      what keeps a game day's faults inside a game day.
+    call:
+      method: POST
+      path: /connectors
+      body:
+        app_id: payments
+        adapter_id: http-observe-chaos
+        name: payments chaos
+        credential_scope: drill
+        config: {base_url: "http://app.test"}
+        credentials: {token: app-token}
+      expect_status: [201]
+
+  - id: connect-inapp
+    kind: machine
+    actor: owner
+    label: "In-app notifications bound"
+    call:
+      method: POST
+      path: /connectors
+      body:
+        app_id: payments
+        adapter_id: notify-in-app
+        name: payments in-app
+        credential_scope: remediation
+        config: {}
+        credentials: {}
+      expect_status: [201]
+
+  - id: connect-pager
+    kind: machine
+    actor: owner
+    label: "Simulated pager bound"
+    call:
+      method: POST
+      path: /connectors
+      body:
+        app_id: payments
+        adapter_id: page-sim
+        name: payments pager
+        credential_scope: remediation
+        config: {}
+        credentials: {}
+      expect_status: [201]
+
+  - id: connect-bridge
+    kind: machine
+    actor: owner
+    label: "War-room bridge bound"
+    call:
+      method: POST
+      path: /connectors
+      body:
+        app_id: payments
+        adapter_id: teams-sim
+        name: payments bridge
+        credential_scope: remediation
+        config: {}
+        credentials: {}
+      expect_status: [201]
+
+  - id: mapping
+    kind: machine
+    actor: owner
+    label: "Golden signals, regions, journeys and probes mapped"
+    call:
+      method: PUT
+      path: /apps/payments/mapping
+      body:
+        region_label: region
+        regions: [region-a, region-b]
+        signals:
+          - key: payments-success
+            signal: business
+            selector: payment_success_ratio
+            direction: lower_is_worse
+            unit: ratio
+            business_counter: true
+          - key: errors
+            signal: errors
+            selector: error_ratio
+            direction: higher_is_worse
+            unit: ratio
+          - key: saturation
+            signal: saturation
+            selector: saturation_ratio
+            direction: higher_is_worse
+            unit: ratio
+          # Keyed by the name the topology gives the component, so a sentence in
+          # the war room that names it can be checked against what was measured
+          # about it. Contradiction detection matches subjects exactly, on
+          # purpose: a looser match would cry contradiction every third message.
+          - key: connection-pool
+            signal: saturation
+            selector: connection_pool_utilisation
+            direction: higher_is_worse
+            unit: ratio
+        journeys:
+          - journey_id: payments
+            name: Payments
+            tier: 1
+        probes:
+          - probe_id: payments-probe
+            path: /checkout
+            journey_id: payments
+            expected_status: 200
+      expect_status: [200]
+
+  - id: slos
+    kind: machine
+    actor: owner
+    label: "The availability objective"
+    call:
+      method: PUT
+      path: /apps/payments/governance
+      body:
+        slos:
+          - slo_id: payments-availability
+            name: Payments availability
+            objective_pct: 99.0
+            window_days: 30
+            journey_id: payments
+            indicator: payments-success
+      expect_status: [200]
+
+  - id: publish-actions
+    kind: world
+    label: "The application publishes a rollback in its action manifest"
+    note: >-
+      The manifest is the application's own document. The platform validates it
+      against the frozen schema and imports what it says - including that the
+      rollback is high risk, is not idempotent, and is reversible by a named
+      forward action.
+    world:
+      set_actions:
+        schema_version: 1
+        actions:
+          - action_id: rollback-payments
+            name: Roll back payments
+            description: Roll the payments deployment back to the previous release.
+            action_class: rollback
+            risk: high
+            approver_roles: [incident_commander]
+            timeout_s: 120
+            idempotent: false
+            reversible: true
+            reverse_action_id: roll-forward-payments
+            preconditions: [change_window_open]
+            verification: [payments_health_up, payments_success_rate]
+            params_schema:
+              type: object
+              additionalProperties: false
+              required: [release]
+              properties:
+                release: {type: string, minLength: 1}
+          - action_id: roll-forward-payments
+            name: Roll forward payments
+            description: Re-apply the release that was rolled back.
+            action_class: rollback
+            risk: high
+            approver_roles: [incident_commander]
+            idempotent: false
+          - action_id: collect-diagnostics
+            name: Collect diagnostics
+            description: Dump a heap profile and thread stacks.
+            action_class: diagnostic
+            risk: low
+            idempotent: true
+
+  - id: import-actions
+    kind: machine
+    actor: owner
+    label: "The platform imports what the application published"
+    call:
+      method: POST
+      path: /apps/payments/actions/import
+      body: {}
+      expect_status: [200]
+    capture: imported
+
+  - id: topology
+    kind: machine
+    actor: owner
+    label: "A topology version is uploaded"
+    call:
+      method: PUT
+      path: /apps/payments/topology
+      body:
+        document:
+          version: v1
+          captured_at: "2026-09-01T11:00:00+00:00"
+          nodes:
+            - {node_id: payments, name: payments, node_type: service, region: region-a, labels: {app: payments}}
+            - {node_id: connection-pool, name: connection-pool, node_type: service}
+            - {node_id: ledger-db, name: ledger-db, node_type: database}
+            - {node_id: mobile-bff, name: mobile-bff, node_type: service}
+          edges:
+            - {source: payments, target: connection-pool, edge_type: depends_on}
+            - {source: connection-pool, target: ledger-db, edge_type: depends_on}
+            - {source: mobile-bff, target: payments, edge_type: depends_on}
+      expect_status: [200]
+
+  # -- the people -------------------------------------------------------------
+
+  - id: invite-ic
+    kind: machine
+    actor: owner
+    label: "An incident commander is invited"
+    call:
+      method: POST
+      path: /invites
+      body: {email: "ida@northwind.test", roles: [incident_commander], app_id: null}
+      expect_status: [201]
+    capture: ic_invite
+
+  - id: accept-ic
+    kind: machine
+    label: "Ida Commander accepts"
+    call:
+      method: POST
+      path: /auth/accept-invite
+      body:
+        token: "{{ic_invite.token}}"
+        password: drill-strong-password
+        display_name: Ida Commander
+      expect_status: [201]
+    capture: ic_user
+    identity: {name: ic, token_path: tokens.access_token, user_id_path: user.id}
+
+  - id: invite-second-ic
+    kind: machine
+    actor: owner
+    label: "A second commander is invited - approval takes two people"
+    note: >-
+      Requesting a high-risk action and approving it are two acts by two people.
+      The domain refuses an approval by the requester whatever permissions are
+      held, so a drill with one commander could not exercise the path at all.
+    call:
+      method: POST
+      path: /invites
+      body: {email: "ken@northwind.test", roles: [incident_commander], app_id: null}
+      expect_status: [201]
+    capture: approver_invite
+
+  - id: accept-second-ic
+    kind: machine
+    label: "Ken Deputy accepts"
+    call:
+      method: POST
+      path: /auth/accept-invite
+      body:
+        token: "{{approver_invite.token}}"
+        password: drill-strong-password
+        display_name: Ken Deputy
+      expect_status: [201]
+    capture: approver_user
+    identity: {name: approver, token_path: tokens.access_token, user_id_path: user.id}
+
+  - id: invite-sme
+    kind: machine
+    actor: owner
+    label: "The primary SME is invited"
+    call:
+      method: POST
+      path: /invites
+      body: {email: "sam@northwind.test", roles: [sme], app_id: null}
+      expect_status: [201]
+    capture: sme_invite
+
+  - id: accept-sme
+    kind: machine
+    label: "Sam SME accepts"
+    call:
+      method: POST
+      path: /auth/accept-invite
+      body:
+        token: "{{sme_invite.token}}"
+        password: drill-strong-password
+        display_name: Sam SME
+      expect_status: [201]
+    capture: sme_user
+    identity: {name: sme, token_path: tokens.access_token, user_id_path: user.id}
+
+  - id: invite-second-sme
+    kind: machine
+    actor: owner
+    label: "The next SME in the rotation is invited"
+    call:
+      method: POST
+      path: /invites
+      body: {email: "sasha@northwind.test", roles: [sme], app_id: null}
+      expect_status: [201]
+    capture: sme2_invite
+
+  - id: accept-second-sme
+    kind: machine
+    label: "Sasha Second accepts"
+    call:
+      method: POST
+      path: /auth/accept-invite
+      body:
+        token: "{{sme2_invite.token}}"
+        password: drill-strong-password
+        display_name: Sasha Second
+      expect_status: [201]
+    capture: sme2_user
+    identity: {name: sme2, token_path: tokens.access_token, user_id_path: user.id}
+
+  - id: invite-comms
+    kind: machine
+    actor: owner
+    label: "The communications lead is invited"
+    call:
+      method: POST
+      path: /invites
+      body: {email: "cara@northwind.test", roles: [comms_lead], app_id: null}
+      expect_status: [201]
+    capture: comms_invite
+
+  - id: accept-comms
+    kind: machine
+    label: "Cara Comms accepts"
+    call:
+      method: POST
+      path: /auth/accept-invite
+      body:
+        token: "{{comms_invite.token}}"
+        password: drill-strong-password
+        display_name: Cara Comms
+      expect_status: [201]
+    capture: comms_user
+    identity: {name: comms, token_path: tokens.access_token, user_id_path: user.id}
+
+  - id: rotation
+    kind: machine
+    actor: owner
+    label: "The on-call rotation, in order"
+    call:
+      method: POST
+      path: /oncall/rotations
+      body:
+        name: payments primary
+        app_id: payments
+        user_ids: ["{{users.sme}}", "{{users.sme2}}"]
+      expect_status: [201]
+
+  - id: ingest-key
+    kind: machine
+    actor: owner
+    label: "The deployment pipeline is issued an ingest key"
+    call:
+      method: POST
+      path: /ingest-keys
+      body: {app_id: payments, stream: changes, name: drill pipeline}
+      expect_status: [201]
+    capture: pipeline_key
+
+  # ==========================================================================
+  # 1. Steady state. A baseline has to exist before a breach means anything.
+  # ==========================================================================
+
+  - id: steady-metrics
+    kind: world
+    label: "The application is healthy in both regions"
+    at_s: 60
+    world:
+      set_metrics: |
+        # TYPE payment_success_ratio gauge
+        payment_success_ratio{region="region-a"} 0.99
+        payment_success_ratio{region="region-b"} 0.99
+        # TYPE error_ratio gauge
+        error_ratio{region="region-a"} 0.01
+        error_ratio{region="region-b"} 0.01
+        # TYPE saturation_ratio gauge
+        saturation_ratio{region="region-a"} 0.4
+        saturation_ratio{region="region-b"} 0.4
+        # TYPE connection_pool_utilisation gauge
+        connection_pool_utilisation{region="region-a"} 0.3
+        connection_pool_utilisation{region="region-b"} 0.3
+      set_health:
+        status: up
+        checked_at: "2026-09-01T12:00:00+00:00"
+        components:
+          - {component: database, status: up}
+          - {component: payment-gateway, status: up}
+
+  - id: baseline
+    kind: platform
+    label: "Ten five-second buckets of unremarkable traffic"
+    note: >-
+      A rolling baseline needs six reference samples plus the four-bucket lag
+      that stops the reference window learning the breach it is about to be
+      compared against. Nothing sleeps: scenario time advances and the platform's
+      own poller and evaluator run.
+    clock: {advance_s: 5}
+    jobs: [metric-rollups, detection]
+    repeat: 10
+
+  - id: read-steady
+    kind: machine
+    actor: ic
+    label: "The cockpit reads Steady"
+    call: {method: GET, path: /apps/payments/detection}
+    capture: steady
+
+  - id: cp-steady
+    kind: checkpoint
+    label: "CP-01 the platform is watching a healthy application"
+    expect:
+      steady.stance: steady
+      steady.health.band: healthy
+      steady.severity: null
+
+  # ==========================================================================
+  # 2. A deployment is announced, and then things start going wrong.
+  # ==========================================================================
+
+  - id: announce-deploy
+    kind: machine
+    label: "The pipeline announces release v14 - started, never completed"
+    note: >-
+      A real deploy hook over the frozen ingest path with a real HMAC over the
+      exact bytes. Started and not completed on purpose: an unfinished change is
+      what the chip beside the health score is for, and it is also the rollback's
+      precondition.
+    call:
+      method: POST
+      path: /api/v1/ingest/changes
+      sign_with: pipeline_key
+      body:
+        source_system: pipeline
+        simulated: false
+        items:
+          - event_id: "9f1a2b3c-4d5e-4f60-8a71-0b2c3d4e5f60"
+            occurred_at: "2026-09-01T12:00:50+00:00"
+            payload:
+              change_id: release-v14
+              change_type: deployment
+              service: payments
+              status: started
+              started_at: "2026-09-01T12:00:50+00:00"
+              version: v14
+              actor: pipeline
+      expect_status: [202, 200]
+
+  - id: dispatch-change
+    kind: platform
+    label: "The bus carries the change to the projection"
+    jobs: [dispatcher]
+    repeat: 2
+
+  - id: read-change-window
+    kind: machine
+    actor: ic
+    label: "The change window is open"
+    call: {method: GET, path: /apps/payments/change-window}
+    capture: change_window
+
+  - id: cp-change-window
+    kind: checkpoint
+    label: "CP-02 something changed just before this broke, and it is on screen"
+    expect:
+      change_window.open: true
+
+  - id: inject-fault
+    kind: inject
+    label: "The declared fault goes in, scoped to this drill and nothing else"
+    note: >-
+      Through the application's own chaos contract, on the drill credential, with
+      `scope: drill:recovery-collision`. The contract refuses an injection whose
+      scope is not a drill scope, which is what keeps a game day's faults inside
+      a game day.
+    inject:
+      scenario_id: billing-latency
+      params: {latency_ms: 3000}
+      idempotency_key: recovery-collision-billing-latency
+    capture: injection
+    expect:
+      - {path: _.state, equals: active}
+      - {path: _.scope, equals: "drill:recovery-collision"}
+
+  - id: degrade
+    kind: world
+    label: "Payments begins failing in both regions"
+    at_s: 130
+    world:
+      set_metrics: |
+        # TYPE payment_success_ratio gauge
+        payment_success_ratio{region="region-a"} 0.45
+        payment_success_ratio{region="region-b"} 0.50
+        # TYPE error_ratio gauge
+        error_ratio{region="region-a"} 0.55
+        error_ratio{region="region-b"} 0.50
+        # TYPE saturation_ratio gauge
+        saturation_ratio{region="region-a"} 0.92
+        saturation_ratio{region="region-b"} 0.88
+        # TYPE connection_pool_utilisation gauge
+        connection_pool_utilisation{region="region-a"} 0.99
+        connection_pool_utilisation{region="region-b"} 0.97
+      set_health:
+        status: degraded
+        checked_at: "2026-09-01T12:02:10+00:00"
+        components:
+          - {component: database, status: up}
+          - {component: payment-gateway, status: degraded, detail: "p99 3.1s"}
+
+  - id: first-breach
+    kind: platform
+    label: "One bucket of the breach"
+    clock: {advance_s: 5}
+    jobs: [metric-rollups, detection]
+
+  - id: read-watch
+    kind: machine
+    actor: ic
+    label: "The stance moves to Watch"
+    call: {method: GET, path: /apps/payments/detection}
+    capture: watch
+
+  - id: cp-watch
+    kind: checkpoint
+    label: "CP-03 a breach is worth watching, not proposing"
+    note: "One sample is not a sustained anomaly, and the platform says so."
+    expect:
+      watch.stance: watch
+
+  - id: sustain
+    kind: platform
+    label: "The breach sustains across two more buckets"
+    clock: {advance_s: 5}
+    jobs: [metric-rollups, detection]
+    repeat: 2
+
+  - id: read-proposed
+    kind: machine
+    actor: ic
+    label: "The platform proposes a severity"
+    call: {method: GET, path: /apps/payments/detection}
+    capture: proposed
+
+  - id: cp-proposal
+    kind: checkpoint
+    label: "CP-04 two independent families corroborate a customer-facing P0, and nothing is declared"
+    expect:
+      - {path: proposed.stance, equals: proposed}
+      - {path: proposed.corroboration.corroborated, equals: true}
+      - {path: proposed.corroboration.families, min_length: 2}
+      - {path: proposed.severity.severity, equals: P0}
+      - {path: proposed.severity.impact.regions_affected, equals: 2}
+      - {path: proposed.severity.impact.journey_tier, equals: 1}
+      - {path: proposed.severity.requires_human, equals: true}
+      - {path: proposed.severity.declared, equals: false}
+      - {path: proposed.severity.evidence, min_length: 1}
+      - {path: proposed.health.band, in: [degraded, unhealthy]}
+
+  # ==========================================================================
+  # 3. A person declares. The war room opens. Somebody does not answer.
+  # ==========================================================================
+
+  - id: declare
+    kind: human
+    actor: ic
+    label: "Ida declares the incident - the only way one begins"
+    at_s: 200
+    call:
+      method: POST
+      path: /incidents
+      params: {app_id: payments}
+      body:
+        title: "Payments failing in both regions after release v14"
+        severity: P0
+      expect_status: [201]
+    capture: incident
+
+  - id: cp-declared
+    kind: checkpoint
+    label: "CP-05 the incident exists because a person pressed Declare"
+    expect:
+      incident.state: active
+      incident.severity: P0
+
+  - id: read-room
+    kind: human
+    actor: ic
+    label: "The war room is open"
+    call: {method: GET, path: "/incidents/{{incident.id}}/war-room"}
+    capture: room
+
+  - id: cp-room
+    kind: checkpoint
+    label: "CP-06 the room knows which roles it needs"
+    expect:
+      - {path: room.required_roles, min_length: 1}
+
+  - id: page-sme
+    kind: human
+    actor: ic
+    label: "Ida pages the primary SME"
+    call:
+      method: POST
+      path: "/incidents/{{incident.id}}/pages"
+      body:
+        user_id: "{{users.sme}}"
+        reason: "payments is failing in both regions and you own the pool"
+        ack_timeout_s: 300
+      expect_status: [201]
+    capture: page
+
+  - id: cp-paged
+    kind: checkpoint
+    label: "CP-07 the page is ringing and the clock on it is running"
+    expect:
+      - {path: page.state, in: [sent, pending]}
+      - {path: page.countdown_s, gt: 0}
+      - {path: page.recipient, equals_path: users.sme}
+
+  - id: nobody-answers
+    kind: clock
+    label: "Six minutes pass and Sam does not answer"
+    clock: {advance_s: 360}
+
+  - id: escalate
+    kind: platform
+    label: "The escalation sweep runs, as it does every fifteen seconds in production"
+    jobs: [page-escalation]
+
+  - id: read-pages
+    kind: human
+    actor: ic
+    label: "The ack board"
+    call: {method: GET, path: "/incidents/{{incident.id}}/pages"}
+    capture: board
+
+  - id: cp-escalated
+    kind: checkpoint
+    label: "CP-08 the page nobody answered escalated on its own"
+    note: >-
+      The claim is about *this* page: somewhere on the board there is now a page
+      whose predecessor is the one Ida raised, and the one Ida raised is marked
+      escalated rather than quietly dropped.
+    expect:
+      - {path: "board.pages[].escalated_from_page_id", contains_path: page.id}
+      - {path: "board.pages[].state", contains: escalated}
+
+  - id: sashas-phone
+    kind: human
+    actor: sme2
+    label: "Sasha's phone is ringing"
+    call: {method: GET, path: /my/pages}
+    capture: sasha_pages
+
+  - id: cp-reached
+    kind: checkpoint
+    label: "CP-09 the escalation reached a person, and the page carries its own countdown"
+    expect:
+      - {path: sasha_pages.count, gte: 1}
+      - {path: sasha_pages.pages.0.severity, equals: P0}
+
+  - id: ack
+    kind: human
+    actor: sme2
+    label: "Sasha answers - 'I have this'"
+    call:
+      method: POST
+      path: "/incidents/{{incident.id}}/pages/{{sasha_pages.pages.0.id}}/ack"
+      body: {note: "on it - looking at the pool"}
+      expect_status: [200]
+    capture: acked
+
+  - id: cp-acked
+    kind: checkpoint
+    label: "CP-10 an acknowledgement is self-scoped, attributed and terminal"
+    expect:
+      - {path: acked.state, equals: acked}
+      - {path: acked.acked_by, equals_path: users.sme2}
+
+  # ==========================================================================
+  # 4. Reasoning: three hypotheses, evidence for, then evidence against.
+  # ==========================================================================
+
+  - id: first-pass
+    kind: human
+    actor: ic
+    label: "The incident brain takes its first pass"
+    at_s: 620
+    call:
+      method: POST
+      path: "/incidents/{{incident.id}}/brain/refresh"
+      body: {}
+      expect_status: [200]
+
+  - id: read-brain
+    kind: human
+    actor: ic
+    label: "What the platform believes, and how strongly"
+    call: {method: GET, path: "/incidents/{{incident.id}}/brain"}
+    capture: brain0
+
+  - id: cp-hypotheses
+    kind: checkpoint
+    label: "CP-11 a room that sees one hypothesis tests one; this room sees three"
+    expect:
+      - {path: brain0.hypotheses, min_length: 3}
+      - {path: brain0.nodes, min_length: 1}
+      - {path: "brain0.hypotheses.0.explain", present: true}
+
+  - id: measurement
+    kind: human
+    actor: sme2
+    label: "Sasha measures the pool and says so in the room"
+    call:
+      method: POST
+      path: "/incidents/{{incident.id}}/bridge"
+      body: {text: "connection-pool is at 100% utilisation, errors climbing"}
+      expect_status: [201]
+
+  - id: second-pass
+    kind: human
+    actor: ic
+    label: "The brain re-reasons over the new statement"
+    call:
+      method: POST
+      path: "/incidents/{{incident.id}}/brain/refresh"
+      body: {}
+      expect_status: [200]
+
+  - id: read-brain-risen
+    kind: human
+    actor: ic
+    label: "One hypothesis has risen"
+    call: {method: GET, path: "/incidents/{{incident.id}}/brain"}
+    capture: brain1
+
+  - id: cp-risen
+    kind: checkpoint
+    label: "CP-12 a measurement of the suspected component moves its hypothesis, with the arithmetic shown"
+    expect:
+      - {path: brain1.hypotheses, min_length: 3}
+      - {path: "brain1.hypotheses.0.explain", present: true}
+      - {path: "brain1.hypotheses.0.discriminating_test", present: true}
+
+  - id: contradiction
+    kind: human
+    actor: sme
+    label: "Sam checks the pool properly and clears it"
+    note: >-
+      Contradictory evidence, arriving later than the evidence it contradicts.
+      A room that had just cleared a suspect and watched its confidence keep
+      rising would stop reading the number.
+    call:
+      method: POST
+      path: "/incidents/{{incident.id}}/bridge"
+      body: {text: "connection-pool is fine and healthy, we were reading the wrong dashboard"}
+      expect_status: [201]
+
+  - id: third-pass
+    kind: human
+    actor: ic
+    label: "The brain re-reasons again"
+    call:
+      method: POST
+      path: "/incidents/{{incident.id}}/brain/refresh"
+      body: {}
+      expect_status: [200]
+
+  - id: read-brain-fallen
+    kind: human
+    actor: ic
+    label: "The ranking has changed"
+    call: {method: GET, path: "/incidents/{{incident.id}}/brain"}
+    capture: brain2
+
+  - id: read-guidance
+    kind: human
+    actor: ic
+    label: "What the room is being warned about"
+    call: {method: GET, path: "/incidents/{{incident.id}}/brain/guidance"}
+    capture: guidance
+
+  - id: cp-contradiction
+    kind: checkpoint
+    label: "CP-13 the contradiction is surfaced to the room, not averaged away"
+    note: >-
+      Two people measured the same pool and disagreed. A platform that quietly
+      took the mean of them would be hiding the most useful fact in the room.
+    expect:
+      - {path: brain2.hypotheses, min_length: 3}
+      - {path: guidance.contradictions, min_length: 1}
+      - {path: guidance.degraded, equals: true}
+
+  - id: read-topology
+    kind: human
+    actor: ic
+    label: "Blast radius"
+    call: {method: GET, path: "/incidents/{{incident.id}}/brain/topology"}
+    capture: blast
+
+  - id: cp-blast
+    kind: checkpoint
+    label: "CP-14 confirmed impact and predicted impact are different lists"
+    note: >-
+      A platform that showed one list would be telling a war room that a guess
+      and a measurement are the same kind of thing.
+    expect:
+      - {path: blast.confirmed, present: true}
+      - {path: blast.predicted, present: true}
+
+  # ==========================================================================
+  # 5. The rollback: refused, approved, timed out, reconciled, refused twice.
+  # ==========================================================================
+
+  # A session is fifteen minutes long. This incident is longer than that, so the
+  # browsers refresh - which is also how the drill proves refresh works under a
+  # clock that has moved a long way.
+  - id: refresh-ic-1
+    kind: machine
+    label: "Ida's session refreshes"
+    call:
+      method: POST
+      path: /auth/refresh
+      body: {refresh_token: "{{ic_user.tokens.refresh_token}}"}
+      expect_status: [200]
+    capture: ic_session_1
+    identity: {name: ic, token_path: access_token}
+
+  - id: refresh-approver-1
+    kind: machine
+    label: "Ken's session refreshes"
+    call:
+      method: POST
+      path: /auth/refresh
+      body: {refresh_token: "{{approver_user.tokens.refresh_token}}"}
+      expect_status: [200]
+    capture: approver_session_1
+    identity: {name: approver, token_path: access_token}
+
+  - id: read-nba
+    kind: human
+    actor: ic
+    label: "What should we do next?"
+    at_s: 900
+    call: {method: GET, path: "/incidents/{{incident.id}}/actions", params: {explain: "false"}}
+    capture: nba
+
+  - id: cp-nba
+    kind: checkpoint
+    label: "CP-15 the recommendation is arithmetic, and it says a person must approve it"
+    expect:
+      - {path: nba.degraded, equals: true}
+      - {path: nba.primary, present: true}
+
+  - id: auto-attempt
+    kind: human
+    actor: ic
+    label: "Somebody asks for the rollback to run automatically"
+    note: >-
+      Asking does not raise. It produces a recorded BLOCK naming the floor rule,
+      because an attempt to auto-execute a rollback is exactly the thing a
+      security review should be able to find afterwards.
+    call:
+      method: POST
+      path: "/incidents/{{incident.id}}/executions"
+      body:
+        action_id: rollback-payments
+        args: {release: v13}
+        intent: auto
+      expect_status: [201]
+    capture: refused
+
+  - id: cp-floor
+    kind: checkpoint
+    label: "CP-16 the platform safety floor refuses auto-execution of a high-risk action"
+    expect:
+      - {path: refused.decision.outcome, equals: block}
+      - {path: refused.execution.state, equals: blocked}
+      - {path: "refused.decision.rules_hit[].rule_id", contains: FLOOR-AUTO-EXECUTE-REFUSED}
+
+  - id: request-rollback
+    kind: human
+    actor: ic
+    label: "Ida requests the rollback properly"
+    call:
+      method: POST
+      path: "/incidents/{{incident.id}}/executions"
+      body:
+        action_id: rollback-payments
+        args: {release: v13}
+        note: "rolling back release v14"
+      expect_status: [201]
+    capture: requested
+
+  - id: cp-approval-required
+    kind: checkpoint
+    label: "CP-17 the request waits for a human approval and nothing has been sent"
+    expect:
+      - {path: requested.execution.state, equals: approval_required}
+      - {path: requested.approval.state, equals: requested}
+      - {path: "requested.decision.rules_hit[].rule_id", contains: FLOOR-HIGH-RISK-NO-AUTO}
+
+  - id: approve
+    kind: human
+    actor: approver
+    label: "Ken - a different person - approves it"
+    call:
+      method: POST
+      path: "/incidents/{{incident.id}}/executions/{{requested.execution.execution_id}}/approve"
+      body: {note: "agreed - roll back to v13"}
+      expect_status: [200]
+    capture: approved
+
+  - id: cp-approved
+    kind: checkpoint
+    label: "CP-18 separation of duty: requester and approver are different people"
+    expect:
+      - {path: approved.execution.state, equals: approved}
+      - {path: approved.approval.approver_user_id, equals_path: users.approver}
+      - {path: approved.approval.permission, equals: approve_high_risk}
+      - {path: approved.approval.seconds_left, gt: 0}
+
+  - id: target-goes-quiet
+    kind: world
+    label: "The application stops answering the execute call"
+    world:
+      times_out: /observe/actions/rollback-payments/execute
+
+  - id: run-rollback
+    kind: human
+    actor: ic
+    label: "The Tool Gateway sends the rollback, and waits, and gives up"
+    call:
+      method: POST
+      path: "/incidents/{{incident.id}}/executions/{{requested.execution.execution_id}}/run"
+      body: {}
+      expect_status: [200]
+    capture: ran
+
+  - id: cp-uncertain
+    kind: checkpoint
+    label: "CP-19 a timeout is not a failure: the ledger says UNCERTAIN and blocks the retry"
+    expect:
+      - {path: ran.execution.state, equals: uncertain}
+      - {path: ran.execution.retry_blocked, equals: true}
+      - {path: ran.execution.error_category, equals: timeout}
+
+  - id: retry-refused
+    kind: human
+    actor: ic
+    label: "Somebody tries to just run it again"
+    call:
+      method: POST
+      path: "/incidents/{{incident.id}}/executions/{{requested.execution.execution_id}}/retry"
+      body: {}
+      expect_status: [409]
+    capture: retry
+
+  - id: cp-retry-blocked
+    kind: checkpoint
+    label: "CP-20 reconcile before retry, or roll production back twice"
+    expect:
+      - {path: retry.detail, matches: "(?i)reconcile"}
+
+  - id: it-actually-landed
+    kind: world
+    label: "The application applied the rollback after SignalForge stopped waiting"
+    note: >-
+      Recorded under the idempotency key the gateway *derived*, which is the
+      whole reason that key is derived rather than generated.
+    world:
+      clear_timeouts: true
+      record_execution:
+        execution_id: exec-rollback-1
+        action_id: rollback-payments
+        idempotency_key: "{{ran.execution.idempotency_key}}"
+        state: succeeded
+        requested_at: "2026-09-01T12:15:00+00:00"
+        finished_at: "2026-09-01T12:17:00+00:00"
+        output: {release: v13, applied: true}
+
+  - id: reconcile
+    kind: human
+    actor: ic
+    label: "SignalForge asks the application what actually happened"
+    call:
+      method: POST
+      path: "/incidents/{{incident.id}}/executions/{{requested.execution.execution_id}}/reconcile"
+      body: {}
+      expect_status: [200]
+    capture: reconciled
+
+  - id: cp-reconciled
+    kind: checkpoint
+    label: "CP-21 the answer is COMPLETED_LATE, and it still refuses to run again"
+    expect:
+      - {path: reconciled.execution.reconcile_outcome, equals: completed_late}
+      - {path: reconciled.execution.state, equals: completed_late}
+      - {path: reconciled.execution.retry_blocked, equals: true}
+
+  - id: duplicate
+    kind: human
+    actor: ic
+    label: "A second operator, not knowing, requests the same rollback"
+    call:
+      method: POST
+      path: "/incidents/{{incident.id}}/executions"
+      body:
+        action_id: rollback-payments
+        args: {release: v13}
+      expect_status: [201]
+    capture: duplicate
+
+  - id: cp-duplicate
+    kind: checkpoint
+    label: "CP-22 the duplicate is recognised and nothing is sent"
+    expect:
+      - {path: duplicate.duplicate, equals: true}
+      - {path: duplicate.execution.execution_id, equals_path: requested.execution.execution_id}
+
+  # ==========================================================================
+  # 6. Communications: issued in good faith, then contradicted.
+  # ==========================================================================
+
+  # A session is fifteen minutes long. This incident is longer than that, so the
+  # browsers refresh - which is also how the drill proves refresh works under a
+  # clock that has moved a long way.
+  - id: refresh-ic-2
+    kind: machine
+    label: "Ida's session refreshes again"
+    call:
+      method: POST
+      path: /auth/refresh
+      body: {refresh_token: "{{ic_session_1.refresh_token}}"}
+      expect_status: [200]
+    capture: ic_session_2
+    identity: {name: ic, token_path: access_token}
+
+  - id: refresh-comms-1
+    kind: machine
+    label: "Cara's session refreshes"
+    call:
+      method: POST
+      path: /auth/refresh
+      body: {refresh_token: "{{comms_user.tokens.refresh_token}}"}
+      expect_status: [200]
+    capture: comms_session_1
+    identity: {name: comms, token_path: access_token}
+
+  - id: draft-customer
+    kind: human
+    actor: ic
+    label: "A customer statement is drafted from the graph"
+    at_s: 1200
+    call:
+      method: POST
+      path: "/incidents/{{incident.id}}/communications"
+      body:
+        audience: customer
+        use_model: false
+      expect_status: [201]
+    capture: draft
+
+  - id: cp-draft
+    kind: checkpoint
+    label: "CP-23 a draft cites the nodes it was written from, and is not sent"
+    expect:
+      - {path: draft.state, equals: draft}
+      - {path: draft.grounded_node_ids, min_length: 1}
+
+  - id: approve-customer
+    kind: human
+    actor: comms
+    label: "The comms lead approves it - the audience decides who may"
+    call:
+      method: POST
+      path: "/incidents/{{incident.id}}/communications/{{draft.communication_id}}/approve"
+      body: {note: "approved for the status page"}
+      expect_status: [200]
+
+  - id: issue-customer
+    kind: human
+    actor: comms
+    label: "And issues it"
+    call:
+      method: POST
+      path: "/incidents/{{incident.id}}/communications/{{draft.communication_id}}/issue"
+      body: {}
+      expect_status: [200]
+    capture: issued
+
+  - id: cp-issued
+    kind: checkpoint
+    label: "CP-24 nothing auto-sends; a person approved and a person issued"
+    expect:
+      issued.state: issued
+
+  # ==========================================================================
+  # 7. Recovery collision: the estate is well, the customer is not.
+  # ==========================================================================
+
+  - id: technical-recovery
+    kind: world
+    label: "The rollback worked: metrics and health return to normal"
+    at_s: 1500
+    world:
+      set_metrics: |
+        # TYPE payment_success_ratio gauge
+        payment_success_ratio{region="region-a"} 0.99
+        payment_success_ratio{region="region-b"} 0.99
+        # TYPE error_ratio gauge
+        error_ratio{region="region-a"} 0.01
+        error_ratio{region="region-b"} 0.01
+        # TYPE saturation_ratio gauge
+        saturation_ratio{region="region-a"} 0.4
+        saturation_ratio{region="region-b"} 0.4
+        # TYPE connection_pool_utilisation gauge
+        connection_pool_utilisation{region="region-a"} 0.3
+        connection_pool_utilisation{region="region-b"} 0.3
+      set_health:
+        status: up
+        checked_at: "2026-09-01T12:25:00+00:00"
+        components:
+          - {component: database, status: up}
+          - {component: payment-gateway, status: up}
+      fail_path:
+        /checkout: 503
+
+  - id: recovery-buckets
+    kind: platform
+    label: "The platform sees the estate recover - and probes the customer path"
+    note: >-
+      The probe runner is in this list on purpose. The customer layer is the one
+      that blocks closure, so it must never be satisfied by an absence of
+      evidence: a probe that did not run is UNKNOWN, and UNKNOWN does not pass.
+    clock: {advance_s: 5}
+    jobs: [metric-rollups, detection, probes]
+    repeat: 4
+
+  - id: validate
+    kind: human
+    actor: ic
+    label: "Independent validation runs, layer by layer"
+    note: >-
+      Validation reads the application directly. It never asks the incident
+      brain whether the system is healthy, because a platform that graded its own
+      reasoning would always pass.
+    call:
+      method: POST
+      path: "/incidents/{{incident.id}}/validation"
+      body: {}
+      expect_status: [201]
+    capture: cycle
+
+  - id: cp-validation
+    kind: checkpoint
+    label: "CP-25 technical passes, the customer journey does not, and closure is locked"
+    expect:
+      - {path: "cycle.layers[].layer", contains: technical}
+      - {path: "cycle.layers[].layer", contains: customer}
+      - {path: cycle.verdict, equals: not_recovered}
+      - {path: cycle.closure_blocked, equals: true}
+      - {path: cycle.closure_lock_reason, matches: "(?i)customer"}
+      - {path: cycle.evidence_node_ids, min_length: 1}
+
+  - id: try-to-close
+    kind: human
+    actor: ic
+    label: "Somebody tries to close it anyway"
+    call:
+      method: POST
+      path: "/incidents/{{incident.id}}/close"
+      body: {}
+      expect_status: [409]
+    capture: close_refused
+
+  - id: cp-closure-blocked
+    kind: checkpoint
+    label: "CP-26 the customer layer blocks closure, and says so"
+    expect:
+      - {path: close_refused.detail, matches: "(?i)customer"}
+
+  - id: post-recovery-reasoning
+    kind: human
+    actor: ic
+    label: "The brain re-reasons over an estate that has moved"
+    call:
+      method: POST
+      path: "/incidents/{{incident.id}}/brain/refresh"
+      body: {}
+      expect_status: [200]
+
+  - id: comms-board-after-recovery
+    kind: human
+    actor: comms
+    label: "The comms board is re-read after the estate moved"
+    call: {method: GET, path: "/incidents/{{incident.id}}/communications"}
+    capture: comms_board
+
+  - id: cp-contradicted
+    kind: checkpoint
+    label: "CP-27 the statement issued in good faith is now contradicted, and the text is untouched"
+    note: >-
+      A contradiction is a warning, never an edit. Changing published text is
+      never this platform's decision, so the body is byte-identical to what was
+      issued and a correction is a new communication with its own approval.
+    expect:
+      - {path: comms_board.communications.0.state, equals: contradicted}
+      - {path: comms_board.communications.0.contradicting_node_ids, min_length: 1}
+      - {path: comms_board.communications.0.contradiction_reason, present: true}
+      - {path: comms_board.communications.0.body, equals_path: issued.body}
+
+  - id: draft-correction
+    kind: human
+    actor: ic
+    label: "Ida drafts a correction with a redline"
+    note: >-
+      Drafted by the commander and approved by the communications lead, because
+      an externally visible statement is approved by somebody other than its
+      author - the same separation the rollback needed.
+    call:
+      method: POST
+      path: "/incidents/{{incident.id}}/communications/{{draft.communication_id}}/correction"
+      body:
+        reason: "the impact figures we published have been superseded"
+        use_model: false
+      expect_status: [201]
+    capture: correction
+
+  - id: cp-correction
+    kind: checkpoint
+    label: "CP-28 the correction is a draft, carries a redline, and needs its own approval"
+    expect:
+      - {path: correction.state, equals: draft}
+      - {path: correction.corrects_id, equals_path: draft.communication_id}
+      - {path: correction.redline, min_length: 1}
+
+  - id: approve-correction
+    kind: human
+    actor: comms
+    label: "The correction is approved on its own merits"
+    call:
+      method: POST
+      path: "/incidents/{{incident.id}}/communications/{{correction.communication_id}}/approve"
+      body: {note: "approved - the numbers changed"}
+      expect_status: [200]
+
+  - id: issue-correction
+    kind: human
+    actor: comms
+    label: "And issued"
+    call:
+      method: POST
+      path: "/incidents/{{incident.id}}/communications/{{correction.communication_id}}/issue"
+      body: {}
+      expect_status: [200]
+    capture: issued_correction
+
+  - id: cp-correction-issued
+    kind: checkpoint
+    label: "CP-29 nothing auto-sent, even the correction"
+    expect:
+      issued_correction.state: issued
+
+  # ==========================================================================
+  # 8. The customer path recovers, the stability window holds, a person closes.
+  # ==========================================================================
+
+  - id: customer-recovery
+    kind: world
+    label: "The customer journey starts working again"
+    at_s: 1800
+    world:
+      clear_failures: true
+
+  # A session is fifteen minutes long. This incident is longer than that, so the
+  # browsers refresh - which is also how the drill proves refresh works under a
+  # clock that has moved a long way.
+  - id: refresh-ic-3
+    kind: machine
+    label: "Ida's session refreshes once more"
+    call:
+      method: POST
+      path: /auth/refresh
+      body: {refresh_token: "{{ic_session_2.refresh_token}}"}
+      expect_status: [200]
+    capture: ic_session_3
+    identity: {name: ic, token_path: access_token}
+
+  - id: reprobe
+    kind: platform
+    label: "The probe runner tries the customer journey again"
+    clock: {advance_s: 5}
+    jobs: [probes, metric-rollups, detection]
+    repeat: 2
+
+  - id: revalidate
+    kind: human
+    actor: ic
+    label: "Validation runs again"
+    call:
+      method: POST
+      path: "/incidents/{{incident.id}}/validation"
+      body: {}
+      expect_status: [201]
+    capture: cycle2
+
+  - id: cp-customer-recovered
+    kind: checkpoint
+    label: "CP-30 every layer now passes"
+    expect:
+      - {path: "cycle2.layers[].verdict", each_in: [pass, not_applicable]}
+
+  - id: hold-the-window
+    kind: clock
+    label: "The stability window is held - in scenario time, not in a coffee break"
+    clock: {advance_s: 1800}
+
+  - id: refresh-ic-4
+    kind: machine
+    label: "And once more, on the far side of the stability window"
+    call:
+      method: POST
+      path: /auth/refresh
+      body: {refresh_token: "{{ic_session_3.refresh_token}}"}
+      expect_status: [200]
+    capture: ic_session_4
+    identity: {name: ic, token_path: access_token}
+
+  - id: stability-probes
+    kind: platform
+    label: "The journey keeps working right across the window"
+    clock: {advance_s: 5}
+    jobs: [probes, metric-rollups, detection]
+    repeat: 2
+
+  - id: stability-sample
+    kind: human
+    actor: ic
+    label: "A second sample, after the window"
+    call:
+      method: POST
+      path: "/incidents/{{incident.id}}/validation"
+      body: {}
+      expect_status: [201]
+    capture: cycle3
+
+  - id: read-validation
+    kind: human
+    actor: ic
+    label: "The validation panel"
+    call: {method: GET, path: "/incidents/{{incident.id}}/validation"}
+    capture: validation
+
+  - id: cp-stable
+    kind: checkpoint
+    label: "CP-31 the stability window completed and closure is unlocked"
+    expect:
+      - {path: validation.closure_blocked, equals: false}
+
+  - id: close
+    kind: human
+    actor: ic
+    label: "Ida closes the incident - the only way one ends"
+    call:
+      method: POST
+      path: "/incidents/{{incident.id}}/close"
+      body: {}
+      expect_status: [200]
+    capture: closed
+
+  - id: cp-closed
+    kind: checkpoint
+    label: "CP-32 closed by a person, after the platform agreed it could be"
+    expect:
+      closed.state: closed
