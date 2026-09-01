@@ -995,3 +995,149 @@ class EventSealRow(Base):
     prev_seal_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     sealed_at: Mapped[datetime] = mapped_column(TZDateTime)
     sealed_by: Mapped[str] = mapped_column(String(36))
+
+
+# --- incident brain (S5-T01) --------------------------------------------------
+
+
+class IncidentGraphNodeRow(Base):
+    """One thing the platform believes about an incident, at one version (REQ-050).
+
+    Rows are inserted and marked superseded; content is never rewritten and rows
+    are never deleted. `(tenant_id, incident_id, derived_key, version)` is unique,
+    which is what makes a redelivered event, a restarted worker and two agents
+    racing produce one version rather than three - and the partial index on the
+    current row is what makes "what do we believe now" one indexed read rather
+    than a scan of the incident's whole history.
+    """
+
+    __tablename__ = "incident_graph_nodes"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "incident_id",
+            "derived_key",
+            "version",
+            name="uq_graph_node_version",
+        ),
+        Index("ix_graph_nodes_incident", "tenant_id", "incident_id", "seq"),
+        Index("ix_graph_nodes_current", "tenant_id", "incident_id", "status", "node_type"),
+        Index("ix_graph_nodes_key", "tenant_id", "incident_id", "derived_key"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    incident_id: Mapped[str] = mapped_column(String(100))
+    node_type: Mapped[str] = mapped_column(String(20))
+    derived_key: Mapped[str] = mapped_column(String(200))
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    seq: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(20), default="current")
+    label: Mapped[str] = mapped_column(String(400))
+    content: Mapped[str] = mapped_column(Text, default="")
+    untrusted: Mapped[bool] = mapped_column(Boolean, default=False)
+    confidence: Mapped[Optional[float]] = mapped_column(nullable=True)
+    confirmation: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    supersedes: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    superseded_by: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    retired_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, nullable=True)
+    retired_reason: Mapped[str] = mapped_column(String(400), default="")
+    created_at: Mapped[datetime] = mapped_column(TZDateTime)
+    provenance: Mapped[dict] = mapped_column(JSON, default=dict)
+    tags: Mapped[list] = mapped_column(JSON, default=list)
+    detail: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class IncidentGraphEdgeRow(Base):
+    """A relation between two node versions, kept forever.
+
+    Unique on (incident, source, target, relation) so that re-linking the same
+    evidence to the same hypothesis is a no-op rather than a doubling of its
+    weight in the confidence policy.
+    """
+
+    __tablename__ = "incident_graph_edges"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "incident_id",
+            "source_id",
+            "target_id",
+            "relation",
+            name="uq_graph_edge",
+        ),
+        Index("ix_graph_edges_target", "tenant_id", "incident_id", "target_id"),
+        Index("ix_graph_edges_source", "tenant_id", "incident_id", "source_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    incident_id: Mapped[str] = mapped_column(String(100))
+    source_id: Mapped[str] = mapped_column(String(36))
+    target_id: Mapped[str] = mapped_column(String(36))
+    relation: Mapped[str] = mapped_column(String(20))
+    weight: Mapped[float] = mapped_column(default=0.0)
+    note: Mapped[str] = mapped_column(String(400), default="")
+    created_at: Mapped[datetime] = mapped_column(TZDateTime)
+    detail: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class ConfidenceHistoryRow(Base):
+    """Why a hypothesis moved (REQ-053). Append-only, and the reason the cockpit
+    can answer "why did #2 go from 65% to 32%" from stored numbers rather than
+    from a narrative somebody has to trust."""
+
+    __tablename__ = "incident_confidence_history"
+    __table_args__ = (
+        Index(
+            "ix_confidence_history_hypothesis",
+            "tenant_id",
+            "incident_id",
+            "hypothesis_key",
+            "id",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    incident_id: Mapped[str] = mapped_column(String(100))
+    hypothesis_key: Mapped[str] = mapped_column(String(200))
+    at: Mapped[datetime] = mapped_column(TZDateTime)
+    previous: Mapped[Optional[float]] = mapped_column(nullable=True)
+    current: Mapped[float] = mapped_column()
+    net_weight: Mapped[float] = mapped_column(default=0.0)
+    supporting: Mapped[list] = mapped_column(JSON, default=list)
+    refuting: Mapped[list] = mapped_column(JSON, default=list)
+    added: Mapped[list] = mapped_column(JSON, default=list)
+    removed: Mapped[list] = mapped_column(JSON, default=list)
+    trigger: Mapped[str] = mapped_column(String(120), default="")
+    narrative: Mapped[str] = mapped_column(Text, default="")
+    narrative_degraded: Mapped[bool] = mapped_column(Boolean, default=False)
+    detail: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class SituationSnapshotRow(Base):
+    """The whole reasoning state at one moment (REQ-050).
+
+    Stores node ids rather than content: the nodes are immutable, so the ids
+    reconstruct the view exactly, and a snapshot that copied content would be a
+    second copy of incident text with its own redaction problem.
+    """
+
+    __tablename__ = "incident_situation_snapshots"
+    __table_args__ = (
+        Index("ix_situation_snapshots_incident", "tenant_id", "incident_id", "taken_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    incident_id: Mapped[str] = mapped_column(String(100))
+    taken_at: Mapped[datetime] = mapped_column(TZDateTime)
+    reason: Mapped[str] = mapped_column(String(200), default="")
+    node_ids: Mapped[list] = mapped_column(JSON, default=list)
+    hypotheses: Mapped[dict] = mapped_column(JSON, default=dict)
+    topology_version: Mapped[str] = mapped_column(String(120), default="")
+    max_seq: Mapped[int] = mapped_column(Integer, default=0)
+    degraded: Mapped[bool] = mapped_column(Boolean, default=False)
+    fingerprint: Mapped[str] = mapped_column(String(64), default="")
+    detail: Mapped[dict] = mapped_column(JSON, default=dict)
