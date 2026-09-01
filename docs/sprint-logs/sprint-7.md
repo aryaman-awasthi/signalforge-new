@@ -193,11 +193,27 @@ installable half of it.
 - **Added this sprint:** 4 drill-boundary, 6 drill-engine, 3 Recovery Collision,
   6 audit replay, 10 PIR (4 of them pure domain), 8 non-functional including the
   benchmark. 37 tests, all integration or boundary - no shallow additions.
-- **Suite result:** see `docs/21-test-report.md`, generated from the final run.
-- **Gates run once at the end:** targeted S7 suites, security, AI evaluation,
-  frontend typecheck, frontend build, `check_clean.sh`, the full Python suite,
-  `reset.sh` + `run.sh`, the Recovery Collision drill, and
-  `python scripts/demo_check.py`.
+- **Suite result: 1255 passed, 5 skipped, 0 failed** (21m20s). Generated into
+  `docs/21-test-report.md` and `docs/20-RTM.md`: 52 requirements, every one with
+  linked tests, none without. The Sprint 7 requirements verify on 11 (REQ-070),
+  3 (REQ-071), 16 (REQ-072) and 8 (REQ-073) executed tests.
+- **Gates, run once at the end:**
+
+  | Gate | Result |
+  |---|---|
+  | Full Python suite | 1255 passed, 5 skipped, 0 failed |
+  | Frontend typecheck (`tsc --noEmit`) | clean |
+  | Frontend build (`next build`) | clean |
+  | `scripts/check_clean.sh` | OK |
+  | Recovery Collision + drill suite | 13 passed |
+  | `reset.sh` then `run.sh` from empty | harness, API and cockpit all answering |
+  | `scripts/demo.sh` against the live harness | corroborated P0, `declared: false` |
+  | `python scripts/demo_check.py` | **12/12** |
+
+  The first full pass was **not** green: four tests in `test_api_spec_docs.py`
+  caught the new `audit` API group having no description and the OpenAPI export
+  being stale, which is exactly what that suite is for. Fixed, regenerated, and
+  the suite re-run in full rather than partially.
 
 ## Artifacts updated
 
