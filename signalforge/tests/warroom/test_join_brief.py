@@ -39,8 +39,18 @@ pytestmark = pytest.mark.anyio
 
 @pytest.mark.req("REQ-045")
 async def test_a_brief_says_who_wrote_it(api):
-    """`source` exists before there is a model, so no screen changes when S5's
-    writer lands and every brief already says which kind it is."""
+    """`source` exists so that a reader can calibrate how much to trust the prose.
+
+    Updated in S5-T03, when the model-backed writer was wired in. This container
+    has no model configured, so the writer is *attempted* and falls back - which
+    is `degraded`, not `template`. The distinction is the point rather than a
+    detail: `template` now means "this node has no writer at all", and
+    `degraded` means "there is one and it could not be used", and an incident
+    commander reading a brief at 03:00 is entitled to know which.
+
+    The text is unchanged either way: it is the same deterministic brief, and
+    its caveats still say a model did not write it.
+    """
     owner_token, _tenant = owner(api)
     onboard(api, owner_token)
     wire_paging(api, owner_token)
@@ -48,7 +58,7 @@ async def test_a_brief_says_who_wrote_it(api):
     incident = declare(api, ic["tokens"]["access_token"], severity="P0")
 
     written = brief(api, ic["tokens"]["access_token"], incident["id"])
-    assert written["source"] == "template"
+    assert written["source"] == "degraded"
     assert "not by a model" in " ".join(written["caveats"])
 
 

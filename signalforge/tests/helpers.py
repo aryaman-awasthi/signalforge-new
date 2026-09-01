@@ -68,6 +68,10 @@ def make_test_settings(
         # derived from the main one when a caller does not care.
         rollup_db_url=rollup_db_url or _rollup_url_beside(db_url),
         detection_enabled=True,
+        # The brain job is driven explicitly in tests, like every other job: the
+        # worker is disabled above, and a test that wants a reasoning pass calls
+        # the governor rather than waiting for a tick.
+        brain_interval_s=20.0,
     )
 
 

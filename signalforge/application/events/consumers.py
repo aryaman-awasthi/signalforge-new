@@ -22,11 +22,17 @@ COCKPIT_SOCKET_GROUP = "cockpit-socket"
 COCKPIT_TOPIC_PATTERNS: tuple[str, ...] = (
     "incident.*",
     "warroom.*",
+    "brain.*",
 )
 """What a war-room screen is refreshed by. Deliberately not `detection.*`: the
 app-detail screen reads a stance that is recomputed every five seconds anyway,
 and nudging on every evaluation would turn a five-second poll into a five-second
-push with more moving parts and no more truth."""
+push with more moving parts and no more truth.
+
+`brain.*` joins the same subscription rather than opening a second socket
+(S5-T05): a hypothesis that moved is exactly the kind of thing a cockpit should
+learn about without waiting for a poll, and the frame still carries no payload -
+the screen re-reads through the authorised route it was already polling."""
 
 
 class BusMetricsConsumer(EventHandler):

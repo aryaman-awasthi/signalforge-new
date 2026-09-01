@@ -159,6 +159,29 @@ class BridgeService:
         messages = await self._fetch(room, since=_opened(room), limit=limit)
         return tuple(_as_message(message) for message in messages)
 
+    async def transcript(
+        self,
+        room: WarRoom,
+        *,
+        since: Optional[datetime] = None,
+        limit: int = MAX_MESSAGES,
+    ) -> tuple[BridgeMessage, ...]:
+        """The transcript for a room the caller already holds. Never raises.
+
+        The platform's own read path, used by the incident brain's evidence
+        gathering (S5-T04). It takes a `WarRoom` rather than a `Principal`
+        because the caller is a background pass with no session - exactly like
+        `harvest_room` - and the tenant boundary is the room object itself,
+        which was loaded through a tenant-scoped repository. Masked on the way
+        out by `_as_message`, like every other reader of this transcript.
+        """
+        if not room.has_bridge:
+            return ()
+        messages = await self._fetch(
+            room, since=since or _opened(room), limit=limit
+        )
+        return tuple(_as_message(message) for message in messages)
+
     async def post(
         self, principal: Principal, incident_id: str, text: str
     ) -> BridgeMessage:

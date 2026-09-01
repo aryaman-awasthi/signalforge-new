@@ -392,4 +392,30 @@ def build_registry() -> MetricsRegistry:
         "signalforge_llm_degraded_total", MetricType.COUNTER,
         "Calls that fell back to the deterministic answer, by reason", ("reason",),
     )
+    # The incident brain (S5-T03/T04). Same discipline as the model path above:
+    # every label is a closed vocabulary from an enum or a fixed agent roster.
+    # No incident id, no tenant id, no hypothesis text, no question - /metrics is
+    # unauthenticated, and an incident is exactly the thing it must not name.
+    registry.declare(
+        "signalforge_agent_runs_total", MetricType.COUNTER,
+        "Agent runs, by agent and outcome", ("agent", "outcome"),
+    )
+    registry.declare(
+        "signalforge_brain_passes_total", MetricType.COUNTER,
+        "Governor passes, split by whether the model path degraded", ("degraded",),
+    )
+    registry.declare(
+        "signalforge_brain_wakes_total", MetricType.COUNTER,
+        "Events that woke an incident's brain, by topic", ("topic",),
+    )
+    registry.declare(
+        "signalforge_brain_evidence_queries_total", MetricType.COUNTER,
+        "Bounded evidence retrievals, by gathering stage", ("stage",),
+    )
+    registry.declare(
+        "signalforge_copilot_answers_total", MetricType.COUNTER,
+        "Copilot answers, by verdict - grounded, insufficient_evidence, "
+        "ungrounded or degraded",
+        ("verdict",),
+    )
     return registry

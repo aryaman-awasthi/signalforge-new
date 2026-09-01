@@ -22,6 +22,12 @@ from signalforge.infrastructure.persistence.repositories import (
 from signalforge.infrastructure.persistence.connectors import (
     SqlConnectorBindingRepository,
 )
+from signalforge.infrastructure.persistence.brain import (
+    SqlAgentRunRepository,
+    SqlConfidenceHistoryRepository,
+    SqlIncidentGraphRepository,
+    SqlSituationSnapshotRepository,
+)
 from signalforge.infrastructure.persistence.event_store import SqlEventStore
 from signalforge.infrastructure.persistence.incidents import (
     SqlChangeWindowStore,
@@ -84,6 +90,10 @@ class SqlIdentityUnitOfWork(IdentityUnitOfWork):
         self.room_members = SqlRoomMemberRepository(self._session)
         self.incident_pages = SqlPageRepository(self._session)
         self.incident_tasks = SqlIncidentTaskRepository(self._session)
+        self.incident_graph = SqlIncidentGraphRepository(self._session)
+        self.confidence_history = SqlConfidenceHistoryRepository(self._session)
+        self.situation_snapshots = SqlSituationSnapshotRepository(self._session)
+        self.agent_runs = SqlAgentRunRepository(self._session)
         self.audit = AuditChainWriter(self._session, clock=self._clock)
         self.events = SqlEventStore(self._session, clock=self._clock)
         return self

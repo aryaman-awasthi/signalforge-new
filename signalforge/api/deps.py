@@ -19,6 +19,15 @@ from signalforge.contracts.roles import Permission
 from signalforge.domain.identity.errors import AuthenticationError
 from signalforge.domain.ingest.streams import IngestStream
 from signalforge.application.adapters.connector_service import ConnectorService
+from signalforge.application.brain.agents.communication import JoinBriefWriter
+from signalforge.application.brain.consumers import IncidentBrainConsumer
+from signalforge.application.brain.evidence import ProgressiveEvidenceService
+from signalforge.application.brain.governor import (
+    BRAIN_GROUP,
+    BRAIN_TRIGGER_PATTERNS,
+    IncidentGovernor,
+)
+from signalforge.application.brain.service import IncidentBrainService
 from signalforge.application.adapters.health import ConnectorHealthSources
 from signalforge.application.adapters.invoker import ConnectorInvoker
 from signalforge.application.adapters.registry_service import AdapterRegistryService
@@ -108,6 +117,7 @@ from signalforge.infrastructure.persistence.rollups import (
     create_rollup_schema,
 )
 from signalforge.infrastructure.persistence.uow import SqlIdentityUnitOfWork
+from signalforge.workers.brain import brain_jobs
 from signalforge.workers.lifecycle import lifecycle_jobs
 from signalforge.workers.warroom import warroom_jobs
 from signalforge.workers.pollers import detection_jobs
@@ -128,7 +138,13 @@ class Container:
         engine=None,
         clock=None,
         llm_settings: Optional[LlmSettings] = None,
+        llm_transport=None,
     ):
+        # `llm_transport` is the same kind of seam as `engine` and `clock`: an
+        # httpx transport the gateway client is built on. Tests hand it an
+        # `httpx.MockTransport` so that request construction, headers, JSON
+        # bodies and status handling are all production code paths and only the
+        # socket is replaced. It is never set in a deployment.
         self.settings = settings or load_settings()
         # Two clocks (REQ-024). wall_clock is what security and durability read -
         # token expiry, refresh windows, rate limits, recorded_at, retention -
@@ -239,12 +255,16 @@ class Container:
         self.llm_degradation = LlmDegradationReporter(
             self.event_uow_factory, self.bus, self.wall_clock, metrics=self.metrics
         )
+        self.token_ledger = InMemoryTokenLedger(
+            self.llm_settings.incident_token_budget
+        )
         self.llm = build_llm_provider(
             self.llm_settings,
             cache=SqlResponseCache(self.session_factory, self.wall_clock),
-            ledger=InMemoryTokenLedger(self.llm_settings.incident_token_budget),
+            ledger=self.token_ledger,
             listener=self.llm_degradation,
             metrics=self.metrics,
+            transport=llm_transport,
         )
         self.embeddings = GatewayEmbeddingProvider(self.llm)
 
@@ -405,12 +425,18 @@ class Container:
         # service importing it, so the dependency keeps pointing one way: the
         # lifecycle knows nothing about paging, and a node could run incidents
         # with the room disabled without changing a line of the lifecycle.
+        # The join-brief writer is passed in rather than imported by the war
+        # room, so the dependency keeps pointing one way: the room knows nothing
+        # about the brain, and a node with the writer removed serves exactly
+        # Sprint 4's deterministic brief (S5-T03, REQ-052).
+        self.brief_writer = JoinBriefWriter(self.llm)
         self.war_rooms = WarRoomService(
             self.uow_factory,
             self.bus,
             self.clock,
             self.adapter_registry,
             metrics=self.metrics,
+            brief_writer=self.brief_writer,
         )
         self.paging = PagingService(
             self.uow_factory,
@@ -439,6 +465,44 @@ class Container:
         self.war_rooms.on_opened.append(self.paging.page_room)
         self.incidents.on_declared.append(self.war_rooms.open_for)
         self.incidents.on_closed.append(self._stand_down)
+
+        # The incident brain (S5-T01/T03/T04). Assembled last because it reads
+        # everything above it and is read by nothing: detection for telemetry,
+        # the bridge for the transcript, the model provider for the model path.
+        # A node that removed it entirely would lose the reasoning and keep
+        # every incident control, which is the dependency direction this
+        # platform is built on.
+        self.brain_evidence = ProgressiveEvidenceService(
+            self.uow_factory,
+            self.clock,
+            detection=self.detection,
+            bridge=self.bridge,
+            metrics=self.metrics,
+        )
+        self.governor = IncidentGovernor(
+            self.uow_factory,
+            self.bus,
+            self.clock,
+            self.llm,
+            self.brain_evidence,
+            metrics=self.metrics,
+        )
+        self.brain = IncidentBrainService(
+            self.uow_factory,
+            self.bus,
+            self.clock,
+            self.llm,
+            governor=self.governor,
+            metrics=self.metrics,
+        )
+        # A consumer group like any other, and it only *wakes* the governor: a
+        # reasoning pass inside the dispatcher's transaction would hold a SQLite
+        # write lock for seconds against a loop meant to take milliseconds.
+        self.dispatcher.register(
+            BRAIN_GROUP,
+            IncidentBrainConsumer(self.governor, metrics=self.metrics),
+            topics=BRAIN_TRIGGER_PATTERNS,
+        )
 
         # Self-observability (S2-T03).
         self.health = ConnectorHealthService(
@@ -516,6 +580,14 @@ class Container:
             self.bridge,
             escalation_interval_s=self.settings.escalation_interval_s,
             harvest_interval_s=self.settings.bridge_harvest_interval_s,
+        )
+        # The brain drains what the bus consumer woke. Registered unconditionally
+        # for the same reason as the two above: it costs nothing on a quiet node
+        # (it returns immediately when nothing is pending), and an incident that
+        # is being reasoned about is exactly the one a node must not be silent
+        # on because a feature flag was off.
+        jobs += brain_jobs(
+            self.governor, interval_s=self.settings.brain_interval_s
         )
         return jobs
 

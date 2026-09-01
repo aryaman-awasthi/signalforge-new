@@ -274,6 +274,12 @@ class Settings:
     # than its deadline an unanswered page actually escalates.
     escalation_interval_s: float = 15.0
     bridge_harvest_interval_s: float = 30.0
+    # The incident brain (S5-T03). The loosest of the three on purpose: a
+    # reasoning pass costs model tokens against a per-incident budget, and
+    # nothing about it is a countdown somebody is watching. The bus consumer
+    # wakes it within milliseconds of an event; this is how often the woken set
+    # is drained.
+    brain_interval_s: float = 20.0
 
 
 def load_settings() -> Settings:
@@ -391,5 +397,11 @@ def load_settings() -> Settings:
         ),
         bridge_harvest_interval_s=max(
             float(os.environ.get("SIGNALFORGE_BRIDGE_HARVEST_INTERVAL_S", 30)), 5.0
+        ),
+        # At least five seconds, for the same reason the ITSM sweep has a floor:
+        # a pass spends an incident's token budget, and a tighter cadence would
+        # spend it on a world that has not changed.
+        brain_interval_s=max(
+            float(os.environ.get("SIGNALFORGE_BRAIN_INTERVAL_S", 20)), 5.0
         ),
     )

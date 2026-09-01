@@ -7,6 +7,12 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 from signalforge.domain.adapters.ports import ConnectorBindingRepository
+from signalforge.domain.brain.ports import (
+    AgentRunRepository,
+    ConfidenceHistoryRepository,
+    IncidentGraphRepository,
+    SituationSnapshotRepository,
+)
 from signalforge.domain.events.ports import EventStore
 from signalforge.domain.incidents.ports import (
     ChangeWindowStore,
@@ -95,6 +101,16 @@ class IdentityUnitOfWork(ABC):
     answered. `incident_pages` sits beside `notifications` for the same reason:
     a page links to the delivery receipts it produced, and a link written without
     its receipt would be a countdown nobody could stop."""
+    incident_graph: IncidentGraphRepository
+    confidence_history: ConfidenceHistoryRepository
+    situation_snapshots: SituationSnapshotRepository
+    agent_runs: AgentRunRepository
+    """The incident brain (S5-T01). On this unit of work because one governor
+    pass is one commit of four things that must never disagree: the graph node
+    version, the confidence-history row that explains why it moved, the audit
+    entry and the incident-plane event. A confidence that moved without its
+    history row would be exactly the unexplained number this sprint exists to
+    make impossible."""
     audit: AuditWriter
     events: EventStore
     """The outbox: an event published here shares the use case's transaction."""

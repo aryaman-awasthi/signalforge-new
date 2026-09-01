@@ -97,12 +97,18 @@ class WarRoomService:
         clock: Clock,
         registry: AdapterRegistry,
         metrics=None,
+        brief_writer=None,
     ):
         self._uow_factory = uow_factory
         self._bus = bus
         self._clock = clock
         self._registry = registry
         self._metrics = metrics
+        # S5-T03's model-backed brief writer, injected rather than imported: the
+        # war room must not depend on the incident brain, so the composition
+        # root passes one in and a node without one keeps Sprint 4's behaviour
+        # exactly (REQ-045, REQ-052).
+        self._brief_writer = brief_writer
         self._on_opened: list = []
 
     @property
@@ -406,8 +412,12 @@ class WarRoomService:
     ) -> JoinBrief:
         """The join brief, addressed to the caller when they are in the room.
 
-        Template-sourced today; the field says so, and S5 swaps the writer
-        without changing this signature or the shape a screen renders.
+        The deterministic brief is built first and always: it is complete on its
+        own, and it is what the reader gets when there is no model, when the
+        budget is spent and when a model answers off-schema. When a writer is
+        wired (S5-T03) it rewrites *that material*, grounded in the incident
+        graph, keeping every caveat - and stamps `source` so the reader can tell
+        which kind they have.
         """
         view = await self.get(principal, incident_id)
         mine = next(
@@ -422,7 +432,17 @@ class WarRoomService:
             transitions = tuple(
                 await uow.incident_transitions.list(principal.tenant_id, incident_id)
             )
-        return build_brief(
+            nodes = (
+                tuple(
+                    await uow.incident_graph.list(
+                        principal.tenant_id, incident_id, limit=200
+                    )
+                )
+                if self._brief_writer is not None
+                else ()
+            )
+        reason = mine.reason if mine and for_self else ""
+        template = build_brief(
             view.incident,
             radius=view.room.radius,
             now=self._clock.now(),
@@ -430,8 +450,28 @@ class WarRoomService:
             transitions=transitions,
             tasks=view.tasks,
             for_user=principal.user_id if for_self else None,
-            for_role_reason=mine.reason if mine and for_self else "",
+            for_role_reason=reason,
         )
+        if self._brief_writer is None:
+            return template
+        try:
+            return await self._brief_writer.write(
+                template,
+                tenant_id=principal.tenant_id,
+                nodes=nodes,
+                for_role_reason=reason,
+            )
+        except Exception as exc:  # pragma: no cover - defensive by design
+            # A brief is the first thing a paged responder reads at 03:00. It is
+            # never allowed to fail because a writer did.
+            logger.warning(
+                "the join-brief writer failed; serving the deterministic brief",
+                extra={
+                    "incident_id": incident_id,
+                    "error": f"{type(exc).__name__}: {exc}",
+                },
+            )
+            return template
 
     # -- joining -------------------------------------------------------------
 
