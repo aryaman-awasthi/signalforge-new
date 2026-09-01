@@ -350,6 +350,79 @@ class ConnectorBindingRow(Base):
     consecutive_failures: Mapped[int] = mapped_column(Integer, default=0)
 
 
+class IngestKeyRow(Base):
+    """One sending application's credential for one ingest stream (REQ-032).
+
+    Neither half of the credential is readable here: `token_hash` is the sha256
+    of the bearer token (the plaintext is shown once, at issue, and cannot be
+    shown again), and the HMAC shared secret lives Fernet-encrypted in `secrets`
+    under `ingest/<key_id>/secret`. `token_prefix` exists so an operator can
+    tell two keys apart on screen without the platform being able to reveal
+    either.
+
+    The counters and `last_event_at` are the freshness a push binding cannot
+    measure by pinging: SignalForge is the server, so it is always reachable
+    even if the sender died a week ago.
+    """
+
+    __tablename__ = "ingest_keys"
+    __table_args__ = (
+        Index("ix_ingest_keys_tenant_app", "tenant_id", "app_id", "stream"),
+        Index("ix_ingest_keys_binding", "tenant_id", "binding_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    app_id: Mapped[str] = mapped_column(String(100))
+    stream: Mapped[str] = mapped_column(String(20))
+    name: Mapped[str] = mapped_column(String(200))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    token_prefix: Mapped[str] = mapped_column(String(20))
+    binding_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    rotated_from: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime)
+    created_by: Mapped[str] = mapped_column(String(36))
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, nullable=True)
+    revoked_by: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    last_used_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, nullable=True)
+    last_event_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, nullable=True)
+    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    accepted_count: Mapped[int] = mapped_column(Integer, default=0)
+    duplicate_count: Mapped[int] = mapped_column(Integer, default=0)
+    rejected_count: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class IngestReceiptRow(Base):
+    """Proof that this tenant has already recorded this producer `event_id`.
+
+    The unique key is `(tenant_id, event_id)`, which is what makes a retry after
+    a lost 202 harmless and what keeps two tenants that picked the same
+    producer-assigned id from blocking or observing each other.
+    """
+
+    __tablename__ = "ingest_receipts"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "event_id", name="uq_ingest_receipts_event"),
+        Index("ix_ingest_receipts_key", "tenant_id", "key_id", "received_at"),
+        Index("ix_ingest_receipts_stream", "tenant_id", "stream", "received_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    event_id: Mapped[str] = mapped_column(String(36))
+    key_id: Mapped[str] = mapped_column(String(36))
+    app_id: Mapped[str] = mapped_column(String(100))
+    stream: Mapped[str] = mapped_column(String(20))
+    source_system: Mapped[str] = mapped_column(String(100))
+    occurred_at: Mapped[datetime] = mapped_column(TZDateTime)
+    received_at: Mapped[datetime] = mapped_column(TZDateTime)
+    platform_event_id: Mapped[str] = mapped_column(String(36))
+    event_seq: Mapped[int] = mapped_column(Integer)
+    event_count: Mapped[int] = mapped_column(Integer, default=1)
+    simulated: Mapped[bool] = mapped_column(Boolean, default=False)
+    normalized_by: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+
+
 class SimTicketRow(Base):
     """A ticket in the built-in lightweight ITSM (itsm-lite).
 

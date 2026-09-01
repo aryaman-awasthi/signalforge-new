@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 
 from signalforge.domain.adapters.ports import ConnectorBindingRepository
 from signalforge.domain.events.ports import EventStore
+from signalforge.domain.ingest.ports import IngestKeyRepository, IngestReceiptStore
 from signalforge.domain.integrations.ports import NotificationStore
 from signalforge.domain.identity.ports import (
     AuditWriter,
@@ -41,6 +42,12 @@ class IdentityUnitOfWork(ABC):
     because acknowledging a page is a human act on the record: the receipt, its
     audit entry and its event have to be one commit, or the audit chain can
     disagree with what the escalation timer is reading."""
+    ingest_keys: IngestKeyRepository
+    ingest_receipts: IngestReceiptStore
+    """Push ingestion (S3). On this unit of work because accepting a batch is
+    one commit of four things: the idempotency receipts, the events they became,
+    the counters on the key and the audit entry for anything refused. A receipt
+    written without its event would silently swallow the sender's retry."""
     audit: AuditWriter
     events: EventStore
     """The outbox: an event published here shares the use case's transaction."""

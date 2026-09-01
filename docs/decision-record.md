@@ -6,6 +6,77 @@ graph" section at the bottom is the authored pre-build decision record
 (signalforge-memory-graph.md, provided and imported 2026-09-01) - every N-line there
 is treated as already decided.
 
+## DR-037 (2026-09-01, S3) A batch is one transaction, and a rejected item does not consume its id
+Receipts, the events they became, the counters on the key and any audit entry
+commit together; per-item schema failures are reported in the 202 rather than
+failing the batch. Why: a receipt written without its event would silently
+swallow the sender's retry, which is the exact failure idempotency exists to
+prevent; and one malformed alert in five hundred must not lose the other four
+hundred and ninety-nine. Consequence: a rejected item writes no receipt, so the
+sender fixes the payload and resends with the same `event_id` and that is an
+acceptance, not a duplicate - and a duplicate is checked *before* validation, so
+a retry of a batch we already recorded gets the same answer every time even if
+the item would also fail validation. Duplicates and item rejections are audited
+once per batch, capped at twenty named details, because the chain is permanent
+and a retrying sender would otherwise write its whole batch into it repeatedly.
+
+## DR-036 (2026-09-01, S3) The ingest redaction floor lives in the domain, not in a manifest
+Free text arriving on the `messages` and `tickets` streams is masked at the
+boundary by `domain/ingest/redaction.py` under policy id `ingest-default`. Why:
+S3-T02 established that redaction happens at write time so a later reader of the
+row cannot bypass it, but the frozen SPI defines `normalize` only on alerts,
+changes and topology - so collaboration and itsm can never have a push adapter,
+and there is no manifest to read a policy from on precisely the two streams that
+carry the most human prose. Consequence: the floor is small and deterministic
+(email addresses, long digit runs) and applies to message text, ticket title and
+description, and alert annotations; `redaction.applied` on the envelope is set
+only when something was actually removed, so the flag means a removal rather than
+the existence of a policy.
+
+## DR-035 (2026-09-01, S3) Ingest keys are per stream, and rotation issues a successor
+An ingest key is bound to one tenant, one app_id and one stream, and
+`POST /ingest-keys/{id}/rotate` creates a new key rather than replacing the
+credential on the existing one. Why: a token that leaks from a deploy script must
+not be usable to inject alerts; and a sender cannot be switched atomically -
+changing it is a configuration change in somebody else's system - so overwriting
+would drop every request in flight between two deploys. Consequence: two keys
+with two secrets are live during a handover, which is what the frozen contract's
+optional `X-SignalForge-Key-Id` header is for: it names which key the sender
+believes it signed with, and a mismatch is refused rather than quietly verified
+against the other secret. Revoking destroys the key's secret, so a revoked key
+cannot produce a signature that would verify.
+
+## DR-034 (2026-09-01, S3) The ingest endpoint is canonical first; the adapter is an optional translator
+`/api/v1/ingest/*` validates against `contracts/canonical.py`, and only when that
+fails does the key's push connector binding get a chance to `normalize` a
+vendor-shaped payload. Why: the frozen contract types `IngestItem.payload` as a
+canonical model, so an application implementing the public contracts is
+ingestible with no platform code written for it - and requiring a push binding
+would make two of the five frozen paths unreachable, because the frozen SPI
+defines `normalize` only on alerts, changes and topology and the manifest floor
+requires a push adapter to declare it. Consequence: `binding_id` on an ingest key
+is optional; when it is set it is validated at issue time (right kind, push mode,
+declares `normalize`) so the operator finds a mis-wiring while wiring it; the
+adapter is resolved once per batch, not once per item; and a disabled binding or
+a refused payload rejects only the items that needed translating.
+
+## DR-033 (2026-09-01, S3) Ingest authenticates a machine, and the sender is told nothing
+The five ingest routes resolve an ingest key - bearer token plus HMAC over the
+body inside the replay window - and carry no Permission, and every refusal
+answers a bare 401. Why: the roles matrix describes people, and a deploy script
+is not one, so giving these routes a permission would be a fiction; and a caller
+that could distinguish "unknown token" from "bad signature" from "clock skew" has
+an oracle. Consequence: the security suite's router walk was widened again, this
+time to accept a dependency marked `resolves_ingest_credential`, so the rule
+"no handler runs before a real, revocable credential is resolved" still holds
+across the whole surface. The reason for a refusal is written to the key row and
+readable on `GET /ingest-keys` behind manage_apps, and lands in that tenant's
+audit chain and timeline; a refusal against an *unknown* token audits nothing,
+because it names no tenant and letting an anonymous caller choose whose chain to
+write to would be the leak rather than the fix. Rate limiting sits before the
+signature check and is deliberately not audited, so a flood cannot write the disk
+it was refused from touching.
+
 ## DR-032 (2026-09-01, S3) The durable receipt, not the socket, is the record of a notification
 Every notification adapter writes a `notification_deliveries` row before it
 touches a transport, and "nobody is connected" is QUEUED rather than failed. Why:

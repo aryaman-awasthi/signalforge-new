@@ -126,7 +126,19 @@ PRINCIPAL_RESOLVERS = (deps.get_principal, deps.get_ws_principal)
 
 
 def _depends_on_principal(dependant) -> bool:
+    """Has a real, revocable credential been resolved before this handler runs?
+
+    Two kinds count. A *human* credential is a session resolved by
+    get_principal or its WebSocket twin, and the RBAC dependency is built on it.
+    A *machine* credential is an ingest key: bearer token plus an HMAC over the
+    body inside the replay window, scoped to one tenant, one app and one stream,
+    and revocable in one call (S3-T03). It carries no Permission on purpose -
+    the roles matrix describes people, and a deploy script is not one - so the
+    factory marks itself rather than pretending to hold a role.
+    """
     if dependant.call in PRINCIPAL_RESOLVERS:
+        return True
+    if getattr(dependant.call, "resolves_ingest_credential", False):
         return True
     return any(_depends_on_principal(sub) for sub in dependant.dependencies)
 

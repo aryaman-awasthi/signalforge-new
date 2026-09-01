@@ -265,4 +265,17 @@ def build_registry() -> MetricsRegistry:
         "signalforge_retention_pruned_total", MetricType.COUNTER,
         "Signal-plane events removed by retention", ("plane",),
     )
+    registry.declare(
+        # Stream and outcome only. Which application posted what belongs to a
+        # tenant, and /metrics has no session; GET /ingest-keys answers that
+        # question behind manage_apps.
+        "signalforge_ingest_items_total", MetricType.COUNTER,
+        "Items posted to the ingest API, by outcome", ("stream", "outcome"),
+    )
+    registry.declare(
+        # `reason` is a closed vocabulary mapped in the ingest service, so a
+        # hostile sender cannot mint metric series by varying its input.
+        "signalforge_ingest_refused_total", MetricType.COUNTER,
+        "Ingest requests refused before their body was parsed", ("stream", "reason"),
+    )
     return registry

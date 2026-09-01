@@ -5,8 +5,8 @@ SQLAlchemy models Alembic also autogenerates migrations from, so this document
 cannot drift from the schema. The design notes below are authored; the ERD and
 the column tables are not.
 
-Generated: 2026-09-01T00:02:34+00:00
-Tables: 22
+Generated: 2026-09-01T00:42:47+00:00
+Tables: 24
 
 ## 1. Entity relationship diagram
 
@@ -287,6 +287,51 @@ erDiagram
         string redaction_policy_id
         datetime updated_at
         datetime indexed_at
+    }
+```
+
+### Push ingestion (S3)
+
+The credential a sending application holds, and the ledger that makes a repeated post harmless. Neither half of the credential is readable here: the token is a sha256 and the HMAC shared secret lives encrypted in `secrets` under ingest/<key>/secret.
+
+```mermaid
+erDiagram
+    ingest_keys {
+        string id "PK"
+        string tenant_id
+        string app_id
+        string stream
+        string name
+        string token_hash
+        string token_prefix
+        string binding_id
+        string rotated_from
+        datetime created_at
+        string created_by
+        datetime revoked_at
+        string revoked_by
+        datetime last_used_at
+        datetime last_event_at
+        text last_error
+        integer accepted_count
+        integer duplicate_count
+        integer rejected_count
+    }
+    ingest_receipts {
+        integer id "PK"
+        string tenant_id
+        string event_id
+        string key_id
+        string app_id
+        string stream
+        string source_system
+        datetime occurred_at
+        datetime received_at
+        string platform_event_id
+        integer event_seq
+        integer event_count
+        boolean simulated
+        string normalized_by
     }
 ```
 
@@ -698,6 +743,59 @@ Indexes: `ix_knowledge_documents_tenant_app`, `ix_knowledge_documents_tenant_id`
 Constraints: unique (tenant_id, doc_id)
 
 
+### Push ingestion (S3)
+
+#### `ingest_keys`
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | string | no | primary key |
+| `tenant_id` | string | no |  |
+| `app_id` | string | no |  |
+| `stream` | string | no |  |
+| `name` | string | no |  |
+| `token_hash` | string | no | unique |
+| `token_prefix` | string | no |  |
+| `binding_id` | string | yes |  |
+| `rotated_from` | string | yes |  |
+| `created_at` | datetime | no |  |
+| `created_by` | string | no |  |
+| `revoked_at` | datetime | yes |  |
+| `revoked_by` | string | yes |  |
+| `last_used_at` | datetime | yes |  |
+| `last_event_at` | datetime | yes |  |
+| `last_error` | text | yes |  |
+| `accepted_count` | integer | no |  |
+| `duplicate_count` | integer | no |  |
+| `rejected_count` | integer | no |  |
+
+Indexes: `ix_ingest_keys_binding`, `ix_ingest_keys_tenant_app`, `ix_ingest_keys_tenant_id`  
+Constraints: unique (token_hash)
+
+
+#### `ingest_receipts`
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | integer | no | primary key |
+| `tenant_id` | string | no |  |
+| `event_id` | string | no |  |
+| `key_id` | string | no |  |
+| `app_id` | string | no |  |
+| `stream` | string | no |  |
+| `source_system` | string | no |  |
+| `occurred_at` | datetime | no |  |
+| `received_at` | datetime | no |  |
+| `platform_event_id` | string | no |  |
+| `event_seq` | integer | no |  |
+| `event_count` | integer | no |  |
+| `simulated` | boolean | no |  |
+| `normalized_by` | string | yes |  |
+
+Indexes: `ix_ingest_receipts_key`, `ix_ingest_receipts_stream`, `ix_ingest_receipts_tenant_id`  
+Constraints: unique (tenant_id, event_id)
+
+
 ### Agent traces (S2, filled S5)
 
 #### `agent_runs`
@@ -800,6 +898,10 @@ deliberately cross-tenant and documented at their definitions:
   loop serves the install. Every binding it returns carries its own `tenant_id`,
   the health event is published on that tenant's timeline, and everything the
   loop writes back goes through the tenant-scoped methods.
+- `IngestKeyRepository.find_by_token_hash` - an unauthenticated HTTP request has
+  no way to name its tenant, so the presented token *is* the selector. Lookup is
+  by sha256, so the stored material is not usable; the key it returns carries the
+  tenant, app and stream every subsequent read and write is then scoped to.
 
 `_platform` is a reserved tenant id used for events about the platform itself
 (the database, the bus, the worker group). Because replay is tenant-scoped, no
@@ -843,6 +945,39 @@ identity one, because an acknowledgement, its audit entry and its event have to
 be a single commit or an escalation timer and the audit chain can disagree about
 whether a human answered.
 
+## 6c. Push ingestion
+
+`ingest_keys` is the credential a sending application holds for one stream of
+one application. Neither half of it is readable from the row: `token_hash` is
+the sha256 of the bearer token, whose plaintext is returned once at issue and
+cannot be shown again, and the HMAC shared secret lives in `secrets` under
+`ingest/<key_id>/secret` - the same path every other credential this platform
+holds takes. `token_prefix` exists so an operator screen can tell two keys apart
+without the platform being able to reveal either. Revoking a key destroys its
+secret, so a revoked key cannot produce a signature that would verify.
+
+Rotation issues a **successor row** rather than overwriting: `rotated_from`
+links them, both are live with two different secrets, and the contract's
+optional `X-SignalForge-Key-Id` header names which one the sender believes it
+signed with. A sender cannot be switched atomically - it is a configuration
+change in somebody else's system - so an overwrite would drop every request in
+flight between the two deploys.
+
+`ingest_receipts` is the idempotency ledger the frozen contract's `event_id`
+names, unique on **(tenant_id, event_id)**:
+
+- not (key, event_id), because the same fact posted through a key and its
+  rotation replacement is one fact;
+- not global, because event ids are producer-assigned, so two tenants will pick
+  the same one and neither may block or observe the other.
+
+A batch's receipts, the events they became, the counters on the key and any
+audit entry are one transaction. A receipt written without its event would
+silently swallow the sender's retry, which is the failure this table exists to
+prevent. `event_count` records that one posted item can become several events -
+an alerts webhook batch normalises into one canonical alert per alert - so the
+receipt does not imply a 1:1 mapping that does not hold.
+
 ## 7. Indexes
 
 Every index exists for a query the platform actually makes:
@@ -865,6 +1000,10 @@ Every index exists for a query the platform actually makes:
 | `ix_notification_deliveries_incident` | the war room's "who was told about this incident" |
 | `ix_knowledge_documents_tenant_app` | the kb-index corpus read, tenant- and app-scoped |
 | `ix_sim_tickets_tenant_app` | the simulated ticket queue per application |
+| `ix_ingest_keys_tenant_app` | the wizard's push cards, per app and stream |
+| `ix_ingest_keys_binding` | which keys a connector binding normalises for, when it is deleted |
+| `ix_ingest_receipts_key` | what has actually arrived on one key, newest first |
+| `ix_ingest_receipts_stream` | ingest volume and freshness per stream |
 
 ## 8. Portability
 

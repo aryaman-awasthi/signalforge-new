@@ -15,6 +15,7 @@ from pathlib import Path
 
 from cryptography.fernet import Fernet
 
+from signalforge.contracts.ingest import REPLAY_WINDOW_S
 from signalforge.domain.events.retention import SIGNAL_RETENTION_DEFAULT_DAYS
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -24,6 +25,15 @@ ADAPTERS_DIR = Path(__file__).resolve().parent / "adapters"
 VERSION = "0.2.0"
 
 ACCESS_TTL_CAP_S = 900  # 15-minute JWT access tokens (REQ-010); config may only shorten
+
+# Push ingestion (REQ-032). The body cap is a ceiling on what one POST may make
+# this process hold in memory while it hashes it; MAX_BATCH_ITEMS items of a few
+# hundred bytes each fit inside it with room to spare, so the cap bites on abuse
+# rather than on legitimate traffic.
+INGEST_MAX_BODY_BYTES_CAP = 4 * 1024 * 1024
+INGEST_DEFAULT_MAX_BODY_BYTES = 2 * 1024 * 1024
+INGEST_DEFAULT_RATE_LIMIT = 600
+INGEST_RATE_WINDOW_S = 60
 
 
 def _persisted_key(env_var: str, filename: str, generate) -> str:
@@ -56,6 +66,10 @@ class Settings:
     health_interval_s: float
     log_level: str
     adapters_dir: str
+    ingest_replay_window_s: int
+    ingest_rate_limit: int
+    ingest_rate_window_s: int
+    ingest_max_body_bytes: int
 
 
 def load_settings() -> Settings:
@@ -98,4 +112,31 @@ def load_settings() -> Settings:
         # a deployment can mount an adapter bundle outside the package, and so a
         # test can point the registry at a tree it wrote itself.
         adapters_dir=os.environ.get("SIGNALFORGE_ADAPTERS_DIR", str(ADAPTERS_DIR)),
+        # Security floor: config may only *tighten* the contract's replay
+        # window and the body cap. The verifier applies the same min() again,
+        # so an environment that sets a wider one gets the contract's.
+        ingest_replay_window_s=min(
+            int(os.environ.get("SIGNALFORGE_INGEST_REPLAY_WINDOW_S", REPLAY_WINDOW_S)),
+            REPLAY_WINDOW_S,
+        ),
+        # At least one request per window: a limit of zero would be a way to
+        # switch ingestion off by configuration rather than by revoking keys,
+        # and a silently dead endpoint is worse than a visibly revoked one.
+        ingest_rate_limit=max(
+            int(
+                os.environ.get(
+                    "SIGNALFORGE_INGEST_RATE_LIMIT", INGEST_DEFAULT_RATE_LIMIT
+                )
+            ),
+            1,
+        ),
+        ingest_rate_window_s=INGEST_RATE_WINDOW_S,
+        ingest_max_body_bytes=min(
+            int(
+                os.environ.get(
+                    "SIGNALFORGE_INGEST_MAX_BODY_BYTES", INGEST_DEFAULT_MAX_BODY_BYTES
+                )
+            ),
+            INGEST_MAX_BODY_BYTES_CAP,
+        ),
     )

@@ -261,7 +261,7 @@ requirements:
     area: integrations
     sprint: S3
     priority: must
-    status: planned
+    status: built
     acceptance: >
       /api/v1/ingest/{changes,alerts,topology,messages,tickets} enforce bearer + HMAC,
       event_id idempotency, replay window and schema validation, answering 202; forged

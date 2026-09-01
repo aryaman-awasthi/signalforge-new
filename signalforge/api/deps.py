@@ -12,10 +12,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from fastapi import Depends, Query, Request, WebSocket, WebSocketException
+from fastapi import Depends, HTTPException, Query, Request, WebSocket, WebSocketException
 
+from signalforge.contracts.ingest import HDR_KEY_ID, HDR_SIGNATURE, HDR_TIMESTAMP
 from signalforge.contracts.roles import Permission
 from signalforge.domain.identity.errors import AuthenticationError
+from signalforge.domain.ingest.streams import IngestStream
 from signalforge.application.adapters.connector_service import ConnectorService
 from signalforge.application.adapters.health import ConnectorHealthSources
 from signalforge.application.adapters.invoker import ConnectorInvoker
@@ -28,6 +30,11 @@ from signalforge.application.events.dispatcher import Dispatcher
 from signalforge.application.events.replay import ReplayService
 from signalforge.application.events.retention import RetentionService
 from signalforge.application.events.sealing import SealService
+from signalforge.application.ingest.ingest_service import (
+    AuthenticatedIngest,
+    IngestService,
+)
+from signalforge.application.ingest.keys_service import IngestKeyService
 from signalforge.application.observability.health import ConnectorHealthService
 from signalforge.application.observability.platform_status import PlatformStatusService
 from signalforge.application.identity.auth_service import AuthService
@@ -56,6 +63,7 @@ from signalforge.infrastructure.persistence.db import make_engine, make_session_
 from signalforge.infrastructure.persistence.event_uow import SqlEventUnitOfWork
 from signalforge.infrastructure.persistence.uow import SqlIdentityUnitOfWork
 from signalforge.workers.runner import PlatformWorker, ScheduledJob
+from signalforge.infrastructure.security.hmac_verify import IngestHmacVerifier
 from signalforge.infrastructure.security.passwords import Argon2PasswordHasher
 from signalforge.infrastructure.security.ratelimit import SlidingWindowRateLimiter
 from signalforge.infrastructure.security.tokens import JWTAccessTokenService
@@ -173,6 +181,32 @@ class Container:
             metrics=self.metrics,
         )
         self.notification_inbox = NotificationInbox(self.uow_factory, self.clock)
+
+        # Push ingestion (S3-T03). Both clocks appear here on purpose: the
+        # replay window and the "when did this reach us" stamp read wall time,
+        # so a drill clock can neither widen the window nor age a batch out,
+        # while the platform clock stamps the events a drill produces.
+        self.ingest_keys = IngestKeyService(
+            self.uow_factory, self.adapter_registry, self.bus, self.clock
+        )
+        self.ingest_rate_limiter = SlidingWindowRateLimiter(
+            limit=self.settings.ingest_rate_limit,
+            window_s=self.settings.ingest_rate_window_s,
+            clock=self.wall_clock,
+        )
+        self.ingest = IngestService(
+            self.uow_factory,
+            self.bus,
+            IngestHmacVerifier(
+                clock=self.wall_clock,
+                replay_window_s=self.settings.ingest_replay_window_s,
+            ),
+            self.ingest_rate_limiter,
+            self.invoker,
+            clock=self.clock,
+            recording_clock=self.wall_clock,
+            metrics=self.metrics,
+        )
 
         # Self-observability (S2-T03).
         self.health = ConnectorHealthService(
@@ -302,6 +336,58 @@ async def get_ws_principal(
         return await container.auth.authenticate(token)
     except AuthenticationError as exc:
         raise WebSocketException(code=1008, reason="authentication failed") from exc
+
+
+async def read_ingest_body(request: Request, limit: int) -> bytes:
+    """The exact bytes the signature covers, bounded before they are read.
+
+    Content-Length is checked first so an oversized body is refused without
+    being buffered, and the length is re-checked afterwards because a chunked
+    request declares no length at all. The bytes are kept rather than re-encoded
+    from a parsed object: an HMAC over a re-serialisation is an HMAC over
+    something the sender never sent.
+    """
+    declared = request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > limit:
+        raise HTTPException(status_code=413, detail=f"body exceeds {limit} bytes")
+    body = await request.body()
+    if len(body) > limit:
+        raise HTTPException(status_code=413, detail=f"body exceeds {limit} bytes")
+    return body
+
+
+def require_ingest(stream: IngestStream):
+    """Ingest authentication factory - the machine counterpart of `require`.
+
+    A sending application holds no session and no role: it holds an ingest key
+    this platform issued, and the credential is the bearer token plus an HMAC
+    over "<timestamp>.<raw body>" within the replay window, exactly as the frozen
+    contract specifies. Everything the request then writes is scoped to the
+    tenant, the application and the stream that key names, so there is no
+    parameter through which it could reach another tenant's data.
+
+    Marked so the security suite's router walk can recognise it as a credential
+    resolver: the walk's rule is that no product route runs a handler before a
+    real, revocable credential has been resolved, and this satisfies it without
+    pretending a machine is a person holding permissions.
+    """
+
+    async def dependency(
+        request: Request, container: "Container" = Depends(get_container)
+    ) -> AuthenticatedIngest:
+        body = await read_ingest_body(request, container.settings.ingest_max_body_bytes)
+        key = await container.ingest.authenticate(
+            stream=stream,
+            authorization=request.headers.get("Authorization", ""),
+            signature=request.headers.get(HDR_SIGNATURE, ""),
+            timestamp=request.headers.get(HDR_TIMESTAMP, ""),
+            key_id=request.headers.get(HDR_KEY_ID),
+            body=body,
+        )
+        return AuthenticatedIngest(key=key, stream=stream, body=body)
+
+    dependency.resolves_ingest_credential = True
+    return dependency
 
 
 def require(permission: Permission):

@@ -10,8 +10,13 @@ from pathlib import Path
 
 from cryptography.fernet import Fernet
 
+from signalforge.contracts.ingest import REPLAY_WINDOW_S
 from signalforge.domain.identity.ports import Clock
-from signalforge.infrastructure.config import ADAPTERS_DIR, Settings
+from signalforge.infrastructure.config import (
+    ADAPTERS_DIR,
+    INGEST_DEFAULT_MAX_BODY_BYTES,
+    Settings,
+)
 
 
 class FakeClock(Clock):
@@ -46,6 +51,12 @@ def make_test_settings(db_url: str, adapters_dir: str | None = None) -> Settings
         # Tests that care about the registry point it at a tree they wrote; the
         # rest run against the adapters this deployment actually ships.
         adapters_dir=adapters_dir or str(ADAPTERS_DIR),
+        ingest_replay_window_s=REPLAY_WINDOW_S,
+        # High enough that an ordinary test is never rate limited, low enough
+        # that the limiter test can reach it without a thousand requests.
+        ingest_rate_limit=50,
+        ingest_rate_window_s=60,
+        ingest_max_body_bytes=INGEST_DEFAULT_MAX_BODY_BYTES,
     )
 
 

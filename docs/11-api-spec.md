@@ -2,8 +2,10 @@
 
 Owner: engineering. Sections are written as endpoints land; the exported OpenAPI document and
 the complete route catalogue arrive with S3-T07. Every route except `/health`, `/metrics` and
-the four `/auth` bootstrap endpoints carries the RBAC dependency (REQ-012), and the permission
-each one needs is named below.
+the four `/auth` bootstrap endpoints resolves a real credential before its handler runs, and
+the permission each one needs is named below. The five `/api/v1/ingest/*` routes are the one
+exception to "credential means human session": they resolve a machine credential - an ingest
+key with an HMAC over the body - and are described under Ingest keys below.
 
 Errors are mapped once, in `signalforge/api/errors.py`: 401 authentication, 403 permission
 denied (with `permission` and `reason`), 404 not found, 409 conflict, 422 domain validation,
@@ -132,6 +134,111 @@ Deletes the binding and exactly its own secrets, and audits `system.connector.un
 The integration health screen. Every `GET /connectors` field plus `freshness_s` - seconds since
 the last successful check, `null` when there has never been one.
 
+## Ingest keys (REQ-032)
+
+All `manage_apps`. An ingest key is the credential a *sending application* holds: a bearer
+token plus an HMAC shared secret, scoped to one tenant, one `app_id` and one stream.
+
+### `POST /ingest-keys` -> 201
+
+```json
+{"app_id": "checkout", "stream": "changes", "name": "checkout ci", "binding_id": null}
+```
+
+`stream` is one of `changes`, `alerts`, `topology`, `messages`, `tickets`. `binding_id`
+optionally names a **push** connector binding of the matching kind whose adapter normalises
+vendor-shaped payloads; omit it when the sender posts the canonical contract shape.
+
+The 201 is the only response that ever carries credential material:
+
+```json
+{
+  "id": "3f0c...", "app_id": "checkout", "stream": "changes", "name": "checkout ci",
+  "path": "/api/v1/ingest/changes",
+  "token": "sfi_...", "secret": "...",
+  "token_prefix": "sfi_S_5VtZit", "binding_id": null, "rotated_from": null,
+  "active": true, "created_at": "2026-09-01T12:00:00Z", "created_by": "u-1",
+  "revoked_at": null, "revoked_by": null,
+  "last_used_at": null, "last_event_at": null, "freshness_s": null, "last_error": null,
+  "accepted_count": 0, "duplicate_count": 0, "rejected_count": 0
+}
+```
+
+`token` and `secret` are returned once and cannot be shown again: only the token's sha256 is
+stored, and the secret lives Fernet-encrypted under `ingest/<key_id>/secret`. Prefix the
+returned `path` with your API base URL to get the ingest URL.
+
+- 422 when the named binding is not found, is not installed, is the wrong adapter kind for the
+  stream, is not push-mode, or does not declare `normalize`.
+
+### `GET /ingest-keys`
+
+Query: `app_id`, `stream`, `include_revoked` (default false). Every field above except `token`
+and `secret`. This is what an integration health screen reads for a push integration:
+`freshness_s` is seconds since anything actually *arrived*, which a ping cannot measure because
+SignalForge is the server; `last_error` is why the most recent request was refused.
+
+### `GET /ingest-keys/{id}` · `POST /ingest-keys/{id}/rotate` -> 201 · `DELETE /ingest-keys/{id}` -> 200
+
+`rotate` issues a **successor** (new id, new token, new secret, `rotated_from` set) and leaves
+the original live, so a sender can be moved over without dropping requests in flight. `DELETE`
+revokes rather than deletes - the receipts a key wrote are the record that a sender's events
+were already accepted - and destroys the shared secret, so a revoked key cannot produce a
+signature that would verify. Both are audited. A cross-tenant id answers 404 with the same
+message as one that never existed.
+
+## `POST /api/v1/ingest/{changes,alerts,topology,messages,tickets}` -> 202 (REQ-032, REQ-017)
+
+The five paths are frozen in `contracts/ingest.py` and registered literally, not as a template.
+These are the only product routes that resolve a *machine* credential rather than a human
+session, and they carry no permission: the caller is a sending application, and the roles
+matrix describes people. The compensating control is that the key names the tenant, the app and
+the stream, and the request body carries none of the three - there is no parameter through
+which a verified sender could reach past its own key.
+
+Headers:
+
+| Header | Required | Meaning |
+|---|---|---|
+| `Authorization: Bearer <token>` | yes | the ingest key |
+| `X-SignalForge-Timestamp` | yes | unix seconds at signing time; must be within 300s |
+| `X-SignalForge-Signature` | yes | hex HMAC-SHA256 of `"<timestamp>.<raw body>"` |
+| `X-SignalForge-Key-Id` | no | which key the sender signed with; a mismatch is refused |
+
+Body - the frozen batch shape, payloads in canonical form (or the vendor's, when the key names
+a normalising binding):
+
+```json
+{"source_system": "jenkins", "simulated": false,
+ "items": [{"event_id": "1c9f...", "occurred_at": "2026-09-01T12:00:00Z",
+            "payload": {"change_id": "deploy-42", "change_type": "deployment",
+                        "service": "checkout", "status": "started",
+                        "started_at": "2026-09-01T12:00:00Z"}}]}
+```
+
+202 body:
+
+```json
+{"accepted": 4, "duplicates": 1,
+ "rejected": [{"index": 3, "reason": "service: Field required"}],
+ "request_id": "bd664c52639040f7"}
+```
+
+Status codes:
+
+| Code | When |
+|---|---|
+| 202 | authentic request; per-item outcomes are in the body |
+| 401 | missing, unknown or revoked token; missing, forged or stale signature; key-id mismatch. Always the bare `{"detail": "authentication failed"}` |
+| 403 | the key is bound to a different stream |
+| 413 | body larger than the configured cap (2 MiB default) |
+| 422 | authentic but the batch wrapper is invalid - no `source_system`, empty or oversized `items`, unknown fields, non-JSON body |
+| 429 | per-key rate limit, with `Retry-After` |
+
+`event_id` is the idempotency unit, unique per `(tenant, event_id)`: a repeat is counted in
+`duplicates` and published nothing. A rejected item does not consume its id, so a sender can
+fix the payload and resend with the same one.
+
 ## Events emitted
 
 | Topic | Plane | Tenant | When |
@@ -140,6 +247,16 @@ the last successful check, `null` when there has never been one.
 | `system.connector.updated` | signal | owning tenant | config, credentials or enabled changed |
 | `system.connector.unbound` | signal | owning tenant | a binding is deleted |
 | `system.connector.health` | signal | owning tenant for a binding, `_platform` for the platform's own components | every poll |
+| `system.ingest.key.issued` / `.rotated` / `.revoked` | signal | owning tenant | key lifecycle; carries the display prefix, never the credential |
+| `system.ingest.rejected` | signal | owning tenant | a request refused after its key resolved, or a batch with rejected items |
+| `deployment.<status>` / `change.<status>` | signal | owning tenant | an accepted `changes` item |
+| `alert.fired` / `alert.resolved` | signal | owning tenant | an accepted `alerts` item |
+| `topology.updated` | signal | owning tenant | an accepted `topology` item |
+| `collaboration.message.received` | signal | owning tenant | an accepted `messages` item |
+| `itsm.ticket.updated` | signal | owning tenant | an accepted `tickets` item |
+
+Audit topics `audit.ingest.rejected` and `audit.ingest.duplicate` carry the same facts into the
+hash chain, one entry per batch rather than one per item.
 
 ## `GET /ws` - the cockpit notification socket (REQ-033)
 

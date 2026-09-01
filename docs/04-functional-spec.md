@@ -248,7 +248,136 @@ integration while nothing was ever queried. They are listed, their capability ro
 and the matrix never counts them as coverage. Adding a real runtime later is an entry in
 `builtin.py` and a manifest field - nothing else in the platform changes.
 
-### 2.9 Calling an adapter
+### 2.9 Push ingestion: `/api/v1/ingest/*` (REQ-032, REQ-017)
+
+Pull adapters are how SignalForge reaches into an application. Ingestion is the other
+direction, and it is the only product surface an unauthenticated caller can reach at all - so
+the shape of it is almost entirely about what happens *before* the body is parsed.
+
+#### 2.9.1 The credential
+
+A sending application holds an **ingest key**, issued through the wizard or `POST /ingest-keys`
+by whoever holds `manage_apps`. It is two independent halves, and neither alone is enough:
+
+| Half | Where it lives | What it proves |
+|---|---|---|
+| bearer token (`sfi_...`) | only its sha256 is stored, exactly as refresh tokens are | who is posting |
+| HMAC-SHA256 shared secret | Fernet-encrypted in `secrets` under `ingest/<key>/secret` | the body is unchanged and recent |
+
+Both are returned exactly once, in the 201. Nothing can show them again - a platform that can
+show you a credential can show it to whoever takes over your session - so "I lost it" is
+answered by rotating, not by looking it up. The screen shows a display prefix so two keys can
+be told apart.
+
+A key is scoped to one tenant, one `app_id` and **one stream**. That last one matters: a token
+that leaks from a deploy script cannot be used to inject alerts, because posting it to
+`/api/v1/ingest/alerts` is refused.
+
+#### 2.9.2 Rotation
+
+`POST /ingest-keys/{id}/rotate` issues a *successor* rather than overwriting. Both keys are
+live, each with its own secret, until the operator revokes the old one. A sender cannot be
+switched atomically - it is a configuration change in somebody else's system - so an overwrite
+would drop every request in flight between the two deploys. The contract's optional
+`X-SignalForge-Key-Id` header is what makes the handover safe: it names which key the sender
+believes it signed with, and a mismatch is refused rather than quietly verified against the
+other secret. Revoking destroys the secret, so a revoked key cannot produce a signature that
+would verify - it is not revoked on paper only.
+
+#### 2.9.3 What a request passes through, in order
+
+1. **A bearer token, and only a bearer token.** It resolves - by hash - to one key, and that
+   key carries the tenant and the app everything in the request will be written under.
+2. **A per-key rate limit**, before any expensive work, and deliberately *not* audited: an
+   audit row per refused request would let a flood write the disk it was refused from touching.
+3. **The HMAC**, over the exact bytes received and inside the replay window. The body is read
+   once as bytes, bounded, and verified *before* it is parsed, so nothing hostile reaches a
+   JSON parser on an unverified request. The signature is not a nonce - a captured request
+   inside the window still verifies - which is exactly why `event_id`, not the signature, is
+   what stops it being applied twice.
+4. **The stream**, checked after verification so the reason can be recorded honestly.
+
+The sender always gets a bare `401 authentication failed`; it never learns from the response
+whether it got the token, the signature or its clock wrong. The reason is written to the key,
+where `GET /ingest-keys` shows it to whoever holds `manage_apps`, and every refusal against a
+*known* key lands in that tenant's audit chain and on its timeline. A refusal against an
+*unknown* token audits nothing at all, deliberately: it names no tenant, and letting an
+anonymous caller pick whose audit chain to write to would be the leak, not the fix.
+
+#### 2.9.4 What a batch does
+
+The wrapper is all-or-nothing (422: a sender that names no source system or exceeds the
+contract's 500 items is broken). Individual items are individually rejectable - a 202 listing
+each one's index and reason - because one malformed alert in five hundred must not lose the
+other four hundred and ninety-nine. A rejected item does not consume its `event_id`: the sender
+fixes the payload, resends with the same id, and that is an acceptance.
+
+`event_id` is the idempotency unit the frozen contract names, and a stored receipt is what
+turns that sentence into a guarantee. A sender whose connection dropped before our 202 arrived
+cannot know whether we recorded its batch, and the only safe answer to the retry it will
+certainly send is to acknowledge it without applying it twice. The uniqueness key is
+**(tenant, event_id)**: not per key, so a rotation cannot cause a double-apply; not global, so
+two tenants that pick the same producer-assigned id neither block nor observe each other. A
+duplicate is counted in the ack and evidenced with one `audit.ingest.duplicate` entry per
+batch.
+
+Everything a batch does is one transaction - the receipts, the events they became, the counters
+on the key and any audit entry. A receipt written without its event would silently swallow the
+sender's retry, which is the failure the whole design exists to prevent.
+
+#### 2.9.5 Canonical first, adapter as translator
+
+The endpoint speaks `contracts/canonical.py`. An application that implements the canonical
+shapes is ingestible with no platform code written for it, which is what "onboard through
+public contracts" means in this direction. When a sender speaks its vendor's shape instead, the
+key names a **push connector binding**, and that adapter's `normalize` translates - so the
+Grafana and deployment normalisers built in S3-T02 are live product code on this path, with
+their own rules intact (an unrecognised severity still becomes `warning`, the unresolved
+sentinel still becomes null). One posted item may become several events - a Grafana batch
+normalises into one canonical alert per alert - and it is still one idempotency unit, so its
+retry is one duplicate rather than three.
+
+Nothing about the translator is fatal to the request. A binding disabled between two posts, an
+adapter uninstalled under it, or a payload the adapter refuses, all reject the items that
+needed translating and name why; the canonical items in the same batch still land. A binding
+that could never translate the stream - wrong kind, wrong mode, no `normalize` - is refused
+when the key is *issued*, so the operator finds out while wiring it rather than at 3am.
+
+Two of the five streams cannot have a push adapter at all: the frozen SPI defines `normalize`
+only on alerts, changes and topology, so `collaboration` and `itsm` can never be push-mode.
+They still work, because the key is the credential and the adapter is only ever an optional
+translator.
+
+#### 2.9.6 Streams, topics and the rules that survive the boundary
+
+| Stream | Canonical model | Topic |
+|---|---|---|
+| `changes` | `ChangeEvent` | `deployment.<status>`, or `change.<status>` for non-deployments |
+| `alerts` | `Alert` | `alert.fired` / `alert.resolved` |
+| `topology` | `TopologySnapshot` | `topology.updated` |
+| `messages` | `CollabMessage` | `collaboration.message.received` |
+| `tickets` | `Ticket` | `itsm.ticket.updated` |
+
+Everything lands on the **signal plane** carrying its provenance: the sending system as the
+external actor, `authority: observed`, the measured `freshness_s`, and the `simulated` flag the
+sender declared. Two domain rules cross the boundary with it. A topology snapshot with a
+dangling edge is refused whole - the pull importer's rule, in the push direction, for the same
+reason: a graph missing half its edges looks complete and understates blast radius. And free
+text is masked at the boundary, at write time, by a redaction floor in the domain
+(`ingest-default`: email addresses and long digit runs, applied to message text, ticket titles
+and descriptions, and alert annotations). It lives there rather than in a manifest precisely
+because the two streams that carry the most human prose can have no manifest; `redaction.applied`
+on the envelope means something was actually removed, not that a policy exists.
+
+#### 2.9.7 Freshness
+
+For a push binding, healthy means "SignalForge is accepting posts". Whether anything has
+*arrived* is a different question, and a ping cannot answer it: this platform is the server, so
+it is reachable whether or not the sender died a week ago. The ingest key answers it -
+`last_event_at`, `freshness_s`, and accepted / duplicate / rejected counters, all on
+`GET /ingest-keys`.
+
+### 2.10 Calling an adapter
 
 Every call goes through one path (`ConnectorInvoker`), because five checks have to happen on
 every single one and none may be a caller's responsibility to remember: the binding exists in
