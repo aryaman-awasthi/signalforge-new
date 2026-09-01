@@ -5,6 +5,11 @@ import { useEffect, useState } from "react";
 
 import { ApiError } from "@/lib/api/client";
 import { fetchMe } from "@/features/auth/api";
+import { BrainPanel } from "@/features/brain/components/BrainPanel";
+import { CopilotPanel } from "@/features/brain/components/CopilotPanel";
+import { GuidancePanel } from "@/features/brain/components/GuidancePanel";
+import { TopologyPanel } from "@/features/brain/components/TopologyPanel";
+import { useBrain } from "@/features/brain/hooks/useBrain";
 import { AckBoard } from "@/features/warroom/components/AckBoard";
 import { LiveBadge } from "@/features/warroom/components/LiveBadge";
 import { BridgePanel } from "@/features/warroom/components/BridgePanel";
@@ -22,11 +27,17 @@ import { getIncident, IncidentDetail } from "@/features/incidents/api";
  * Next Best Action, AI Copilot, Incident Timeline, Warning and Guidance,
  * Health Score and Metrics, Affected Services - plus Who is in the room.
  *
- * Four of them describe agent features that Sprint 5 builds. They are rendered
- * *now*, with their real titles and a sentence saying what will fill them,
- * rather than hidden until they work. Two reasons: the layout an incident
- * commander learns should not move under them when the agents land, and a panel
- * that quietly does not exist is indistinguishable from one that is broken.
+ * Sprint 5 fills four of them - AI Incident Brain, Affected Services, Warning
+ * and Guidance, AI Copilot - in the places Sprint 4 reserved. The layout an
+ * incident commander learned does not move: the titles, the order and the grid
+ * are unchanged, and only the contents of those four panels are new. That was
+ * the reason for rendering them as placeholders rather than hiding them.
+ *
+ * The brain is read through its own hook and its own routes, and it shares this
+ * screen's socket rather than opening a second one: the server's cockpit
+ * consumer subscribes to `brain.*` alongside `incident.*` and `warroom.*`, so a
+ * hypothesis that moved arrives on the frame the platform was already sending.
+ * There is one WebSocket store in this application and it stays that way.
  *
  * "Who is in the room" shows presence, not invitations. Somebody who was paged
  * and has not answered is not in the room, and the panel says which is which -
@@ -34,6 +45,7 @@ import { getIncident, IncidentDetail } from "@/features/incidents/api";
  */
 export function WarRoomShell({ incidentId }: { incidentId: string }) {
   const { state, reload, connected } = useWarRoom(incidentId);
+  const { state: brainState, reload: reloadBrain } = useBrain(incidentId);
   const [me, setMe] = useState<{ user_id: string; permissions: string[] } | null>(
     null,
   );
@@ -135,6 +147,52 @@ export function WarRoomShell({ incidentId }: { incidentId: string }) {
           {room.gaps.map((gap) => `${gap.role} (${gap.reason})`).join("; ")}.
         </section>
       )}
+
+      {/* S10 sits full width above the grid: three hypothesis cards, their
+          confidence history and the ledger they were computed from do not fit
+          in a third of a row, and it is the first thing an incident commander
+          opens this screen for. */}
+      <Panel
+        title="AI Incident Brain"
+        subtitle={
+          brainState.kind === "ready"
+            ? `${brainState.brain.hypotheses.length} hypotheses${
+                brief ? ` · brief written by: ${brief.source}` : ""
+              }`
+            : undefined
+        }
+      >
+        <BrainPanel
+          incidentId={incidentId}
+          state={brainState}
+          onRefreshed={() => {
+            reloadBrain();
+            reload();
+          }}
+        />
+        {brief && (
+          <div className="mt-3 border-t border-line pt-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+              Join brief
+            </h3>
+            <p className="mt-1 text-xs font-medium">{brief.headline}</p>
+            {brief.what_we_know.slice(0, 4).map((line) => (
+              <p key={line} className="text-[11px] text-ink-muted">
+                {line}
+              </p>
+            ))}
+            {/* The caveats are rendered, not buried behind a toggle. A brief
+                that reads confidently from thin evidence is the failure mode
+                this section exists to prevent - and the model writer is
+                required to keep every one of them. */}
+            <ul className="mt-1 space-y-0.5 text-[11px] text-warn">
+              {brief.caveats.map((caveat) => (
+                <li key={caveat}>{caveat}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </Panel>
 
       <div className="grid gap-3 lg:grid-cols-3">
         <Panel
@@ -254,78 +312,44 @@ export function WarRoomShell({ incidentId }: { incidentId: string }) {
 
         <Panel
           title="Affected Services"
-          subtitle={radius.truncated ? "truncated" : undefined}
+          subtitle={
+            radius.customer_facing ? "customers are feeling this" : undefined
+          }
         >
-          {radius.services.length === 0 ? (
-            <p className="text-xs text-ink-muted">
-              No topology is mapped for this application, so nothing here says
-              what is downstream of the fault.
-            </p>
-          ) : (
-            <ul className="flex flex-wrap gap-1.5">
-              {radius.services.map((service) => (
-                <li
-                  key={service}
-                  className="rounded-full border border-line px-2 py-0.5 text-xs"
-                >
-                  {service}
-                </li>
-              ))}
-            </ul>
-          )}
+          {/* S13. The blast radius the room was assembled from is still the
+              header's summary above; this panel is the map it came from, with
+              CONFIRMED kept apart from PREDICTED. */}
+          <TopologyPanel incidentId={incidentId} />
           {radius.regions.length > 0 && (
             <p className="mt-2 text-xs text-ink-muted">
-              Regions: {radius.regions.join(", ")}
+              Regions declared: {radius.regions.join(", ")}
               {radius.regions_total ? ` of ${radius.regions_total}` : ""}
             </p>
-          )}
-          {radius.customer_facing && (
-            <p className="mt-1 text-xs text-danger">Customers are feeling this.</p>
-          )}
-        </Panel>
-
-        <Panel
-          title="AI Incident Brain"
-          subtitle={brief ? `brief: ${brief.source}` : undefined}
-        >
-          {brief ? (
-            <div className="space-y-2 text-xs">
-              <p className="font-medium">{brief.headline}</p>
-              {brief.what_we_know.slice(0, 4).map((line) => (
-                <p key={line} className="text-ink-muted">
-                  {line}
-                </p>
-              ))}
-              {/* The caveats are rendered, not buried behind a toggle. A brief
-                  that reads confidently from thin evidence is the failure mode
-                  this section exists to prevent. */}
-              <ul className="space-y-0.5 border-t border-line pt-1.5 text-warn">
-                {brief.caveats.map((caveat) => (
-                  <li key={caveat}>{caveat}</li>
-                ))}
-              </ul>
-            </div>
-          ) : (
-            <p className="text-xs text-ink-muted">No brief could be built.</p>
           )}
         </Panel>
 
         <Panel
           title="Next Best Action"
-          pending="Sprint 5 fills this: a ranked next action with its evidence, its risk class and who must approve it. Until then, high-risk actions can never auto-execute - that floor is already enforced in the domain, not by this panel."
+          pending="Sprint 6 fills this: a ranked next action with its evidence, its risk class and who must approve it. Until then, high-risk actions can never auto-execute - that floor is already enforced in the domain, not by this panel."
         />
 
         <Panel
           title="AI Copilot"
-          pending="Sprint 5 fills this: ask a question about this incident and get an answer with citations. The llm.provider adapter, its cache and its degraded fallback are configured; nothing is wired to this panel yet."
-        />
+          subtitle="answers only from this incident's record"
+        >
+          <CopilotPanel
+            incidentId={incidentId}
+            nodes={brainState.kind === "ready" ? brainState.brain.nodes : []}
+          />
+        </Panel>
 
-        <Panel
-          title="Warning and Guidance"
-          pending="Sprint 5 fills this: what the platform is unsure about, what it refused to do and why. The refusals already exist as events on the timeline below."
-        />
+        <Panel title="Warning and Guidance" subtitle="advisory, not measured">
+          <GuidancePanel
+            guidance={brainState.kind === "ready" ? brainState.guidance : null}
+          />
+        </Panel>
 
-        <Panel title="Team Chat" pending="Sprint 5 fills this: room chat separate from the bridge transcript, so notes to each other do not become part of the record of what was said on the call." />
+        <Panel title="Team Chat" pending="Sprint 6 fills this: room chat separate from the bridge transcript, so notes to each other do not become part of the record of what was said on the call." />
 
         <Panel
           title="Live Bridge Transcript"
