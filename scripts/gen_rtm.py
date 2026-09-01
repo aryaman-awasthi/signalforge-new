@@ -74,14 +74,20 @@ def build_rtm(requirements: list[dict], results: dict) -> tuple[str, list[str]]:
         else:
             tests_cell = "<br>".join(f"`{n}`" for n, _ in linked)
             outcomes = [o for _, o in linked]
-            if all(o is None for o in outcomes):
+            # A skipped test is neither evidence nor a failure. Opt-in suites -
+            # the live-gateway checks, which must never be on the critical path
+            # - would otherwise report every requirement they touch as FAILING.
+            ran = [o for o in outcomes if o is not None]
+            failed = sum(1 for o in ran if o not in ("passed", "skipped"))
+            skipped = sum(1 for o in ran if o == "skipped")
+            if not ran:
                 verdict = "not executed"
-            elif all(o == "passed" for o in outcomes if o is not None):
-                ran = sum(1 for o in outcomes if o is not None)
-                verdict = f"passed ({ran}/{len(outcomes)} executed)"
-            else:
-                failed = sum(1 for o in outcomes if o not in (None, "passed"))
+            elif failed:
                 verdict = f"FAILING ({failed} not passing)"
+            else:
+                verdict = f"passed ({len(ran) - skipped}/{len(outcomes)} executed)"
+                if skipped:
+                    verdict += f", {skipped} skipped (opt-in)"
         lines.append(
             f"| {req['id']} | {req['title']} | {req['area']} | {req['sprint']}"
             f" | {req['status']} | {tests_cell} | {verdict} |"

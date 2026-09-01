@@ -401,7 +401,7 @@ requirements:
     area: incident-brain
     sprint: S5
     priority: must
-    status: planned
+    status: built
     acceptance: >
       Single llm.provider adapter per CLAUDE.md: configured endpoint and models,
       structured outputs, retries, cache, per-incident budgets; failure flips to a

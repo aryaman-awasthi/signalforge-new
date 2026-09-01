@@ -365,4 +365,24 @@ def build_registry() -> MetricsRegistry:
         "signalforge_incident_tasks_completed_total", MetricType.COUNTER,
         "Incident tasks completed, by where they came from", ("source",),
     )
+    # The model path (S5-T02). Every label is closed: a classification, a
+    # call outcome and the degraded-reason vocabulary. No purpose, no model id
+    # from a response and certainly no prompt - /metrics is unauthenticated, and
+    # a cardinality an upstream gateway could grow is a cardinality it can be
+    # used to attack.
+    registry.declare(
+        "signalforge_llm_calls_total", MetricType.COUNTER,
+        "Model calls, by classification and outcome - `reason` is set only when "
+        "the outcome is degraded",
+        ("model_class", "outcome", "reason"),
+    )
+    registry.declare(
+        "signalforge_llm_tokens_total", MetricType.COUNTER,
+        "Tokens the gateway reported, by classification and direction",
+        ("model_class", "kind"),
+    )
+    registry.declare(
+        "signalforge_llm_degraded_total", MetricType.COUNTER,
+        "Calls that fell back to the deterministic answer, by reason", ("reason",),
+    )
     return registry

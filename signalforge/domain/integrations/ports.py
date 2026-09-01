@@ -136,6 +136,17 @@ class EmbeddingProvider(ABC):
     async def embed(self, texts: Sequence[str]) -> Sequence[Sequence[float]]:
         """Raise on failure. The caller falls back to BM25 and says so."""
 
+    def for_tenant(self, tenant_id: str) -> "EmbeddingProvider":
+        """This provider, scoped to one tenant.
+
+        The composition root installs a single provider for every adapter, but a
+        provider with a cache behind it needs to know whose call it is serving -
+        so an adapter narrows it to its own binding's tenant before use. The
+        default returns `self`, which is correct for any provider that keeps no
+        state between calls.
+        """
+        return self
+
 
 class NotificationSink(ABC):
     """Live delivery to whoever is connected right now (the /ws fan-out).

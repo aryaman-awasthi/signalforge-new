@@ -10,8 +10,8 @@ integrations and onboarding, and is the one Alembic migrates. `rollups.db`
 holds derived detection telemetry, is created from its models at startup, and
 can be deleted without losing any record of anything that happened.
 
-Generated: 2026-09-01T09:20:40+00:00
-Tables: 34 in signalforge.db, 4 in rollups.db
+Generated: 2026-09-01T10:07:16+00:00
+Tables: 35 in signalforge.db, 4 in rollups.db
 
 ## 1. Entity relationship diagram
 
@@ -591,6 +591,26 @@ erDiagram
         json detail
     }
     agent_runs ||--o{ agent_run_steps : "run_id"
+```
+
+### Ungrouped
+
+Tables not yet placed in a group - add them to GROUPS in scripts/gen_erd.py.
+
+```mermaid
+erDiagram
+    llm_cache {
+        string tenant_id "PK"
+        string cache_key "PK"
+        string provider
+        string model
+        string purpose
+        json payload
+        integer prompt_tokens
+        integer completion_tokens
+        integer hits
+        datetime created_at
+    }
 ```
 
 ### Detection (S4) - second database, `rollups.db`
@@ -1394,6 +1414,24 @@ Indexes: `ix_agent_runs_incident`, `ix_agent_runs_tenant_id`, `ix_agent_runs_ten
 | `detail` | json | no |  |
 
 Indexes: `ix_agent_run_steps_run`, `ix_agent_run_steps_run_id`
+
+
+#### `llm_cache`
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `tenant_id` | string | no | primary key |
+| `cache_key` | string | no | primary key |
+| `provider` | string | no |  |
+| `model` | string | no |  |
+| `purpose` | string | no |  |
+| `payload` | json | no |  |
+| `prompt_tokens` | integer | no |  |
+| `completion_tokens` | integer | no |  |
+| `hits` | integer | no |  |
+| `created_at` | datetime | no |  |
+
+Indexes: `ix_llm_cache_tenant_created`
 
 
 ### Detection (S4) - second database, `rollups.db`

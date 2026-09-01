@@ -62,10 +62,12 @@ from signalforge.application.ingest.keys_service import IngestKeyService
 from signalforge.application.observability.health import ConnectorHealthService
 from signalforge.application.observability.platform_status import PlatformStatusService
 from signalforge.application.identity.auth_service import AuthService
+from signalforge.application.llm.reporting import LlmDegradationReporter
 from signalforge.application.identity.oncall_service import OnCallService
 from signalforge.application.identity.org_service import OrgService
 from signalforge.application.identity.principal import Principal
 from signalforge.domain.events.retention import RetentionPolicy
+from signalforge.domain.llm.budget import InMemoryTokenLedger
 from signalforge.infrastructure.adapters.builtin import register_builtin_runtimes
 from signalforge.infrastructure.adapters.limits import CallBudget
 from signalforge.infrastructure.adapters.registry import FileAdapterRegistry
@@ -77,7 +79,16 @@ from signalforge.infrastructure.onboarding.probe import HttpEndpointProbe
 from signalforge.infrastructure.persistence.integrations import (
     SqlIntegrationUnitOfWork,
 )
-from signalforge.infrastructure.config import VERSION, Settings, load_settings
+from signalforge.infrastructure.config import (
+    VERSION,
+    LlmSettings,
+    Settings,
+    load_llm_settings,
+    load_settings,
+)
+from signalforge.infrastructure.llm.embeddings import GatewayEmbeddingProvider
+from signalforge.infrastructure.llm.provider import build_llm_provider
+from signalforge.infrastructure.persistence.llm_cache import SqlResponseCache
 from signalforge.infrastructure.observability.metrics import build_registry
 from signalforge.infrastructure.observability.sources import (
     DatabaseHealthSource,
@@ -107,6 +118,7 @@ class Container:
         settings: Optional[Settings] = None,
         engine=None,
         clock=None,
+        llm_settings: Optional[LlmSettings] = None,
     ):
         self.settings = settings or load_settings()
         # Two clocks (REQ-024). wall_clock is what security and durability read -
@@ -192,15 +204,33 @@ class Container:
         self.integration_uow_factory = lambda: SqlIntegrationUnitOfWork(
             self.session_factory
         )
+        # The model path (S5-T02, REQ-051). Built unconditionally and never
+        # allowed to stop a boot: with no key, or with an endpoint that is not
+        # the approved gateway, the provider holds no client and every call
+        # answers deterministically while announcing system.llm.degraded.
+        self.llm_settings = llm_settings or load_llm_settings()
+        self.llm_degradation = LlmDegradationReporter(
+            self.event_uow_factory, self.bus, self.wall_clock, metrics=self.metrics
+        )
+        self.llm = build_llm_provider(
+            self.llm_settings,
+            cache=SqlResponseCache(self.session_factory, self.wall_clock),
+            ledger=InMemoryTokenLedger(self.llm_settings.incident_token_budget),
+            listener=self.llm_degradation,
+            metrics=self.metrics,
+        )
+        self.embeddings = GatewayEmbeddingProvider(self.llm)
+
         self.adapter_services = AdapterServices(
             uow_factory=self.integration_uow_factory,
             clock=self.clock,
             budget=CallBudget(lambda: self.wall_clock.now().timestamp()),
             notifications=self.notification_hub,
             metrics=self.metrics,
-            # No embedding provider yet: kb-index ranks with BM25 until the
-            # llm.provider adapter registers one in S5 (REQ-051).
-            embeddings=None,
+            # kb-index blends embeddings from the same gateway the rest of the
+            # model path uses, and ranks with BM25 alone whenever it degrades
+            # (REQ-035).
+            embeddings=self.embeddings,
         )
         self.installed_adapters = register_builtin_runtimes(
             self.adapter_runtimes, self.adapter_services

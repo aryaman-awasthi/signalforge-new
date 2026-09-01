@@ -25,7 +25,8 @@ Stack locked: **Spring Boot** (the reference payments app, the first onboarded a
 earlier Angular choice), **on-device RDBMS: SQLite in WAL mode** for SignalForge and
 **H2 file mode** for the reference app. Everything runs on one machine, no Docker.
 Prometheus and Grafana run as downloaded binaries. LLM only through the GenAI Lab
-LiteLLM proxy.
+LiteLLM gateway - chat *and* embeddings - reached through a single provider whose
+approved host is a constant in code rather than configuration (S5-T02, REQ-051).
 
 Why these databases: SQLite WAL gives SignalForge a zero-install, transactional,
 single-file RDBMS that supports the append-only outbox and concurrent readers;
@@ -87,7 +88,34 @@ remediation for /observe/actions); chaos endpoints accept only the drill-scoped 
 | SignalForge platform | Python 3.11, FastAPI, SQLAlchemy 2 (async, aiosqlite), Alembic, LangGraph, pydantic v2, APScheduler for pollers | 8000 | SQLite WAL (`signalforge.db`, `rollups.db`) |
 | Cockpit | Next.js 14 (App Router), TypeScript, Tailwind CSS, React Query, Zustand, Recharts, native WebSocket | 3001 | none |
 | Metrics stack | Prometheus, Grafana (provisioned) | 9090, 3000 | their own files |
-| LLM | LiteLLM proxy via LangChain | external | cache table in signalforge.db |
+| LLM | TCS GenAI Lab LiteLLM gateway (`https://genailab.tcs.in/v1`), OpenAI-compatible over httpx; one `llm.provider`; models by classification, ids from config | external | `llm_cache` table in signalforge.db |
+
+### 2.1 Model path configuration (S5-T02, REQ-051)
+
+Every live model call - chat and embeddings alike - leaves through one provider,
+`signalforge/infrastructure/llm/provider.py`, implementing the domain port
+`domain/llm/ports.LlmProvider`. Application code holds the port; no application or
+domain module imports an SDK or names a model id. The full template with comments is
+`.env.example`; nothing here is required for the platform to boot.
+
+| Variable | Default | Notes |
+|---|---|---|
+| `GENAILAB_BASE_URL` | `https://genailab.tcs.in/v1` | Accepted with or without `/v1`. The **host** is an allowlist in `infrastructure/llm/hosts.py`, not configuration: an endpoint outside it is refused, no client is built, and the platform runs deterministically. |
+| `GENAILAB_API_KEY` | *(unset)* | `OPENAI_API_KEY` is accepted as a compatibility alias; `GENAILAB_API_KEY` wins and the alias selects nothing - the endpoint stays the gateway. `OPENAI_BASE_URL` and `OPENAI_API_BASE` are ignored outright. |
+| `LLM_MODEL_GENERAL` | `genailab-maas-gpt-5.4-mini` | Fast path: classification, extraction, short rewrites. |
+| `LLM_MODEL_REASONING` | `genailab-maas-gpt-5.4` | Multi-step judgement. |
+| `LLM_MODEL_EMBEDDINGS` | `azure/genailab-maas-text-embedding-3-large` | kb-index blends these with BM25 and falls back to BM25 alone when they degrade. |
+| `LLM_TIMEOUT_S` | `20` | Bounded, capped at 120s. Every call has one. |
+| `LLM_CACHE` | `true` | `llm_cache`, keyed by model + prompt/config version + normalised input + schema, scoped per tenant. |
+| `LLM_MAX_ATTEMPTS` | `3` | Retries transient failures only (timeouts, transport, 429, 5xx); a 400 or 401 is never retried. |
+| `LLM_INCIDENT_TOKEN_BUDGET` | `200000` | Per incident, checked before a call and charged after it. |
+| `LLM_CA_BUNDLE` | *(unset)* | TLS verification is always on; a corporate interception certificate is presented as a CA bundle. There is no variable that disables verification. |
+
+A missing key, an unreachable gateway, a timeout, an off-schema answer or a spent
+budget all land in the same place: the caller's deterministic fallback, with
+`degraded=True`, a closed-vocabulary reason and one `system.llm.degraded` event per
+episode. Verify an environment before a demo with `python scripts/llm_smoke.py`
+(opt-in, the only thing in the repository that talks to a live model).
 
 ## 3. Reference app (Spring Boot) internals
 

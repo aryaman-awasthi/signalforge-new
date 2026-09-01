@@ -15,7 +15,9 @@ from signalforge.domain.identity.ports import Clock
 from signalforge.infrastructure.config import (
     ADAPTERS_DIR,
     INGEST_DEFAULT_MAX_BODY_BYTES,
+    LlmSettings,
     Settings,
+    load_llm_settings,
 )
 
 
@@ -67,6 +69,18 @@ def make_test_settings(
         rollup_db_url=rollup_db_url or _rollup_url_beside(db_url),
         detection_enabled=True,
     )
+
+
+def make_test_llm_settings(**env: str) -> LlmSettings:
+    """Model settings resolved from an *empty* environment by default.
+
+    The suite must prove the same thing on a laptop with `GENAILAB_API_KEY`
+    exported and on one without it, and no test may ever be one missing mock
+    away from posting an incident transcript to a live gateway. So the test
+    container is unconfigured unless a test says otherwise, which also makes the
+    degraded path the default the rest of the suite runs under.
+    """
+    return load_llm_settings(env)
 
 
 def _rollup_url_beside(db_url: str) -> str:

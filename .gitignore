@@ -22,9 +22,11 @@ var/
 *.db-shm
 observability/bin/
 
-# secrets and env
+# secrets and env. The template is committed - it is the config documentation
+# and it carries no values; anything else matching .env* is a real environment.
 .env
 .env.*
+!.env.example
 
 # build output
 dist/

@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import os
 import secrets as pysecrets
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Mapping, Optional, Union
 
 from cryptography.fernet import Fernet
 
@@ -19,6 +20,9 @@ from signalforge.contracts.ingest import REPLAY_WINDOW_S
 from signalforge.domain.detection.baselines import DEFAULT_BASELINE_WINDOW_S
 from signalforge.domain.detection.rollups import ROLLUP_INTERVAL_S, ROLLUP_RETENTION_S
 from signalforge.domain.events.retention import SIGNAL_RETENTION_DEFAULT_DAYS
+from signalforge.domain.llm.budget import DEFAULT_INCIDENT_TOKEN_BUDGET
+from signalforge.domain.llm.entities import ModelClass
+from signalforge.infrastructure.llm.hosts import describe_endpoint, endpoint_is_approved
 
 ROOT = Path(__file__).resolve().parents[2]
 KEYS_DIR = ROOT / "var" / "keys"
@@ -36,6 +40,176 @@ INGEST_MAX_BODY_BYTES_CAP = 4 * 1024 * 1024
 INGEST_DEFAULT_MAX_BODY_BYTES = 2 * 1024 * 1024
 INGEST_DEFAULT_RATE_LIMIT = 600
 INGEST_RATE_WINDOW_S = 60
+
+
+# --- the model path (S5-T02, REQ-051) ----------------------------------------
+#
+# Every one of these is configuration. Model ids in particular are swappable to
+# any approved model without a code change (CLAUDE.md, Environment), which is
+# why no model id appears anywhere in domain or application code - a call site
+# names a classification and this file decides which model serves it.
+
+GENAILAB_DEFAULT_BASE_URL = "https://genailab.tcs.in/v1"
+
+DEFAULT_MODEL_GENERAL = "genailab-maas-gpt-5.4-mini"
+DEFAULT_MODEL_REASONING = "genailab-maas-gpt-5.4"
+DEFAULT_MODEL_EMBEDDINGS = "azure/genailab-maas-text-embedding-3-large"
+
+LLM_DEFAULT_TIMEOUT_S = 20.0
+LLM_MIN_TIMEOUT_S = 1.0
+# A ceiling, not a default: a model call that can hang for ten minutes inside an
+# incident is a worse failure than one that gives up and degrades.
+LLM_TIMEOUT_CAP_S = 120.0
+LLM_DEFAULT_MAX_ATTEMPTS = 3
+LLM_MAX_ATTEMPTS_CAP = 5
+
+# Bumped by hand when the prompt-construction or response-parsing rules change.
+# It is part of every cache key, so a change invalidates warm entries instead of
+# serving answers produced by rules that no longer exist.
+LLM_PROMPT_CONFIG_VERSION = "1"
+
+PROVIDER_NAME = "genailab"
+
+_CA_BUNDLE_VARS = ("LLM_CA_BUNDLE", "REQUESTS_CA_BUNDLE", "SSL_CERT_FILE")
+
+
+def normalize_gateway_url(raw: str) -> str:
+    """Accept the endpoint with or without its `/v1` suffix.
+
+    Both forms are published for the gateway and operators paste either, so this
+    normalises rather than rejects - but only by *appending* the version
+    segment. It never rewrites the host, which is the part that is a security
+    control (infrastructure/llm/hosts.py).
+    """
+    url = (raw or "").strip().rstrip("/")
+    if not url:
+        return GENAILAB_DEFAULT_BASE_URL
+    return url if url.endswith("/v1") else f"{url}/v1"
+
+
+def _ca_bundle(env: Mapping[str, str]) -> Optional[str]:
+    """A CA bundle from the environment, if it names a file that exists.
+
+    This is the supported answer to a corporate TLS-interception certificate.
+    There is deliberately no variable that disables verification: an operator
+    who cannot present a CA bundle gets a degraded model path, not an
+    unauthenticated one (CLAUDE.md rule 4).
+    """
+    for name in _CA_BUNDLE_VARS:
+        value = (env.get(name) or "").strip()
+        if value and Path(value).is_file():
+            return value
+    return None
+
+
+@dataclass(frozen=True)
+class LlmSettings:
+    """Everything the provider needs, resolved once from the environment.
+
+    `api_key` carries `repr=False` so that a settings object printed into a log,
+    a traceback or a debugger never shows the credential; `redacted` is what
+    diagnostics print instead.
+    """
+
+    base_url: str
+    api_key: str = field(default="", repr=False)
+    key_source: str = ""
+    models: Mapping[ModelClass, str] = field(default_factory=dict)
+    timeout_s: float = LLM_DEFAULT_TIMEOUT_S
+    max_attempts: int = LLM_DEFAULT_MAX_ATTEMPTS
+    cache_enabled: bool = True
+    incident_token_budget: int = DEFAULT_INCIDENT_TOKEN_BUDGET
+    prompt_version: str = LLM_PROMPT_CONFIG_VERSION
+    verify: Union[bool, str] = True
+    provider: str = PROVIDER_NAME
+
+    @property
+    def endpoint_approved(self) -> bool:
+        return endpoint_is_approved(self.base_url)
+
+    @property
+    def configured(self) -> bool:
+        """Whether a live call may be attempted at all. Both halves matter: a
+        key pointed at an unapproved host is worse than no key."""
+        return bool(self.api_key) and self.endpoint_approved
+
+    @property
+    def redacted(self) -> dict[str, object]:
+        """What diagnostics, `/status` and the degraded event are allowed to say."""
+        return {
+            "provider": self.provider,
+            "endpoint": describe_endpoint(self.base_url),
+            "endpoint_approved": self.endpoint_approved,
+            "key_present": bool(self.api_key),
+            "key_source": self.key_source or None,
+            "models": {kind.value: name for kind, name in self.models.items()},
+            "timeout_s": self.timeout_s,
+            "cache_enabled": self.cache_enabled,
+            "tls_verify": "ca-bundle" if isinstance(self.verify, str) else bool(self.verify),
+        }
+
+    def model_for(self, model_class: ModelClass) -> str:
+        return self.models[model_class]
+
+
+def load_llm_settings(env: Optional[Mapping[str, str]] = None) -> LlmSettings:
+    """Resolve the model path from the environment.
+
+    `GENAILAB_API_KEY` wins. `OPENAI_API_KEY` is accepted as an alias so that an
+    existing local setup keeps working - but it selects nothing: the endpoint is
+    the gateway either way, and `OPENAI_BASE_URL`/`OPENAI_API_BASE` are ignored,
+    because a provider inferred from a variable name is how prompts end up at a
+    public API by accident.
+    """
+    env = os.environ if env is None else env
+
+    key = (env.get("GENAILAB_API_KEY") or "").strip()
+    key_source = "GENAILAB_API_KEY" if key else ""
+    if not key:
+        key = (env.get("OPENAI_API_KEY") or "").strip()
+        key_source = "OPENAI_API_KEY" if key else ""
+
+    return LlmSettings(
+        base_url=normalize_gateway_url(env.get("GENAILAB_BASE_URL", "")),
+        api_key=key,
+        key_source=key_source,
+        models={
+            ModelClass.GENERAL: env.get("LLM_MODEL_GENERAL") or DEFAULT_MODEL_GENERAL,
+            ModelClass.REASONING: env.get("LLM_MODEL_REASONING") or DEFAULT_MODEL_REASONING,
+            ModelClass.EMBEDDINGS: (
+                env.get("LLM_MODEL_EMBEDDINGS") or DEFAULT_MODEL_EMBEDDINGS
+            ),
+        },
+        timeout_s=min(
+            max(_float(env, "LLM_TIMEOUT_S", LLM_DEFAULT_TIMEOUT_S), LLM_MIN_TIMEOUT_S),
+            LLM_TIMEOUT_CAP_S,
+        ),
+        max_attempts=min(
+            max(_int(env, "LLM_MAX_ATTEMPTS", LLM_DEFAULT_MAX_ATTEMPTS), 1),
+            LLM_MAX_ATTEMPTS_CAP,
+        ),
+        cache_enabled=(env.get("LLM_CACHE", "true").strip().lower()
+                       not in {"0", "false", "no", "off"}),
+        incident_token_budget=max(
+            _int(env, "LLM_INCIDENT_TOKEN_BUDGET", DEFAULT_INCIDENT_TOKEN_BUDGET), 1_000
+        ),
+        prompt_version=env.get("LLM_PROMPT_VERSION") or LLM_PROMPT_CONFIG_VERSION,
+        verify=_ca_bundle(env) or True,
+    )
+
+
+def _float(env: Mapping[str, str], name: str, default: float) -> float:
+    try:
+        return float(env.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _int(env: Mapping[str, str], name: str, default: int) -> int:
+    try:
+        return int(env.get(name, default))
+    except (TypeError, ValueError):
+        return default
 
 
 def _persisted_key(env_var: str, filename: str, generate) -> str:

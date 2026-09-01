@@ -121,7 +121,12 @@ def itsm_api(tmp_path):
     from signalforge.api import deps
     from signalforge.api.main import app
     from signalforge.infrastructure.persistence.models import Base
-    from signalforge.tests.helpers import ApiCtx, FakeClock, make_test_settings
+    from signalforge.tests.helpers import (
+        ApiCtx,
+        FakeClock,
+        make_test_llm_settings,
+        make_test_settings,
+    )
 
     tree = tmp_path / "adapters" / "probe-itsm"
     tree.mkdir(parents=True)
@@ -139,7 +144,12 @@ def itsm_api(tmp_path):
     )
     clock = FakeClock()
     engine = create_async_engine(settings.db_url, poolclass=NullPool)
-    container = deps.Container(settings=settings, engine=engine, clock=clock)
+    container = deps.Container(
+        settings=settings,
+        engine=engine,
+        clock=clock,
+        llm_settings=make_test_llm_settings(),
+    )
     StubItsmAdapter.reset()
     container.adapter_runtimes.register("probe-itsm", StubItsmAdapter)
     app.dependency_overrides[deps.get_container] = lambda: container

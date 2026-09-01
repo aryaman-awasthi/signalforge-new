@@ -950,6 +950,35 @@ class IncidentTaskRow(Base):
     detail: Mapped[dict] = mapped_column(JSON, default=dict)
 
 
+class LlmCacheRow(Base):
+    """Model answers already paid for, keyed by a hash of the whole input (REQ-051).
+
+    The primary key is `(tenant_id, cache_key)` rather than the hash alone. The
+    hash is a pure function of the input, so two tenants asking the identical
+    question produce the identical key - and a shared row would mean one
+    tenant's call could be served an answer generated inside another's
+    incident. Tenant isolation is cheaper than the debate (REQ-013).
+
+    `payload` holds the answer and its provenance, never the prompt: a warm
+    cache should not become a second, unredacted copy of everything the
+    platform has ever sent a model.
+    """
+
+    __tablename__ = "llm_cache"
+    __table_args__ = (Index("ix_llm_cache_tenant_created", "tenant_id", "created_at"),)
+
+    tenant_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    cache_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(40))
+    model: Mapped[str] = mapped_column(String(120))
+    purpose: Mapped[str] = mapped_column(String(80))
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    prompt_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    completion_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    hits: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime)
+
+
 class EventSealRow(Base):
     __tablename__ = "event_seals"
     __table_args__ = (Index("ix_event_seals_tenant", "tenant_id", "sealed_at"),)

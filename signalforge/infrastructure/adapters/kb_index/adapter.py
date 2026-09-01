@@ -161,4 +161,8 @@ class KbIndexAdapter(GenericAdapter, KnowledgeAdapter):
     def _provider(self):
         if not bool(self.config("use_embeddings", True)):
             return None
-        return self.services.embeddings
+        provider = self.services.embeddings
+        # Narrowed to this binding's tenant before it is used: the provider is
+        # installed once for every adapter, and what sits behind it caches
+        # (REQ-013).
+        return provider.for_tenant(self.tenant_id) if provider is not None else None
