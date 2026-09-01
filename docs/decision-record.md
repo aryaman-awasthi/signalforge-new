@@ -6,6 +6,38 @@ graph" section at the bottom is the authored pre-build decision record
 (signalforge-memory-graph.md, provided and imported 2026-09-01) - every N-line there
 is treated as already decided.
 
+## DR-088 (2026-09-01, S4) The unbuilt agent panels ship with their titles and a reason
+Next Best Action, AI Copilot, Warning and Guidance and Team Chat render in the S9 shell now,
+each with one sentence saying what Sprint 5 will put in it. Why: the ten panel titles are a
+vocabulary an incident commander learns, and a layout that rearranges itself when the agents land
+would make that learning worthless at exactly the moment it is needed. And a panel that quietly
+does not exist is indistinguishable from one that is broken - during an incident, that ambiguity
+costs more than an empty panel does. Consequence: the shell publishes titles for behaviour it does
+not have, which is only honest because each says so in its own body; a test asserts every pending
+panel names what will fill it, so one cannot be left as a blank box.
+
+## DR-087 (2026-09-01, S4) The cockpit polls, because the token is deliberately unreachable
+The war room refreshes every five seconds and the pager every ten, through the typed cookie proxy;
+there is still no WebSocket client. Why: the session token lives in an httpOnly cookie so browser
+JavaScript cannot read it (S1), and a cross-origin WebSocket handshake has nothing else to
+authenticate with. The two ways out are handing the token to JavaScript - which would undo the
+control that keeps it out of XSS reach, for a refresh interval - or minting a short-lived socket
+ticket, which is a credential design in its own right and not something to append to a screens
+task. Consequence: the cockpit lags by at most one poll. That is survivable here only because
+nothing on these screens is computed in the browser: the countdowns are the server's own numbers,
+so the screen can be *stale* but never *wrong*.
+
+## DR-086 (2026-09-01, S4) The ack board ticks the server's countdown, never the browser's clock
+`useCountdown` takes `countdown_s` from the API, counts down locally between polls and re-anchors
+on every one. `Date.now()`, `Date.parse` and `new Date(` are absent from the hook and from both
+screens that use it, asserted by a test that strips comments first so the rule can be explained
+where it is enforced. Why: a responder's laptop clock can be minutes off. A browser computing
+`deadline - Date.now()` would show two minutes remaining while the escalation sweep - which reads
+stored times on the server - was already waking a colleague. The reasonable conclusion from that
+is that the pager is broken, and a pager people do not trust is worse than no pager. Consequence:
+local drift is bounded by the poll interval and never cumulative, and the number on the screen is
+the same number the thing that escalates is acting on.
+
 ## DR-085 (2026-09-01, S4) A commitment key is derived from the message, not from who said it
 `_key(message_id, title)` deliberately excludes the author. Why: the same message is read by two
 paths that legitimately disagree about who said it - the poster knows the session, and a later

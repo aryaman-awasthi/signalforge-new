@@ -5,7 +5,17 @@
  *     platform operations, /apps onboarding and /integration-health - all need
  *     manage_org or manage_apps, which only the org owner holds in the frozen
  *     matrix
- *   any authenticated session: everything except the public pages
+ *   any authenticated session: everything except the public pages - which
+ *     includes /incidents, /incidents/[id] (the war room) and /my/pages
+ *     (the mobile pager), deliberately and permanently
+ *
+ * The war room and the pager must never join a role group. The frozen roles
+ * matrix gives the SME no permissions at all, and the SME is the person most
+ * likely to be paged; a group guard on those paths would redirect exactly the
+ * people an incident exists to reach away from the screen that pages them. The
+ * API enforces the same split - those routes carry no permission and are
+ * self-scoped instead - so adding a guard here would not tighten anything, it
+ * would only lock somebody out of a page they are allowed to open.
  */
 
 import { NextRequest, NextResponse } from "next/server";

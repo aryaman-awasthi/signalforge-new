@@ -10,7 +10,7 @@ integrations and onboarding, and is the one Alembic migrates. `rollups.db`
 holds derived detection telemetry, is created from its models at startup, and
 can be deleted without losing any record of anything that happened.
 
-Generated: 2026-09-01T08:14:48+00:00
+Generated: 2026-09-01T08:42:37+00:00
 Tables: 34 in signalforge.db, 4 in rollups.db
 
 ## 1. Entity relationship diagram

@@ -1522,3 +1522,159 @@ first is how a board fills with things everybody knows are finished.
 | **Human override** | acknowledgement is terminal against any machine, and a commander can escalate before the countdown ends - recorded as a human act with their id on it | `test_paging_escalation.py` |
 | **Permission change mid-flow** | the ack path depends on no permission, so a re-bound responder can still answer the page they were sent; command writes are refused on the next call and what was already acknowledged stands | `test_warroom_boundary.py` |
 | **Nobody answers at all** | the chain exhausts loudly - `warroom.page.escalation.exhausted` with `needs_human: true` on the timeline and in the audit chain - and the page keeps saying it went unanswered | `test_paging_escalation.py` |
+
+## 10. The incident screens (REQ-040, REQ-042, REQ-043, REQ-044, REQ-045)
+
+Six screens, and one question runs through all of them: is the reader looking at
+something the platform *measured*, something it *proposed*, or something a person
+*decided*? Those three need different responses, the same six words name the
+first and third (`steady`/`watch`/`proposed` against `active`/`recovering`/
+`closed`), and every screen below says which it is showing rather than leaving a
+reader to infer it from a colour.
+
+### 10.1 S5 - application detail
+
+The header carries the state, the word for where it came from (`a detection
+stance, recomputed every 5s` or `declared by a person`), and the change-window
+chip. Below it: golden signal tiles, journeys, the health panel and recent
+changes.
+
+**Nothing on this screen is computed in the browser.** The health score, the
+corroboration verdict and the severity proposal are all read from the API. A
+second implementation of the weighting in TypeScript would eventually disagree
+with the one in the domain, and it would disagree during an incident.
+
+Three renderings are deliberate:
+
+- **Golden tiles show the worst region, not an average.** An average of "one
+  region is down and one is fine" is "half broken", which describes nothing that
+  is happening and hides the region to look at.
+- **`unknown` is never drawn as healthy.** A signal that could not be measured
+  gets its own muted state everywhere. "We could not check" and "this is fine"
+  lead to opposite actions, and a grey tile that looks green is how a blind spot
+  survives a review. The journey list keeps `not checked` separate from `failed`
+  for the same reason.
+- **The health panel's Grafana tab always states its fallback.** A browser gives
+  an iframe no usable error, so a blank frame could be Grafana being down, not
+  configured, or refusing to be embedded - and the screen cannot tell those
+  apart. It says so in advance, beside the frame, and the SignalForge view is the
+  default because it is computed from data this platform holds and cannot fail
+  independently.
+
+The chip is lit by the API's own `chip` field, not by a count the browser
+derives. A window open past the platform's ceiling is `stale`: the chip goes out,
+because a chip lit for three days is a chip people stop seeing, but the row stays
+listed as "started 3.1h ago, never announced completion". It is not closed on a
+guess - nobody knows whether that deploy landed.
+
+### 10.2 S6 - the Watch banner
+
+Quiet is the requirement, not a stylistic preference. `watch` means something is
+being observed and nothing has been decided: no corroboration, no severity, no
+incident. A banner that shouted here would train people to ignore the one that
+shouts when it matters, so this is a low-contrast strip with no alarm colour and
+no button that could be mistaken for a decision.
+
+What it does do is **name what is being checked**. "The AI is looking into it"
+with no list is the thing operators most reasonably distrust; listing the signals
+under observation, with how many evaluations each has been breaching, is what
+makes the quiet version credible.
+
+### 10.3 S7 - the proposal sheet
+
+The corroboration checklist, then Declare.
+
+"The AI thinks this is a P0" is not something an incident commander can act on at
+03:00. What they can act on is: two independent families are saying it, one is
+customer-facing, these regions are affected, this is the journey impact, here are
+the evidence refs. The checklist renders the platform's own verdict item by item
+- **including the items that did not pass**, because a proposal that is not
+corroborated is precisely the one to look at carefully, and hiding the failed
+rows would make it look like the strong one.
+
+Declaring at the proposed severity and declaring at a different one are two
+separate buttons rather than a dropdown and a submit. Both are human acts; the
+API records `proposed` or `chosen`, and the sheet says that choosing differently
+is kept as an override with what the matrix proposed beside it.
+
+The sheet does not render at all once an incident exists. A second Declare button
+beside a live incident is how a duplicate gets pressed.
+
+### 10.4 S8 - the acknowledgement board
+
+One row per person asked, each with its own timer and, next to it, **why they
+were asked**. The reason is not decoration: somebody woken at 03:00 deserves to
+know why it was them, and a board of names and timers makes every page look
+interchangeable.
+
+Three things the board deliberately does not do:
+
+- **It does not compute its own countdown.** The number is the server's, ticked
+  locally between polls and re-anchored on every one. A responder's laptop clock
+  can be minutes off; if the browser computed `deadline - Date.now()`, that
+  screen would show two minutes remaining while the escalation sweep was already
+  waking a colleague, and the reasonable conclusion would be that the pager is
+  broken. This is pinned by test.
+- **It does not offer Acknowledge on somebody else's row.** The API refuses it -
+  a page is answered by the person it names - and a button guaranteed to 403
+  teaches people the product is unreliable.
+- **It does not draw a `failed` page as counting down.** A page no channel could
+  carry reached nobody, and it says so with the reason instead of a timer nobody
+  is watching.
+
+### 10.5 S9 - the war-room shell
+
+Ten panels with fixed titles - Incident Overview, Live Bridge Transcript, Team
+Chat, AI Incident Brain, Next Best Action, AI Copilot, Incident Timeline, Warning
+and Guidance, Health Score and Metrics, Affected Services - plus **Who is in the
+room**. The titles are a vocabulary: somebody who learns where "Next Best Action"
+is should find it under that name in every room, every drill and every screenshot
+in the runbook, so they are pinned verbatim by test and renaming one is a
+decision made in that file.
+
+Four panels describe agent features Sprint 5 builds. They render **now**, with
+their real titles and one sentence saying what will fill them. Two reasons: the
+layout an incident commander learns must not move under them when the agents
+land, and a panel that quietly does not exist is indistinguishable from one that
+is broken.
+
+*Who is in the room* shows presence, not invitations: `here`, `paged, not
+answered`, `in the radius`. That difference is the entire reason a commander
+looks at the panel, and one status field could not express it.
+
+The Health Score panel in the room shows the score **as declared**, and says so.
+It is the snapshot copied onto the incident, not the live number - an incident
+that re-read live telemetry would explain itself differently every time somebody
+opened it.
+
+### 10.6 S22 - the mobile paging page
+
+One screen, one decision: acknowledge, or read the brief. Everything else can
+wait for a laptop.
+
+Big targets and no confirmation dialog, because acknowledging is idempotent and
+terminal on the server - a mis-tap costs nothing, and a confirmation step costs
+seconds when seconds are the point. The countdown is the server's number here
+too. The brief's caveats are carried onto the phone rather than trimmed for
+space: a responder deciding whether to get up needs to know how much is actually
+known.
+
+It reads `/my/pages`, which has **no recipient parameter at all**. There is no way
+for this screen to show anybody else's pages, which is what lets the route carry
+no permission - and the person holding the phone is usually an SME, who by the
+frozen roles matrix holds none.
+
+### 10.7 What the cockpit does not have yet
+
+**A WebSocket client.** These screens poll through the typed cookie proxy - five
+seconds for the war room, ten for the pager - and that is an honest limitation
+rather than a design choice. The session token lives in an httpOnly cookie that
+browser JavaScript cannot read, so a cross-origin WebSocket handshake has nothing
+to authenticate with. Handing JavaScript the token to fix that would weaken the
+S1 control keeping it out of XSS reach, and that is not a trade worth making for
+a refresh interval. A short-lived socket ticket is the real answer and is a
+credential design in its own right.
+
+Polling is adequate here precisely because nothing on these screens is computed
+in the browser: the countdowns are the server's own numbers, so a five-second
+refresh lags reality by at most five seconds and never disagrees with it.
