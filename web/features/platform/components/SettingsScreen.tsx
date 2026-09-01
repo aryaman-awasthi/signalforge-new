@@ -2,17 +2,28 @@
 
 import { useState } from "react";
 
+import { AdapterRegistryPanel } from "@/features/integrations/components/AdapterRegistryPanel";
+import { IngestKeysPanel } from "@/features/integrations/components/IngestKeysPanel";
 import { DeadLettersPanel } from "@/features/platform/components/DeadLettersPanel";
 import { PlatformHealthPanel } from "@/features/platform/components/PlatformHealthPanel";
 import { usePlatformSettings } from "@/features/platform/hooks/usePlatformSettings";
 import { EventTimeline } from "@/features/timeline/components/EventTimeline";
 
-const TABS = ["Platform health", "Dead letters", "Event timeline"] as const;
+const TABS = [
+  "Platform health",
+  "Adapters",
+  "Ingest",
+  "Dead letters",
+  "Event timeline",
+] as const;
 type Tab = (typeof TABS)[number];
 
 /**
- * Screen 21. Sprint 2 fills the platform panes; the adapter registry, ingest
- * tokens and policy sections join the same shell in later sprints.
+ * Screen 21. Sprint 2 filled the platform panes; sprint 3 adds the adapter
+ * registry (what this installation can integrate with, and which manifests
+ * refused to load) and the ingest section (every credential a sending
+ * application holds, with rotation and revocation). The policy sections join
+ * the same shell in a later sprint.
  */
 export function SettingsScreen() {
   const { state, reload } = usePlatformSettings();
@@ -55,6 +66,8 @@ export function SettingsScreen() {
       </nav>
 
       {tab === "Platform health" && <PlatformHealthPanel status={state.data.status} />}
+      {tab === "Adapters" && <AdapterRegistryPanel />}
+      {tab === "Ingest" && <IngestKeysPanel />}
       {tab === "Dead letters" && (
         <DeadLettersPanel
           deadLetters={state.data.deadLetters}

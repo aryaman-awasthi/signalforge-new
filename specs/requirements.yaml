@@ -292,7 +292,7 @@ requirements:
     area: integrations
     sprint: S3
     priority: must
-    status: partial
+    status: built
     acceptance: >
       Connect/auto-discover/map/topology/SLO/baseline/test steps with direction-correct
       connection tests including a failure state, readiness score, and an integration

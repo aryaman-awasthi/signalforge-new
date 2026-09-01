@@ -571,3 +571,101 @@ reads as "what to do next".
 The test page is the step that turns the last checks green: it runs every connector test in its
 own direction and every journey probe in every declared region, stores the summary, and
 recomputes the score from what came back.
+
+## 4. The onboarding screens (REQ-036, REQ-030, REQ-032, REQ-033)
+
+Chapter 3 is what the platform *does*; this chapter is what an operator *sees*. Three screens
+and two settings sections, all of them behind `manage_apps` at the API - the route guard in the
+cockpit middleware is UX over that and has never been the control.
+
+### 4.1 Applications (screen 4)
+
+One row per onboarded application: name, app id, tier, environment, base URL, owning team, and
+the readiness score with its verdict. The score and the verdict are shown as **two** facts,
+because they are two facts: a 90 with no SLO is not watchable, and a bar alone would imply it
+was. Both come from the API - the thirteen weighted checks and the blocking rule live in the
+domain, so a screen cannot call something ready that the platform would not.
+
+Registering an application is on this screen because registering and onboarding are one motion:
+a successful POST lands the operator on step 2 with the application already created.
+
+### 4.2 The wizard (screen 3)
+
+Seven steps, as seven **routes** rather than tab state, so a half-finished onboarding is a URL
+that can be sent to whoever owns the credential for step 2. Nothing is staged across steps: each
+step writes its own section through its own endpoint and the whole application is re-read
+afterwards, because the domain can refuse or adjust what a step sent - a policy edit the floor
+rejects, a topology upload that turns out to be unchanged, a risk override that a re-import
+raised. A wizard that trusted its own local state would show the operator something the platform
+does not hold.
+
+The stepper's per-step progress is `readiness.steps`, keyed by the domain's own `WizardStep`, so
+a step reads complete because the weighted checks say so and not because a form was submitted
+once. A test pins the seven keys against `WIZARD_STEP_ORDER`.
+
+**Step 2 has three card shapes**, because there are three genuinely different jobs:
+
+| Card | What the operator does | Why it is its own shape |
+|---|---|---|
+| pull / invoke | fills fields rendered from the adapter's own `config_schema`, gives a credential, presses Test | SignalForge does the calling, so config and a credential are the whole job |
+| push | copies an ingest URL, issues a credential, hands it over, later rotates it | nothing to configure on this side; the work is somebody else's system |
+| simulated | one button | the honest thing to say is not "a shorter form" but "this one is not real" |
+
+Credential inputs on a pull card are write-only: posted once, encrypted at rest under the
+binding, and never returned. The card can say whether a credential worked and never what it was,
+so re-entering it is how it is changed - there is no "show", because there is nothing to show.
+
+A push card shows the ingest URL, the masked token prefix and a Rotate button. The full token
+and the HMAC secret appear exactly once, in the panel that follows an issue or a rotate, and
+that panel says so - the platform holds a sha256 and a Fernet ciphertext, so "I lost it" is
+answered by rotating. Rotation is presented as issuing a **successor** with both keys live,
+never as an atomic swap, because moving the sender is a config change in somebody else's system.
+
+Auto-discovery lives on step 2 rather than before it: it needs the base URL, it writes no
+binding and sends no credential, and its findings **pre-fill** the cards rather than acting on
+their own. A guarded endpoint (401/403) is shown as found, because it is.
+
+Step 3 keeps the actions panel. What may be changed is narrow and the platform enforces it, not
+the screen: the auto option is disabled for a high-risk class, and the approver chips are the
+roles that actually hold `approve_high_risk` in the frozen matrix - but a refusal, when it comes,
+is the API's and is shown verbatim.
+
+Step 5 states the floor in full rather than hiding the controls it constrains. An operator who
+cannot see a rule cannot design around it, and every floor refusal is already in the audit chain
+before the error is returned.
+
+**Failure states are rendered, not swallowed.** A manifest that would not load is named with its
+path on the Connect step, so an integration that is missing from the list has a visible reason;
+an interface with no runtime reads "available, not installed"; an identical topology re-upload
+says so, or an operator retries thinking nothing happened; a partial baseline run lists the
+signals it missed with the reason and says that what was learned is kept; the test page shows
+four distinct outcomes, because a push connector reading *pending* is waiting for traffic and an
+adapter with no runtime is *skipped*, neither of which is failure; and a permission narrowed
+mid-flow lands as a message saying what was already saved is intact.
+
+### 4.3 Integration health (screen 23)
+
+One row per integration, with the columns chosen so a row cannot lie about its own direction:
+direction, status, last pull, last push, freshness, errors and SIMULATED. A pull row's freshness
+is when SignalForge last read the integrated system. A push row's is when something last
+*arrived*, joined from the live ingest keys - see `GET /connectors/health` in docs/11.
+
+Ingest keys that name no binding get their own rows. Two of the five frozen streams can never
+have a push adapter, so for those the key *is* the whole integration and it would otherwise be
+invisible on the one screen meant to show every integration.
+
+A key with no traffic and no refusals reads **unknown**, not up: SignalForge has no evidence
+either way, and unknown is the honest word for that.
+
+### 4.4 Settings gains adapters and ingest (screen 21)
+
+The adapter registry section lists every manifest with its kind, direction, credential scopes,
+availability and simulated flag, the capability coverage per kind with the uncovered
+capabilities named, and - deliberately prominent - **the manifests that would not load**, with
+their path and reason. A silently short registry is how an installation ends up wondering where
+its integration went.
+
+The ingest section lists every credential a sending application holds with its endpoint, masked
+prefix, freshness, counters and last refusal, and offers rotate and revoke. The refusal reason
+is readable here and nowhere else on purpose: the sender gets a bare 401, because a caller that
+could tell "unknown token" from "bad signature" from "clock skew" has an oracle.

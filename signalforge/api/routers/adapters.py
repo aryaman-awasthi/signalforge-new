@@ -97,11 +97,12 @@ async def connector_health(
     principal: Principal = Depends(deps.require(Permission.MANAGE_APPS)),
     container: deps.Container = Depends(deps.get_container),
 ):
-    """What the integration health screen reads: direction, freshness, last
-    error and the SIMULATED flag, straight off the bindings the health loop
-    writes back to."""
+    """What the S23 integration health screen reads: direction, last pull, last
+    push, freshness, errors and the SIMULATED flag - the bindings the health
+    loop writes back to, joined with the live ingest keys that point at them so
+    a push row measures what arrived rather than that this server is up."""
     now = container.clock.now()
-    views = await container.connectors.list(principal, app_id=app_id)
+    views = await container.connectors.health(principal, app_id=app_id)
     return [connector_health_out(view, now) for view in views]
 
 

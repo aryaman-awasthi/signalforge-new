@@ -131,8 +131,30 @@ Deletes the binding and exactly its own secrets, and audits `system.connector.un
 
 ### `GET /connectors/health`
 
-The integration health screen. Every `GET /connectors` field plus `freshness_s` - seconds since
-the last successful check, `null` when there has never been one.
+What screen 23 reads. Every `GET /connectors` field, plus a **pull** side and a **push** side,
+because a single freshness number cannot be honest about both directions:
+
+| Field | Side | Meaning |
+|---|---|---|
+| `freshness_s` | pull | seconds since SignalForge last read the integrated system successfully; `null` when it never has |
+| `last_event_at` | push | when anything last arrived on this binding's live ingest keys |
+| `event_freshness_s` | push | seconds since that arrival; `null` when nothing ever has |
+| `ingest_keys` | push | how many *live* keys name this binding |
+| `ingest_paths` | push | the frozen ingest paths those keys post to |
+| `ingest_accepted` / `ingest_duplicates` / `ingest_rejected` | push | counters summed across those keys |
+| `ingest_last_error` | push | why the most recently used key refused a sender; the sender itself only ever saw a bare 401 |
+
+The join is by `ingest_keys.binding_id`, tenant-scoped and app-scoped like the bindings
+themselves, and **revoked keys are excluded**: a credential that can no longer authenticate is
+not a live sender, and leaving its last arrival on the row would keep an integration looking
+healthy after the operator deliberately cut it off. Two reads serve the whole screen however
+many integrations a tenant holds.
+
+Why this exists: a push binding cannot be measured by pinging. SignalForge is the *server* for
+those, so it is reachable whether or not the sender died a week ago, and a row that reported
+"checked 2s ago" would be answering a question nobody asked. Keys that name no binding - the
+canonical senders, and the collaboration and itsm streams that can never have a push adapter -
+are not on this endpoint; the screen lists them from `GET /ingest-keys`.
 
 ## Onboarding: `/apps` (REQ-036)
 

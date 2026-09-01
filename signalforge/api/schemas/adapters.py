@@ -153,7 +153,30 @@ class ConnectorOut(BaseModel):
 
 
 class ConnectorHealthOut(ConnectorOut):
+    """One row of the S23 integration health screen.
+
+    `freshness_s` is the *pull* side - seconds since SignalForge last read the
+    integrated system successfully. Everything prefixed `ingest_`, plus
+    `last_event_at` and `event_freshness_s`, is the *push* side, read off the
+    live ingest keys that name this binding. A push binding has no meaningful
+    pull freshness and a pull binding has no ingest side; the screen shows
+    whichever one its direction makes true.
+    """
+
     freshness_s: Optional[float] = None
+    last_event_at: Optional[datetime] = None
+    event_freshness_s: Optional[float] = Field(
+        default=None,
+        description="Seconds since anything actually arrived on this binding's "
+        "ingest keys; null when nothing ever has. A push integration cannot be "
+        "measured by pinging - SignalForge is the server.",
+    )
+    ingest_keys: int = 0
+    ingest_paths: list[str] = []
+    ingest_accepted: int = 0
+    ingest_duplicates: int = 0
+    ingest_rejected: int = 0
+    ingest_last_error: Optional[str] = None
 
 
 def adapter_out(entry: RegistryEntry) -> AdapterOut:
@@ -265,7 +288,20 @@ def connector_out(view: ConnectorView) -> ConnectorOut:
 
 
 def connector_health_out(view: ConnectorView, now: datetime) -> ConnectorHealthOut:
+    last_event_at = view.last_event_at
     return ConnectorHealthOut(
         **connector_out(view).model_dump(),
         freshness_s=view.binding.freshness_s(now),
+        last_event_at=last_event_at,
+        event_freshness_s=(
+            None
+            if last_event_at is None
+            else max((now - last_event_at).total_seconds(), 0.0)
+        ),
+        ingest_keys=len(view.keys),
+        ingest_paths=view.ingest_paths,
+        ingest_accepted=view.ingest_accepted,
+        ingest_duplicates=view.ingest_duplicates,
+        ingest_rejected=view.ingest_rejected,
+        ingest_last_error=view.ingest_last_error,
     )

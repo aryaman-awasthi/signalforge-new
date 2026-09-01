@@ -21,8 +21,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/health" className="hover:text-ink">
                 Health
               </Link>
+              <Link href="/apps" className="hover:text-ink">
+                Applications
+              </Link>
+              <Link href="/integration-health" className="hover:text-ink">
+                Integrations
+              </Link>
               <Link href="/setup" className="hover:text-ink">
                 Setup
+              </Link>
+              <Link href="/settings" className="hover:text-ink">
+                Settings
               </Link>
               <Link href="/login" className="hover:text-ink">
                 Sign in
@@ -30,7 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </nav>
           </div>
         </header>
-        <main className="mx-auto max-w-5xl px-6 py-10">{children}</main>
+        <main className="mx-auto max-w-6xl px-6 py-10">{children}</main>
       </body>
     </html>
   );

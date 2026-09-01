@@ -6,6 +6,49 @@ graph" section at the bottom is the authored pre-build decision record
 (signalforge-memory-graph.md, provided and imported 2026-09-01) - every N-line there
 is treated as already decided.
 
+## DR-048 (2026-09-01, S3) The cockpit's types are pinned to the API's response models
+Three tests read `ConnectorHealthOut`, `IngestKeyOut` and `ReadinessOut` field by
+field and require each name in the corresponding `api.ts`. Why: the S2 timeline did
+this against the frozen envelope and it caught real drift; the wizard consumes far
+more of the API than the timeline did, and a field the platform starts returning
+that no screen decodes is invisible rather than broken. Consequence: adding a field
+to one of those three models is a two-file change by construction. The pinning is
+deliberately one-directional - the cockpit may hold view-only fields the API does
+not have (a formatted label), it may not silently ignore one the API does.
+
+## DR-047 (2026-09-01, S3) Ingest keys with no binding get their own rows on screen 23
+`GET /connectors/health` joins only the keys that name a binding. The integration
+health screen additionally reads `GET /ingest-keys` and renders the unbound ones as
+rows of their own. Why: DR-034 made `binding_id` optional because the frozen SPI
+defines `normalize` only on alerts, changes and topology - collaboration and itsm
+can never have a push adapter - so for two of the five frozen streams the key *is*
+the whole integration. Joining them onto a binding was impossible and dropping them
+would leave the one screen meant to show every integration silently missing two
+kinds. Consequence: the screen makes two reads rather than one, and de-duplicates by
+`binding_id` so a bound key is not listed twice.
+
+## DR-046 (2026-09-01, S3) A wizard step re-reads the application rather than patching local state
+Every step writes its own section through its own endpoint and then reloads the
+whole application, profile and readiness. Why: the domain can refuse or adjust what
+a step sent - the policy floor rejects an edit, a topology upload turns out to be
+`unchanged`, a re-import raises a risk above an operator's override - so the truth
+after a write is what the platform now holds, not what the form believed it sent. A
+wizard that patched its own state optimistically would show a policy value the floor
+had refused. Consequence: a step costs four reads after each save, which is right at
+wizard cadence and is the obvious thing to narrow if a step ever writes on keystroke.
+
+## DR-045 (2026-09-01, S3) The push side of a health row is joined from the ingest keys
+`GET /connectors/health` gained `last_event_at`, `event_freshness_s`, `ingest_keys`,
+`ingest_paths`, three counters and `ingest_last_error`, read from the live keys whose
+`binding_id` names the binding. Why: S3-T02, S3-T03 and S3-T04 each closed with the
+same open item - a push binding cannot be measured by pinging, because SignalForge
+is the server and is reachable whether or not the sender died a week ago, so the row
+read UP for a silent integration. The number that answers the question lives on the
+key. Consequence: revoked keys are deliberately excluded, so revoking a credential
+takes the integration off the row on the next read rather than leaving a stale green
+arrival behind it; and the endpoint makes two queries instead of one, grouped in
+memory, so the screen costs two reads however many integrations a tenant holds.
+
 ## DR-044 (2026-09-01, S3) A connection test writes its verdict onto the binding
 The wizard's explicit test updates the binding's health columns - status, detail,
 last_ok_at, consecutive_failures - exactly as the 30-second health loop does. Why:

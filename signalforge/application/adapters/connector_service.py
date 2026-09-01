@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Callable, Mapping, Optional, Sequence
 
 from signalforge.application.events.bus import EventBus
@@ -56,6 +57,7 @@ from signalforge.domain.adapters.errors import (
 from signalforge.domain.adapters.manifest import AdapterManifest, CredentialScope
 from signalforge.domain.adapters.ports import AdapterRegistry
 from signalforge.domain.identity.ports import Clock
+from signalforge.domain.ingest.keys import IngestKey
 
 BOUND_TOPIC = "system.connector.bound"
 UPDATED_TOPIC = "system.connector.updated"
@@ -71,6 +73,14 @@ class ConnectorView:
 
     binding: ConnectorBinding
     manifest: Optional[AdapterManifest]
+    keys: tuple[IngestKey, ...] = ()
+    """The *live* ingest keys that name this binding, joined only by `health()`.
+
+    Empty for a pull or invoke binding, and empty for a push binding nobody has
+    issued a credential for. A push binding is the one case where the binding
+    row cannot answer "is this integration alive": SignalForge is the server, so
+    it is always reachable, and what actually arrived is recorded on the key.
+    """
 
     @property
     def config(self) -> dict[str, Any]:
@@ -79,6 +89,40 @@ class ConnectorView:
         if self.manifest is None:
             return dict(self.binding.config)
         return self.manifest.redact(self.binding.config)
+
+    # -- the push side of an integration health row ------------------------
+
+    @property
+    def last_event_at(self) -> Optional[datetime]:
+        """When anything last arrived on any of this binding's live keys."""
+        arrivals = [key.last_event_at for key in self.keys if key.last_event_at]
+        return max(arrivals) if arrivals else None
+
+    @property
+    def ingest_paths(self) -> list[str]:
+        return sorted({key.path for key in self.keys})
+
+    @property
+    def ingest_accepted(self) -> int:
+        return sum(key.accepted_count for key in self.keys)
+
+    @property
+    def ingest_duplicates(self) -> int:
+        return sum(key.duplicate_count for key in self.keys)
+
+    @property
+    def ingest_rejected(self) -> int:
+        return sum(key.rejected_count for key in self.keys)
+
+    @property
+    def ingest_last_error(self) -> Optional[str]:
+        """Why the most recently used key refused a sender. The sender itself
+        only ever sees a bare 401, so this row is where the reason is readable -
+        and it is behind manage_apps, like everything else about a credential."""
+        used = [key for key in self.keys if key.last_used_at and key.last_error]
+        if not used:
+            return None
+        return max(used, key=lambda key: key.last_used_at).last_error
 
 
 class ConnectorService:
@@ -112,6 +156,43 @@ class ConnectorService:
                 enabled_only=enabled_only,
             )
         return [self._view(binding) for binding in bindings]
+
+    async def health(
+        self, principal: Principal, *, app_id: Optional[str] = None
+    ) -> Sequence[ConnectorView]:
+        """What the S23 integration health screen reads.
+
+        `list` with the push side joined on. A pull binding's row is unchanged -
+        its freshness is when SignalForge last read the integrated system. A
+        push binding's row gains the keys that point at it, because pinging a
+        push binding measures nothing: SignalForge is the server, and a row that
+        reads UP for an integration whose sender died last Tuesday is worse than
+        no row at all.
+
+        One query for the bindings and one for the keys, grouped here, so the
+        screen costs two reads however many integrations a tenant holds.
+        """
+        async with self._uow_factory() as uow:
+            bindings = await uow.connectors.list(principal.tenant_id, app_id=app_id)
+            keys = await uow.ingest_keys.list(principal.tenant_id, app_id=app_id)
+
+        by_binding: dict[str, list[IngestKey]] = {}
+        for key in keys:
+            # Revoked keys are excluded rather than counted: a credential that
+            # can no longer authenticate is not a live sender, and leaving its
+            # last arrival on the row would keep an integration looking healthy
+            # after the operator deliberately cut it off.
+            if key.binding_id and key.active:
+                by_binding.setdefault(key.binding_id, []).append(key)
+
+        return [
+            ConnectorView(
+                binding=binding,
+                manifest=self._registry.find(binding.adapter_id),
+                keys=tuple(by_binding.get(binding.id, ())),
+            )
+            for binding in bindings
+        ]
 
     async def get(self, principal: Principal, binding_id: str) -> ConnectorView:
         async with self._uow_factory() as uow:
