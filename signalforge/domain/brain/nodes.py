@@ -139,9 +139,14 @@ class Provenance:
 
     `model` and `model_class` are populated only when a model was actually
     involved, and `degraded` says the answer came from the deterministic
-    fallback instead. A node written by a template and a node written by
-    `genailab-maas-gpt-5.4` are not the same evidence, and a reader who cannot
-    tell them apart cannot calibrate anything.
+    fallback instead. A node written by a template and a node written by a
+    language model are not the same evidence, and a reader who cannot tell them
+    apart cannot calibrate anything.
+
+    The `model` field holds whatever id the gateway reports having served. No
+    model id is named anywhere in this layer: a call site names a `ModelClass`
+    and configuration decides the rest, which is what makes the model swappable
+    without touching domain or application code (CLAUDE.md, Environment).
     """
 
     source: str

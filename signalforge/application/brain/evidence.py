@@ -95,6 +95,11 @@ class IncidentContext:
     messages: tuple[Mapping[str, Any], ...] = ()
     tasks: tuple[IncidentTask, ...] = ()
     priors: tuple[IncidentFingerprint, ...] = ()
+    prior_relevance: Mapping[str, float] = field(default_factory=dict)
+    """What each similar incident's relevance was at the last pass, read from the
+    graph. Without it "relevance movement" - a prior incident becoming *more*
+    relevant as evidence arrives, which is the interesting event on S14 - would
+    always read as zero, because the agent has no memory of its own."""
     bundle: Optional[EvidenceBundle] = None
     ledger: BudgetLedger = field(default_factory=BudgetLedger)
 
@@ -178,6 +183,9 @@ class ProgressiveEvidenceService:
                 context.topology_versions = tuple(v.version for v in versions)
             if ledger.take():
                 context.priors = await self._priors(uow, tenant_id, incident)
+                context.prior_relevance = await self._prior_relevance(
+                    uow, tenant_id, incident.id
+                )
 
         if ledger.take():
             context.verdict, context.verdict_error = await self._verdict(
@@ -523,6 +531,29 @@ class ProgressiveEvidenceService:
             }
             for message in messages
         )
+
+    async def _prior_relevance(
+        self, uow: IdentityUnitOfWork, tenant_id: str, incident_id: str
+    ) -> dict[str, float]:
+        """The relevance each similar incident was last given, from the graph.
+
+        The graph is the agent's memory. Reading it back here rather than keeping
+        a cache means a restart, a redelivery and a second node all see the same
+        history - and that the movement shown on the screen is the difference
+        between two things that were actually written down.
+        """
+        from signalforge.domain.brain.nodes import NodeType
+
+        held = await uow.incident_graph.list(
+            tenant_id, incident_id, types=[NodeType.EVIDENCE], limit=200
+        )
+        found: dict[str, float] = {}
+        for node in held:
+            source = str((node.detail or {}).get("source_incident") or "")
+            relevance = (node.detail or {}).get("relevance")
+            if source and isinstance(relevance, (int, float)):
+                found[source] = float(relevance)
+        return found
 
     async def _priors(
         self, uow: IdentityUnitOfWork, tenant_id: str, incident: Incident

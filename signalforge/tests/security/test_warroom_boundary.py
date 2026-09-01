@@ -71,6 +71,24 @@ SELF_SCOPED_WRITES = {
 """The four. Pinned as a literal so a fifth cannot be added without somebody
 deciding, in this file, that it is genuinely self-scoped."""
 
+STATE_FREE_WRITES = {
+    ("POST", "/incidents/{incident_id}/brain/ask"),
+    ("POST", "/incidents/{incident_id}/brain/refresh"),
+}
+"""The other reason an incident write may carry no permission (S5-T03).
+
+These two are not self-scoped - there is no "yourself" in them - and they do not
+need to be, because **they change no incident state at all**. `ask` reads one
+incident's graph and returns an answer; `refresh` recomputes reasoning the bus
+would have recomputed on the next event. Neither can declare, re-grade, close,
+page, approve, execute or send, and neither holds a path to anything that can.
+
+They are POSTs because one carries a question body and must not be cached and
+the other costs tokens - not because either mutates the incident. Both are
+tenant-scoped by the repositories they read through, which the tests below
+assert in the same direction as the self-scoped four: somebody holding every
+permission in the matrix still cannot reach another tenant's incident."""
+
 READ_ROUTES = {
     ("GET", "/incidents/{incident_id}/war-room"),
     ("GET", "/incidents/{incident_id}/brief"),
@@ -109,7 +127,7 @@ async def test_command_writes_name_a_permission_and_self_scoped_writes_name_none
             f"{key} is not behind {permission.value}"
         )
 
-    for key in SELF_SCOPED_WRITES | READ_ROUTES:
+    for key in SELF_SCOPED_WRITES | STATE_FREE_WRITES | READ_ROUTES:
         assert key in guards, f"war-room route missing: {key}"
         assert not guards[key], (
             f"{key} carries a permission. The frozen matrix gives the SME none "
@@ -122,14 +140,22 @@ async def test_command_writes_name_a_permission_and_self_scoped_writes_name_none
 
 
 @pytest.mark.req("REQ-012", "REQ-045")
-async def test_the_unpermissioned_write_exemption_holds_exactly_these_four(api):
+async def test_the_unpermissioned_write_exemption_is_justified_route_by_route(api):
     """The two lists are joined here, so neither can drift from the other.
 
     `test_api_surface.py` exempts a set of session writes from needing a
-    permission. Every war-room entry in that exemption must appear below with a
-    test asserting that it refuses to act on somebody else's behalf - otherwise
-    an unpermissioned write could be added to the exemption and quietly become a
-    route every member of every tenant may perform on anybody.
+    permission. Every incident-path entry in that exemption must appear in one of
+    the two lists below, each of which carries a *different* justification and a
+    test obligation to match:
+
+    - `SELF_SCOPED_WRITES` - it acts only on the caller, and the entity refuses
+      everyone else. Tested in both directions below.
+    - `STATE_FREE_WRITES` - it changes no incident state at all. Tested below for
+      tenant scoping and for leaving the incident untouched.
+
+    Without this join, an unpermissioned write could be added to the exemption
+    and quietly become a route every member of every tenant may perform on
+    anybody.
     """
     from signalforge.tests.security.test_api_surface import SESSION_ONLY_WRITES
 
@@ -138,10 +164,72 @@ async def test_the_unpermissioned_write_exemption_holds_exactly_these_four(api):
         for method, path in SESSION_ONLY_WRITES
         if "incident" in path or "war-room" in path
     }
-    assert exempted == SELF_SCOPED_WRITES, (
-        "a war-room write was exempted from needing a permission without being "
-        "listed - and tested - as self-scoped here"
+    assert exempted == SELF_SCOPED_WRITES | STATE_FREE_WRITES, (
+        "an incident write was exempted from needing a permission without being "
+        "listed - and justified - here as either self-scoped or state-free"
     )
+    assert not SELF_SCOPED_WRITES & STATE_FREE_WRITES, (
+        "a route must be justified one way or the other, not both"
+    )
+
+
+@pytest.mark.req("REQ-012", "REQ-013", "REQ-055")
+async def test_the_state_free_writes_change_no_incident_state_and_cross_no_tenant(api):
+    """The obligation `STATE_FREE_WRITES` takes on.
+
+    Written failing-first for the two categories that matter here: tenant
+    isolation, and the claim that these routes are exempt from a permission
+    *because* they mutate nothing. If either stopped being true, an unguarded
+    POST would have become a way for any member of any tenant to change an
+    incident.
+    """
+    from signalforge.tests.brain.conftest import ask, refresh
+    from signalforge.tests.incidents.conftest import read_incident
+
+    owner_token, _tenant = owner(api)
+    onboard(api, owner_token)
+    wire_paging(api, owner_token)
+    ic = commander(api, owner_token)
+    ic_token = ic["tokens"]["access_token"]
+    sme = responder(api, owner_token, email="sme@acme.io")
+    sme_token = sme["tokens"]["access_token"]
+    incident = declare(api, ic_token, severity="P0")
+
+    before = read_incident(api, ic_token, incident["id"])
+
+    # The SME - holding no permission at all - may use both, which is the point.
+    refresh(api, sme_token, incident["id"])
+    answer = ask(api, sme_token, incident["id"], "what do we know?")
+    assert answer["verdict"] in (
+        "grounded",
+        "insufficient_evidence",
+        "ungrounded",
+        "degraded",
+    )
+
+    # And the incident is untouched: same state, same severity, same closure,
+    # and no transition was added.
+    after = read_incident(api, ic_token, incident["id"])
+    assert after["state"] == before["state"]
+    assert after["severity"] == before["severity"]
+    assert after["closed_at"] == before["closed_at"]
+    assert len(after["transitions"]) == len(before["transitions"])
+
+    # A second tenant cannot reach this incident through either route. The
+    # boundary is the repository, so both answer the way a read of nothing does.
+    other = api.client.post(
+        "/auth/signup",
+        json={
+            "org_name": "Other Co",
+            "email": "owner@other.test",
+            "password": "another-strong-password",
+            "display_name": "Other Owner",
+        },
+    )
+    assert other.status_code == 201, other.text
+    intruder = other.json()["tokens"]["access_token"]
+    refresh(api, intruder, incident["id"], expect=404)
+    ask(api, intruder, incident["id"], "what do we know?", expect=404)
 
 
 @pytest.mark.req("REQ-012", "REQ-045")

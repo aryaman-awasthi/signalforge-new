@@ -10,8 +10,8 @@ policy floor: per-app policy can tighten them, never loosen them (CLAUDE.md rule
 
 | Control | Enforcement point | Status |
 |---|---|---|
-| CTL-ALW-01 read-only telemetry within budgets | adapter credential scopes (S3) + query budgets (S5) | planned |
-| CTL-ALW-02 detection/correlation/scoring | detection services (S4/S5); no external mutation possible from these code paths | planned |
+| CTL-ALW-01 read-only telemetry within budgets | adapter credential scopes (S3) + `QueryBudget` per hypothesis and per pass, plus the per-incident token ledger, both refusing before the work starts (REQ-054, tested S5) | **enforced** |
+| CTL-ALW-02 detection/correlation/scoring | detection services (S4) + the agent roster (S5); no agent holds an invoker, a repository or an HTTP client, asserted by reading their source (REQ-052, tested S5) | **enforced** |
 | CTL-ALW-03 drafting, never issuing | comms lifecycle keeps drafts until approver issues (S6); CTL-PRO-05 backs it | planned |
 | CTL-ALW-04 low-risk idempotent diagnostics | action manifests declare risk + idempotency (REQ-003, schema-tested S0); gateway enforces S6 | manifests tested |
 | CTL-ALW-05 paging per escalation policy | escalation policies with bounded, validated timers (REQ-014, tested S1); live paging S4 | timers tested |
@@ -42,9 +42,9 @@ policy floor: per-app policy can tighten them, never loosen them (CLAUDE.md rule
 | Control | Enforcement point | Status |
 |---|---|---|
 | CTL-ESC-01 unacked page escalates to next-in-rotation | rotation.next_in_rotation + cumulative policy timers (REQ-014, tested S1); live countdowns S4 | model tested |
-| CTL-ESC-02 low confidence/contradiction surfaces to IC | agent suite S5 | planned |
+| CTL-ESC-02 low confidence/contradiction surfaces to IC | contradictions become a `RISK` node, a `brain.contradiction.detected` event and a row on S14; every hypothesis carries its computed confidence and the test that would move it (REQ-052, REQ-053, tested S5) | **enforced** |
 | CTL-ESC-03 validation failure escalates after N cycles | closure gate S6 | planned |
-| CTL-ESC-04 LLM failure degrades deterministically | llm.provider adapter S5 (REQ-051) | planned |
+| CTL-ESC-04 LLM failure degrades deterministically | `LlmProvider` never raises for a model failure; every call site branches on the result. Timeout, transport, off-schema, budget and unconfigured all covered by the ai-eval suite (REQ-051, REQ-055, tested S5) | **enforced** |
 | CTL-ESC-05 UNCERTAIN blocks retry until reconciled | SPI reconcile-before-retry primitive frozen (REQ-002, tested S0); execution engine S6 | interface frozen |
 
 ## Auditability
@@ -54,5 +54,5 @@ policy floor: per-app policy can tighten them, never loosen them (CLAUDE.md rule
 | CTL-AUD-01 FLOOR every event hash-chained | audit writer chains per tenant (REQ-016, tested S1); event-store sealing S2 | **enforced** for audit events |
 | CTL-AUD-02 gateway decisions recorded | authz denials already audited with permission + reason (REQ-012, tested S1); full gateway ledger S6 | partial |
 | CTL-AUD-03 approvals carry identity + expiry | gateway S6 | planned |
-| CTL-AUD-04 agent runs traced | agent trace tables S5 | planned |
+| CTL-AUD-04 agent runs traced | `agent_runs` + `agent_run_steps` written by the governor for every agent: which agent, on what, which model, tokens, degraded or failed - and no prompt or answer, because content lives on the graph nodes with their own provenance (REQ-052, tested S5) | **enforced** |
 | CTL-AUD-05 audit access permissioned + logged | read_audit permission live in matrix (REQ-005); audit-read API lands S2 | permission live |

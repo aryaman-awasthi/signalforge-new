@@ -20,6 +20,7 @@ from signalforge.application.brain.agents.base import (
     AgentOutcome,
     EdgeProposal,
     NodeProposal,
+    inferred,
     observed,
 )
 from signalforge.application.brain.agents.telemetry import confirmed_services
@@ -52,7 +53,7 @@ class TopologyAgent(Agent):
                             "the blast radius is the severity and the regions a "
                             "person declared, not a computed one."
                         ),
-                        provenance=observed(self.name),
+                        provenance=inferred(self.name),
                         tags=("degraded-input",),
                     ),
                 ),
@@ -148,11 +149,27 @@ class TopologyAgent(Agent):
                         + ("affected" if impact.confirmed else "may be affected")
                     ),
                     content=impact.reason,
-                    provenance=observed(
-                        self.name if not impact.confirmed else "detection",
-                        result_ref=(
-                            f"topology:{context.app_id}:{context.topology.version}"
-                        ),
+                    # A confirmed impact carries the authority of the measurement
+                    # that confirmed it; a predicted one is this agent's
+                    # inference from the map and is weighted as one. Recording a
+                    # prediction as `observed` would let it count like a
+                    # measurement in the confidence policy, which is the
+                    # CONFIRMED/PREDICTED distinction leaking away through a
+                    # field nobody looks at.
+                    provenance=(
+                        observed(
+                            "detection",
+                            result_ref=(
+                                f"topology:{context.app_id}:{context.topology.version}"
+                            ),
+                        )
+                        if impact.confirmed
+                        else inferred(
+                            self.name,
+                            result_ref=(
+                                f"topology:{context.app_id}:{context.topology.version}"
+                            ),
+                        )
                     ),
                     # The only place this value is set, and it is set from the
                     # domain's own walk rather than from anything here.

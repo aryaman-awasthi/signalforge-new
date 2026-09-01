@@ -122,6 +122,23 @@ TAGS: list[dict[str, str]] = [
         "task - because the frozen roles matrix gives the SME none, and the "
         "entity refusing to act on anybody else's behalf is a tighter control "
         "than a permission any holder could use on anybody's page."},
+    {"name": "incident-brain", "description":
+        "What the platform believes about an incident and why: a versioned "
+        "graph of facts, assumptions, evidence, impact, risks and hypotheses, "
+        "each carrying provenance and each kept forever - nothing is deleted, "
+        "and a revised belief supersedes rather than overwrites. Hypothesis "
+        "confidence is computed here from weighted evidence and is never "
+        "written by a model; the model writes the sentence beside it. Impacts "
+        "publish `confirmed` (measured) and `predicted` (inferred from "
+        "dependencies) as separate values and separate lists, because a "
+        "predicted downstream outage read as an observed one is how a war room "
+        "pages four teams for an outage that never happened. The copilot "
+        "answers only from this incident's own graph and every citation must "
+        "resolve to a node the retrieval returned; an answer that cites "
+        "anything else is discarded rather than shown. These routes carry no "
+        "permission, on the same reasoning the war room's reads carry none, and "
+        "none of them can change incident state, execute an action or approve "
+        "anything - there is no such path from here."},
     {"name": "notifications", "description":
         "The cockpit notification socket. A WebSocket is not expressible in "
         "OpenAPI; its frame protocol is in docs/11-api-spec.md."},

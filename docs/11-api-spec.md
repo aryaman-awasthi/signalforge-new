@@ -107,7 +107,7 @@ catalogue below and its frame protocol is written out later in this document.
 
 <!-- BEGIN GENERATED ROUTE CATALOGUE (scripts/gen_openapi.py) -->
 
-99 routes: 88 need a human session, 5 a sending application's ingest key, and 6 no credential at all - and that last number is the one the security suite pins to a closed list.
+105 routes: 94 need a human session, 5 a sending application's ingest key, and 6 no credential at all - and that last number is the one the security suite pins to a closed list.
 
 The permission column is read from each route's own RBAC dependency, so a route guarded by the wrong permission is documented as guarded by the wrong permission. It also says where a per-application role binding is evaluated from: `?app_id=`, the optional query parameter every route guarded by `deps.require` accepts, or `path`, the application named in the URL on the wizard's own routes.
 
@@ -299,6 +299,19 @@ The room an incident is run from: membership derived from the blast radius, pagi
 | GET | `/incidents/{incident_id}/war-room` | session | (session only) | The room: who should be there, who was paged, who turned up, and the roles nobody holds. |
 | POST | `/incidents/{incident_id}/war-room/join` | session | (session only) | Turn up. |
 | GET | `/my/pages` | session | (session only) | What is on this person's phone. |
+
+### `incident-brain`
+
+What the platform believes about an incident and why: a versioned graph of facts, assumptions, evidence, impact, risks and hypotheses, each carrying provenance and each kept forever - nothing is deleted, and a revised belief supersedes rather than overwrites. Hypothesis confidence is computed here from weighted evidence and is never written by a model; the model writes the sentence beside it. Impacts publish `confirmed` (measured) and `predicted` (inferred from dependencies) as separate values and separate lists, because a predicted downstream outage read as an observed one is how a war room pages four teams for an outage that never happened. The copilot answers only from this incident's own graph and every citation must resolve to a node the retrieval returned; an answer that cites anything else is discarded rather than shown. These routes carry no permission, on the same reasoning the war room's reads carry none, and none of them can change incident state, execute an action or approve anything - there is no such path from here.
+
+| Method | Path | Credential | Permission | Purpose |
+|---|---|---|---|---|
+| GET | `/incidents/{incident_id}/brain` | session | (session only) | The ledger, the hypotheses and their confidence history. |
+| POST | `/incidents/{incident_id}/brain/ask` | session | (session only) | Ask the copilot about this incident. |
+| GET | `/incidents/{incident_id}/brain/guidance` | session | (session only) | Similar prior incidents, mistake warnings, contradictions and any content that tried to instruct the assistant. |
+| GET | `/incidents/{incident_id}/brain/nodes/{derived_key:path}` | session | (session only) | Every version of one belief, oldest first. |
+| POST | `/incidents/{incident_id}/brain/refresh` | session | (session only) | Run a reasoning pass now. |
+| GET | `/incidents/{incident_id}/brain/topology` | session | (session only) | The dependency map, what changed, and the impact split. |
 
 ### `platform`
 

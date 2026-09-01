@@ -685,123 +685,6 @@
         "title": "AgentRunDetailOut",
         "type": "object"
       },
-      "AgentRunOut": {
-        "properties": {
-          "agent": {
-            "title": "Agent",
-            "type": "string"
-          },
-          "completion_tokens": {
-            "title": "Completion Tokens",
-            "type": "integer"
-          },
-          "error": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Error"
-          },
-          "finished_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Finished At"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "incident_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Incident Id"
-          },
-          "model": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Model"
-          },
-          "prompt_tokens": {
-            "title": "Prompt Tokens",
-            "type": "integer"
-          },
-          "started_at": {
-            "format": "date-time",
-            "title": "Started At",
-            "type": "string"
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          },
-          "total_tokens": {
-            "title": "Total Tokens",
-            "type": "integer"
-          },
-          "trigger_event_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Trigger Event Id"
-          },
-          "trigger_topic": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Trigger Topic"
-          }
-        },
-        "required": [
-          "id",
-          "agent",
-          "status",
-          "incident_id",
-          "trigger_topic",
-          "trigger_event_id",
-          "started_at",
-          "finished_at",
-          "model",
-          "prompt_tokens",
-          "completion_tokens",
-          "total_tokens",
-          "error"
-        ],
-        "title": "AgentRunOut",
-        "type": "object"
-      },
       "AgentRunStepOut": {
         "properties": {
           "detail": {
@@ -940,6 +823,77 @@
           "latest_at"
         ],
         "title": "AlertClusterOut",
+        "type": "object"
+      },
+      "AnswerOut": {
+        "properties": {
+          "answer": {
+            "title": "Answer",
+            "type": "string"
+          },
+          "caveats": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Caveats",
+            "type": "array"
+          },
+          "citations": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "considered": {
+            "default": 0,
+            "description": "How many graph nodes were offered to the model.",
+            "title": "Considered",
+            "type": "integer"
+          },
+          "degraded": {
+            "default": false,
+            "title": "Degraded",
+            "type": "boolean"
+          },
+          "degraded_reason": {
+            "default": "",
+            "title": "Degraded Reason",
+            "type": "string"
+          },
+          "grounded": {
+            "title": "Grounded",
+            "type": "boolean"
+          },
+          "injection_observed": {
+            "default": false,
+            "title": "Injection Observed",
+            "type": "boolean"
+          },
+          "model": {
+            "default": "",
+            "title": "Model",
+            "type": "string"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "verdict": {
+            "description": "grounded, insufficient_evidence, ungrounded or degraded.",
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question",
+          "answer",
+          "verdict",
+          "grounded"
+        ],
+        "title": "AnswerOut",
         "type": "object"
       },
       "AppTier": {
@@ -1256,6 +1210,22 @@
         "title": "ApplicationSummaryOut",
         "type": "object"
       },
+      "AskIn": {
+        "properties": {
+          "question": {
+            "description": "A question about this incident. The answer is drawn only from this incident's own graph; anything the graph does not support comes back as insufficient evidence rather than as a guess.",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question"
+        ],
+        "title": "AskIn",
+        "type": "object"
+      },
       "AuthResponse": {
         "properties": {
           "org": {
@@ -1507,6 +1477,93 @@
           "source"
         ],
         "title": "BlastRadiusOut",
+        "type": "object"
+      },
+      "BrainOut": {
+        "properties": {
+          "app_id": {
+            "title": "App Id",
+            "type": "string"
+          },
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "default": {},
+            "title": "Counts",
+            "type": "object"
+          },
+          "degraded": {
+            "description": "The AI path is not working. Every deterministic path still is, and the ledger below was still built.",
+            "title": "Degraded",
+            "type": "boolean"
+          },
+          "degraded_reason": {
+            "default": "",
+            "title": "Degraded Reason",
+            "type": "string"
+          },
+          "edges": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/EdgeOut"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
+          "hypotheses": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/HypothesisOut"
+            },
+            "title": "Hypotheses",
+            "type": "array"
+          },
+          "incident_id": {
+            "title": "Incident Id",
+            "type": "string"
+          },
+          "model_configured": {
+            "title": "Model Configured",
+            "type": "boolean"
+          },
+          "nodes": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/NodeOut"
+            },
+            "title": "Nodes",
+            "type": "array"
+          },
+          "reference": {
+            "title": "Reference",
+            "type": "string"
+          },
+          "runs": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/signalforge__api__schemas__brain__AgentRunOut"
+            },
+            "title": "Runs",
+            "type": "array"
+          },
+          "snapshots": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SnapshotOut"
+            },
+            "title": "Snapshots",
+            "type": "array"
+          }
+        },
+        "required": [
+          "incident_id",
+          "reference",
+          "app_id",
+          "degraded",
+          "model_configured"
+        ],
+        "title": "BrainOut",
         "type": "object"
       },
       "BridgeMessageOut": {
@@ -2250,6 +2307,98 @@
           "status"
         ],
         "title": "ComponentOut",
+        "type": "object"
+      },
+      "ConfidenceEntryOut": {
+        "properties": {
+          "added": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Added",
+            "type": "array"
+          },
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "current": {
+            "title": "Current",
+            "type": "number"
+          },
+          "delta": {
+            "title": "Delta",
+            "type": "number"
+          },
+          "direction": {
+            "title": "Direction",
+            "type": "string"
+          },
+          "explain": {
+            "description": "The deterministic explanation, always populated - written from the stored numbers, so it says the same thing with or without a model.",
+            "title": "Explain",
+            "type": "string"
+          },
+          "narrative": {
+            "default": "",
+            "description": "One sentence a model may write about why this moved. Never the source of a number.",
+            "title": "Narrative",
+            "type": "string"
+          },
+          "narrative_degraded": {
+            "default": false,
+            "title": "Narrative Degraded",
+            "type": "boolean"
+          },
+          "net_weight": {
+            "title": "Net Weight",
+            "type": "number"
+          },
+          "previous": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous"
+          },
+          "refuting": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Refuting",
+            "type": "array"
+          },
+          "supporting": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Supporting",
+            "type": "array"
+          },
+          "trigger": {
+            "default": "",
+            "title": "Trigger",
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "previous",
+          "current",
+          "delta",
+          "direction",
+          "net_weight",
+          "explain"
+        ],
+        "title": "ConfidenceEntryOut",
         "type": "object"
       },
       "ConnectionCheckOut": {
@@ -3437,6 +3586,39 @@
         "title": "DiscoveryOut",
         "type": "object"
       },
+      "EdgeOut": {
+        "properties": {
+          "note": {
+            "default": "",
+            "title": "Note",
+            "type": "string"
+          },
+          "relation": {
+            "title": "Relation",
+            "type": "string"
+          },
+          "source_id": {
+            "title": "Source Id",
+            "type": "string"
+          },
+          "target_id": {
+            "title": "Target Id",
+            "type": "string"
+          },
+          "weight": {
+            "default": 0.0,
+            "title": "Weight",
+            "type": "number"
+          }
+        },
+        "required": [
+          "source_id",
+          "target_id",
+          "relation"
+        ],
+        "title": "EdgeOut",
+        "type": "object"
+      },
       "Environment": {
         "enum": [
           "production",
@@ -3891,6 +4073,57 @@
         "title": "GovernanceIn",
         "type": "object"
       },
+      "GuidanceOut": {
+        "properties": {
+          "caveat": {
+            "title": "Caveat",
+            "type": "string"
+          },
+          "contradictions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/NodeOut"
+            },
+            "title": "Contradictions",
+            "type": "array"
+          },
+          "degraded": {
+            "default": false,
+            "title": "Degraded",
+            "type": "boolean"
+          },
+          "injections": {
+            "default": [],
+            "description": "Content in this incident that tried to instruct the assistant. Recorded, never followed.",
+            "items": {
+              "$ref": "#/components/schemas/NodeOut"
+            },
+            "title": "Injections",
+            "type": "array"
+          },
+          "similar": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/NodeOut"
+            },
+            "title": "Similar",
+            "type": "array"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/NodeOut"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "caveat"
+        ],
+        "title": "GuidanceOut",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -3993,68 +4226,65 @@
         "title": "HealthScoreOut",
         "type": "object"
       },
-      "ImpactOut": {
+      "HypothesisOut": {
         "properties": {
-          "affected_journeys": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Affected Journeys",
-            "type": "array"
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
           },
-          "affected_regions": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Affected Regions",
-            "type": "array"
-          },
-          "customer_impacting": {
-            "title": "Customer Impacting",
-            "type": "boolean"
-          },
-          "detail": {
-            "default": "",
-            "title": "Detail",
+          "discriminating_test": {
+            "description": "What would most move this next. The thing that turns a percentage into an action.",
+            "title": "Discriminating Test",
             "type": "string"
           },
-          "journey_tier": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Journey Tier"
+          "evidence_against": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/NodeOut"
+            },
+            "title": "Evidence Against",
+            "type": "array"
           },
-          "regions_affected": {
-            "title": "Regions Affected",
-            "type": "integer"
+          "evidence_for": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/NodeOut"
+            },
+            "title": "Evidence For",
+            "type": "array"
           },
-          "regions_total": {
-            "title": "Regions Total",
-            "type": "integer"
+          "explain": {
+            "title": "Explain",
+            "type": "string"
           },
-          "success_rate_pct": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Success Rate Pct"
+          "history": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ConfidenceEntryOut"
+            },
+            "title": "History",
+            "type": "array"
+          },
+          "node": {
+            "$ref": "#/components/schemas/NodeOut"
+          },
+          "sparkline": {
+            "default": [],
+            "description": "Confidence over time, oldest first, for the card's chart.",
+            "items": {
+              "type": "number"
+            },
+            "title": "Sparkline",
+            "type": "array"
           }
         },
         "required": [
-          "regions_affected",
-          "regions_total",
-          "customer_impacting"
+          "node",
+          "confidence",
+          "discriminating_test",
+          "explain"
         ],
-        "title": "ImpactOut",
+        "title": "HypothesisOut",
         "type": "object"
       },
       "IncidentDetailOut": {
@@ -5585,6 +5815,155 @@
         "title": "MembershipGapOut",
         "type": "object"
       },
+      "NodeHistoryOut": {
+        "properties": {
+          "derived_key": {
+            "title": "Derived Key",
+            "type": "string"
+          },
+          "versions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/NodeOut"
+            },
+            "title": "Versions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "derived_key"
+        ],
+        "title": "NodeHistoryOut",
+        "type": "object"
+      },
+      "NodeOut": {
+        "properties": {
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "confirmation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "confirmed (measured) or predicted (inferred from dependencies). Never conflated.",
+            "title": "Confirmation"
+          },
+          "content": {
+            "default": "",
+            "title": "Content",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "derived_key": {
+            "title": "Derived Key",
+            "type": "string"
+          },
+          "detail": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "Detail",
+            "type": "object"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "node_type": {
+            "title": "Node Type",
+            "type": "string"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/ProvenanceOut"
+          },
+          "retired_reason": {
+            "default": "",
+            "title": "Retired Reason",
+            "type": "string"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "superseded_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded By"
+          },
+          "supersedes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes"
+          },
+          "tags": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "untrusted": {
+            "default": false,
+            "description": "True when the content is text this platform did not write.",
+            "title": "Untrusted",
+            "type": "boolean"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "node_type",
+          "derived_key",
+          "label",
+          "version",
+          "status",
+          "seq",
+          "created_at",
+          "provenance"
+        ],
+        "title": "NodeOut",
+        "type": "object"
+      },
       "OrgOut": {
         "properties": {
           "created_at": {
@@ -6431,6 +6810,51 @@
         "title": "ProposalOut",
         "type": "object"
       },
+      "ProvenanceOut": {
+        "properties": {
+          "actor_type": {
+            "title": "Actor Type",
+            "type": "string"
+          },
+          "authority": {
+            "description": "authoritative, observed or inferred. Anything a model concluded is inferred; the brain correlates, it does not measure.",
+            "title": "Authority",
+            "type": "string"
+          },
+          "degraded": {
+            "default": false,
+            "title": "Degraded",
+            "type": "boolean"
+          },
+          "model": {
+            "default": "",
+            "title": "Model",
+            "type": "string"
+          },
+          "model_class": {
+            "default": "",
+            "title": "Model Class",
+            "type": "string"
+          },
+          "result_ref": {
+            "default": "",
+            "description": "Where the underlying data can be read in full - the drill-down handle behind an excerpt.",
+            "title": "Result Ref",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "actor_type",
+          "authority"
+        ],
+        "title": "ProvenanceOut",
+        "type": "object"
+      },
       "ReadinessCheckOut": {
         "properties": {
           "blocking": {
@@ -6562,6 +6986,91 @@
           }
         },
         "title": "Redaction",
+        "type": "object"
+      },
+      "RefreshOut": {
+        "properties": {
+          "degraded": {
+            "default": false,
+            "title": "Degraded",
+            "type": "boolean"
+          },
+          "degraded_reasons": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Degraded Reasons",
+            "type": "array"
+          },
+          "edges_written": {
+            "default": 0,
+            "title": "Edges Written",
+            "type": "integer"
+          },
+          "hypotheses": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "default": {},
+            "title": "Hypotheses",
+            "type": "object"
+          },
+          "incident_id": {
+            "title": "Incident Id",
+            "type": "string"
+          },
+          "moved": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Moved",
+            "type": "array"
+          },
+          "nodes_written": {
+            "default": 0,
+            "title": "Nodes Written",
+            "type": "integer"
+          },
+          "queries": {
+            "default": 0,
+            "title": "Queries",
+            "type": "integer"
+          },
+          "ran": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Ran",
+            "type": "array"
+          },
+          "skipped": {
+            "default": "",
+            "title": "Skipped",
+            "type": "string"
+          },
+          "snapshot_id": {
+            "default": "",
+            "title": "Snapshot Id",
+            "type": "string"
+          },
+          "tokens": {
+            "default": 0,
+            "title": "Tokens",
+            "type": "integer"
+          },
+          "versions_written": {
+            "default": 0,
+            "title": "Versions Written",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "incident_id"
+        ],
+        "title": "RefreshOut",
         "type": "object"
       },
       "RefreshRequest": {
@@ -7345,7 +7854,7 @@
             "type": "array"
           },
           "impact": {
-            "$ref": "#/components/schemas/ImpactOut"
+            "$ref": "#/components/schemas/signalforge__api__schemas__detection__ImpactOut"
           },
           "proposed_at": {
             "format": "date-time",
@@ -7947,6 +8456,58 @@
         "title": "SloOut",
         "type": "object"
       },
+      "SnapshotOut": {
+        "properties": {
+          "degraded": {
+            "default": false,
+            "title": "Degraded",
+            "type": "boolean"
+          },
+          "fingerprint": {
+            "title": "Fingerprint",
+            "type": "string"
+          },
+          "hypotheses": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "default": {},
+            "title": "Hypotheses",
+            "type": "object"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "node_count": {
+            "default": 0,
+            "title": "Node Count",
+            "type": "integer"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "taken_at": {
+            "format": "date-time",
+            "title": "Taken At",
+            "type": "string"
+          },
+          "topology_version": {
+            "default": "",
+            "title": "Topology Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "taken_at",
+          "reason",
+          "fingerprint"
+        ],
+        "title": "SnapshotOut",
+        "type": "object"
+      },
       "Source": {
         "properties": {
           "authority": {
@@ -8519,6 +9080,75 @@
         "title": "TokenPairOut",
         "type": "object"
       },
+      "TopologyDeltaOut": {
+        "properties": {
+          "added_edges": {
+            "default": [],
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Added Edges",
+            "type": "array"
+          },
+          "added_nodes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Added Nodes",
+            "type": "array"
+          },
+          "changed_nodes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Changed Nodes",
+            "type": "array"
+          },
+          "from_version": {
+            "title": "From Version",
+            "type": "string"
+          },
+          "removed_edges": {
+            "default": [],
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Removed Edges",
+            "type": "array"
+          },
+          "removed_nodes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Removed Nodes",
+            "type": "array"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "to_version": {
+            "title": "To Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from_version",
+          "to_version",
+          "summary"
+        ],
+        "title": "TopologyDeltaOut",
+        "type": "object"
+      },
       "TopologyEdge": {
         "additionalProperties": false,
         "properties": {
@@ -8635,48 +9265,6 @@
         ],
         "title": "TopologyNodeType",
         "type": "string"
-      },
-      "TopologyOut": {
-        "properties": {
-          "app_id": {
-            "title": "App Id",
-            "type": "string"
-          },
-          "snapshot": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/TopologySnapshot"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "version": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Version"
-          },
-          "versions": {
-            "items": {
-              "$ref": "#/components/schemas/TopologyVersionOut"
-            },
-            "title": "Versions",
-            "type": "array"
-          }
-        },
-        "required": [
-          "app_id",
-          "versions"
-        ],
-        "title": "TopologyOut",
-        "type": "object"
       },
       "TopologyRefOut": {
         "properties": {
@@ -9174,6 +9762,284 @@
         "title": "WsTicketOut",
         "type": "object"
       },
+      "signalforge__api__schemas__brain__AgentRunOut": {
+        "properties": {
+          "agent": {
+            "title": "Agent",
+            "type": "string"
+          },
+          "error": {
+            "default": "",
+            "title": "Error",
+            "type": "string"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "model": {
+            "default": "",
+            "title": "Model",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tokens": {
+            "default": 0,
+            "title": "Tokens",
+            "type": "integer"
+          },
+          "trigger_topic": {
+            "default": "",
+            "title": "Trigger Topic",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "agent",
+          "status",
+          "started_at"
+        ],
+        "title": "AgentRunOut",
+        "type": "object"
+      },
+      "signalforge__api__schemas__brain__ImpactOut": {
+        "properties": {
+          "confirmation": {
+            "title": "Confirmation",
+            "type": "string"
+          },
+          "hops": {
+            "default": 0,
+            "title": "Hops",
+            "type": "integer"
+          },
+          "likelihood": {
+            "default": 1.0,
+            "title": "Likelihood",
+            "type": "number"
+          },
+          "path": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Path",
+            "type": "array"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "region": {
+            "default": "",
+            "title": "Region",
+            "type": "string"
+          },
+          "service": {
+            "title": "Service",
+            "type": "string"
+          }
+        },
+        "required": [
+          "service",
+          "confirmation",
+          "reason"
+        ],
+        "title": "ImpactOut",
+        "type": "object"
+      },
+      "signalforge__api__schemas__brain__TopologyOut": {
+        "properties": {
+          "app_id": {
+            "title": "App Id",
+            "type": "string"
+          },
+          "confirmed": {
+            "default": [],
+            "description": "Measured. Something was observed on these.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Confirmed",
+            "type": "array"
+          },
+          "delta": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TopologyDeltaOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "detail": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Detail",
+            "type": "object"
+          },
+          "edge_count": {
+            "default": 0,
+            "title": "Edge Count",
+            "type": "integer"
+          },
+          "edges": {
+            "default": [],
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
+          "impacts": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/signalforge__api__schemas__brain__ImpactOut"
+            },
+            "title": "Impacts",
+            "type": "array"
+          },
+          "imported_at": {
+            "default": "",
+            "title": "Imported At",
+            "type": "string"
+          },
+          "node_count": {
+            "default": 0,
+            "title": "Node Count",
+            "type": "integer"
+          },
+          "nodes": {
+            "default": [],
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Nodes",
+            "type": "array"
+          },
+          "predicted": {
+            "default": [],
+            "description": "Inferred from dependencies. Nothing has been measured on these at all.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Predicted",
+            "type": "array"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          },
+          "versions": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Versions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "app_id",
+          "version"
+        ],
+        "title": "TopologyOut",
+        "type": "object"
+      },
+      "signalforge__api__schemas__detection__ImpactOut": {
+        "properties": {
+          "affected_journeys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Affected Journeys",
+            "type": "array"
+          },
+          "affected_regions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Affected Regions",
+            "type": "array"
+          },
+          "customer_impacting": {
+            "title": "Customer Impacting",
+            "type": "boolean"
+          },
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "journey_tier": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journey Tier"
+          },
+          "regions_affected": {
+            "title": "Regions Affected",
+            "type": "integer"
+          },
+          "regions_total": {
+            "title": "Regions Total",
+            "type": "integer"
+          },
+          "success_rate_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Success Rate Pct"
+          }
+        },
+        "required": [
+          "regions_affected",
+          "regions_total",
+          "customer_impacting"
+        ],
+        "title": "ImpactOut",
+        "type": "object"
+      },
       "signalforge__api__schemas__identity__PolicyIn": {
         "additionalProperties": false,
         "properties": {
@@ -9388,6 +10254,165 @@
           "revalidation_cycles_before_escalation"
         ],
         "title": "PolicyOut",
+        "type": "object"
+      },
+      "signalforge__api__schemas__onboarding__TopologyOut": {
+        "properties": {
+          "app_id": {
+            "title": "App Id",
+            "type": "string"
+          },
+          "snapshot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TopologySnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/TopologyVersionOut"
+            },
+            "title": "Versions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "app_id",
+          "versions"
+        ],
+        "title": "TopologyOut",
+        "type": "object"
+      },
+      "signalforge__api__schemas__platform__AgentRunOut": {
+        "properties": {
+          "agent": {
+            "title": "Agent",
+            "type": "string"
+          },
+          "completion_tokens": {
+            "title": "Completion Tokens",
+            "type": "integer"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "incident_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Incident Id"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "prompt_tokens": {
+            "title": "Prompt Tokens",
+            "type": "integer"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "total_tokens": {
+            "title": "Total Tokens",
+            "type": "integer"
+          },
+          "trigger_event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Event Id"
+          },
+          "trigger_topic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Topic"
+          }
+        },
+        "required": [
+          "id",
+          "agent",
+          "status",
+          "incident_id",
+          "trigger_topic",
+          "trigger_event_id",
+          "started_at",
+          "finished_at",
+          "model",
+          "prompt_tokens",
+          "completion_tokens",
+          "total_tokens",
+          "error"
+        ],
+        "title": "AgentRunOut",
         "type": "object"
       }
     },
@@ -10969,7 +11994,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TopologyOut"
+                  "$ref": "#/components/schemas/signalforge__api__schemas__onboarding__TopologyOut"
                 }
               }
             },
@@ -12714,6 +13739,331 @@
         "summary": "Get Incident",
         "tags": [
           "incidents"
+        ],
+        "x-signalforge-auth": "session"
+      }
+    },
+    "/incidents/{incident_id}/brain": {
+      "get": {
+        "description": "The ledger, the hypotheses and their confidence history.\n\nReturns superseded and retracted nodes as well as current ones: nothing is\ndeleted, and a client that only ever showed the current view would hide the\nhalf a post-incident review reads.",
+        "operationId": "get_brain_incidents__incident_id__brain_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrainOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Get Brain",
+        "tags": [
+          "incident-brain"
+        ],
+        "x-signalforge-auth": "session"
+      }
+    },
+    "/incidents/{incident_id}/brain/ask": {
+      "post": {
+        "description": "Ask the copilot about this incident.\n\nThe answer is drawn only from this incident's graph and every citation must\nresolve to a node retrieval actually returned. An answer that cited anything\nelse is discarded, not annotated - showing an ungrounded answer with a\nwarning is showing it.",
+        "operationId": "ask_copilot_incidents__incident_id__brain_ask_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AskIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnswerOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Ask Copilot",
+        "tags": [
+          "incident-brain"
+        ],
+        "x-signalforge-auth": "session"
+      }
+    },
+    "/incidents/{incident_id}/brain/guidance": {
+      "get": {
+        "description": "Similar prior incidents, mistake warnings, contradictions and any content\nthat tried to instruct the assistant. Every row is advisory and the caveat\ntravels with the payload rather than being a thing the client remembers.",
+        "operationId": "get_guidance_incidents__incident_id__brain_guidance_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuidanceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Get Guidance",
+        "tags": [
+          "incident-brain"
+        ],
+        "x-signalforge-auth": "session"
+      }
+    },
+    "/incidents/{incident_id}/brain/nodes/{derived_key}": {
+      "get": {
+        "description": "Every version of one belief, oldest first. What the version-history icon\non the ledger opens, and what makes an incident replayable.",
+        "operationId": "get_node_history_incidents__incident_id__brain_nodes__derived_key__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "derived_key",
+            "required": true,
+            "schema": {
+              "title": "Derived Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeHistoryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Node History",
+        "tags": [
+          "incident-brain"
+        ]
+      }
+    },
+    "/incidents/{incident_id}/brain/refresh": {
+      "post": {
+        "description": "Run a reasoning pass now.\n\nIdempotent and budgeted: a pass against an unchanged world writes nothing,\nand every model call inside it spends against this incident's token budget.",
+        "operationId": "refresh_brain_incidents__incident_id__brain_refresh_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefreshOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Refresh Brain",
+        "tags": [
+          "incident-brain"
+        ],
+        "x-signalforge-auth": "session"
+      }
+    },
+    "/incidents/{incident_id}/brain/topology": {
+      "get": {
+        "description": "The dependency map, what changed, and the impact split.\n\n`confirmed` and `predicted` are two lists and are never merged: a predicted\ndownstream outage rendered like an observed one is how a war room pages four\nteams for an outage that never happened.",
+        "operationId": "get_brain_topology_incidents__incident_id__brain_topology_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Which imported map to read. Defaults to the latest; older versions are kept forever and the delta is computed against the one before the selection.",
+            "in": "query",
+            "name": "version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Which imported map to read. Defaults to the latest; older versions are kept forever and the delta is computed against the one before the selection.",
+              "title": "Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/signalforge__api__schemas__brain__TopologyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Get Brain Topology",
+        "tags": [
+          "incident-brain"
         ],
         "x-signalforge-auth": "session"
       }
@@ -14704,7 +16054,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/AgentRunOut"
+                    "$ref": "#/components/schemas/signalforge__api__schemas__platform__AgentRunOut"
                   },
                   "title": "Response List Agent Runs Platform Agent Runs Get",
                   "type": "array"
@@ -15223,6 +16573,10 @@
     {
       "description": "The room an incident is run from: membership derived from the blast radius, paging with per-row acknowledgement countdowns and next-in-rotation escalation, the join brief, the live bridge and the task board. Four writes here carry no permission and are self-scoped instead - acknowledging, joining, speaking and completing your own task - because the frozen roles matrix gives the SME none, and the entity refusing to act on anybody else's behalf is a tighter control than a permission any holder could use on anybody's page.",
       "name": "war-room"
+    },
+    {
+      "description": "What the platform believes about an incident and why: a versioned graph of facts, assumptions, evidence, impact, risks and hypotheses, each carrying provenance and each kept forever - nothing is deleted, and a revised belief supersedes rather than overwrites. Hypothesis confidence is computed here from weighted evidence and is never written by a model; the model writes the sentence beside it. Impacts publish `confirmed` (measured) and `predicted` (inferred from dependencies) as separate values and separate lists, because a predicted downstream outage read as an observed one is how a war room pages four teams for an outage that never happened. The copilot answers only from this incident's own graph and every citation must resolve to a node the retrieval returned; an answer that cites anything else is discarded rather than shown. These routes carry no permission, on the same reasoning the war room's reads carry none, and none of them can change incident state, execute an action or approve anything - there is no such path from here.",
+      "name": "incident-brain"
     },
     {
       "description": "The cockpit notification socket. A WebSocket is not expressible in OpenAPI; its frame protocol is in docs/11-api-spec.md.",

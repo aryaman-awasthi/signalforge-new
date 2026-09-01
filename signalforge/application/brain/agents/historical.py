@@ -39,7 +39,6 @@ from signalforge.application.brain.agents.base import (
     AgentOutcome,
     ModelBackedAgent,
     NodeProposal,
-    observed,
 )
 from signalforge.application.brain.common import GUIDANCE_TOPIC
 from signalforge.application.brain.evidence import IncidentContext, fingerprint_of
@@ -70,7 +69,17 @@ class HistoricalLearningAgent(ModelBackedAgent):
 
         current = fingerprint_of(context.incident)
         semantic, degraded, reason, model = await self._semantic(context, current)
-        similar = rank(current, context.priors, now=context.now, semantic=semantic)
+        similar = rank(
+            current,
+            context.priors,
+            now=context.now,
+            semantic=semantic,
+            # What each of these was worth at the last pass, read from the graph.
+            # A prior incident becoming *more* relevant as evidence arrives is the
+            # interesting event on the guidance panel, and it is only visible
+            # against what was written down before.
+            previous=context.prior_relevance,
+        )
         if not similar:
             return AgentOutcome(
                 skipped=(
@@ -101,8 +110,13 @@ class HistoricalLearningAgent(ModelBackedAgent):
                         f"{item.decay_factor:.0%}. "
                         + item.caveat()
                     ),
-                    provenance=observed(
-                        self.name,
+                    # Inferred, not observed. A similarity is a correlation this
+                    # agent computed between two incidents; nobody measured it.
+                    # The distinction is not cosmetic - `AUTHORITY_FACTOR` scales
+                    # inferred evidence to a quarter, so calling this observed
+                    # would have weighted a guess like a measurement.
+                    provenance=self.provenance(
+                        source=self.name,
                         result_ref=f"incident:{item.fingerprint.incident_id}",
                         detail={
                             "components": dict(item.components),
@@ -147,8 +161,8 @@ class HistoricalLearningAgent(ModelBackedAgent):
                         "incident, not a finding about this one: nothing here has "
                         "been measured on the system that is broken now."
                     ),
-                    provenance=observed(
-                        self.name,
+                    provenance=self.provenance(
+                        source=self.name,
                         result_ref=f"incident:{warning.source_incident_id}",
                     ),
                     detail={

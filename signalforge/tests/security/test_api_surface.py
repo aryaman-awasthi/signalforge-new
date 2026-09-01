@@ -78,6 +78,27 @@ SESSION_ONLY_WRITES = {
     ("post", "/incidents/{incident_id}/war-room/join"),
     ("post", "/incidents/{incident_id}/bridge"),
     ("post", "/incidents/{incident_id}/tasks/{task_id}/done"),
+    # S5-T03. Two POSTs that write no incident state at all, added here
+    # deliberately rather than given a permission, because a permission would
+    # lock the SME - who holds none in the frozen matrix - out of the reasoning
+    # panels a paged expert most needs.
+    #
+    # `ask` reads one incident's graph in the caller's own tenant, asks a model
+    # about it, and returns an answer. It holds no invoker, no tool gateway and
+    # no write path, which is a stronger control than a permission: there is
+    # nothing for an answer - or an injected instruction inside one - to reach.
+    # It is a POST because it carries a question body and must not be cached,
+    # not because it mutates anything. It does write an audit entry, because
+    # "the assistant told me the pool was fine" is a sentence somebody will say
+    # at a review.
+    #
+    # `refresh` runs a reasoning pass the bus would have run on the next event
+    # anyway. It is idempotent - a pass against an unchanged world writes no new
+    # version - and doubly budgeted, by the per-hypothesis query budget and by
+    # the per-incident token ledger, which is the control that matters for a
+    # route that costs money.
+    ("post", "/incidents/{incident_id}/brain/ask"),
+    ("post", "/incidents/{incident_id}/brain/refresh"),
 }
 
 WRITE_METHODS = {"post", "put", "patch", "delete"}
@@ -143,8 +164,13 @@ def test_only_the_five_frozen_ingest_paths_take_a_machine_credential():
 @pytest.mark.req("REQ-012")
 def test_every_route_that_writes_names_the_permission_it_enforces():
     """A write behind a session but behind no permission is a route every member
-    of every tenant may perform. There is exactly one, and it ends the caller's
-    own session."""
+    of every tenant may perform.
+
+    They are a closed, justified list (`SESSION_ONLY_WRITES`): each either acts
+    only on the caller themselves, or writes no incident state at all. Adding one
+    means editing that list and writing down why, which is the point - this test
+    exists so that shipping an unguarded write is a decision somebody made rather
+    than something that happened."""
     unguarded = []
     for method, path, operation in operations(published()):
         if method not in WRITE_METHODS:

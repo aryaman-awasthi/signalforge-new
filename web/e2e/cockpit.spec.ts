@@ -122,6 +122,49 @@ test("an IC declares a corroborated P0 and the SME it pages acknowledges", async
   // not is the failure this badge exists to prevent.
   await expect(page.getByTestId("live-badge")).toHaveAttribute("data-live", "true");
 
+  // --- the incident brain, in the browser (S5) ---------------------------
+  //
+  // A live `run.sh` has no model key, so this walks the *degraded* path
+  // deliberately - which is the half that has to work. Everything asserted
+  // below is computed by the platform without a model: the hypotheses, their
+  // confidences, the confirmed/predicted split and the copilot's fallback.
+  const brainPanel = page.getByRole("region", { name: "AI Incident Brain" });
+  await brainPanel.getByRole("button", { name: "re-reason now" }).click();
+  // Three competing hypotheses, each with a computed percentage and a next test.
+  await expect
+    .poll(async () => brainPanel.getByRole("article").count(), { timeout: 30_000 })
+    .toBeGreaterThanOrEqual(3);
+  const firstCard = brainPanel.getByRole("article").first();
+  await expect(firstCard).toContainText(/%/);
+  await expect(firstCard).toContainText("Next test:");
+  // The ledger, tabbed so a fact and an assumption are never read in one column.
+  await expect(brainPanel.getByRole("tab", { name: /^Facts/ })).toBeVisible();
+  await expect(brainPanel.getByRole("tab", { name: /^Assumptions/ })).toBeVisible();
+
+  // CONFIRMED and PREDICTED under two legends, never one list.
+  const services = page.getByRole("region", { name: "Affected Services" });
+  await expect(services).toContainText("CONFIRMED");
+  await expect(services).toContainText("PREDICTED");
+  await expect(services).toContainText("nothing has been measured");
+
+  // The copilot answers from the record. With no model configured it says so
+  // and lists what is held rather than failing - that is what "the system
+  // continues deterministically" looks like to a person.
+  const copilot = page.getByRole("region", { name: "AI Copilot" });
+  await copilot.getByRole("textbox", { name: "Ask the incident copilot" }).fill(
+    "what do we know so far?",
+  );
+  await copilot.getByRole("button", { name: "Ask" }).click();
+  await expect(copilot.getByRole("article")).toBeVisible({ timeout: 30_000 });
+  await expect(copilot.getByRole("article")).toContainText(
+    /grounded|insufficient evidence|degraded|discarded/i,
+  );
+
+  // Guidance is captioned as guidance wherever it appears.
+  await expect(
+    page.getByRole("region", { name: "Warning and Guidance" }),
+  ).toContainText("measured on the system that is broken now");
+
   // --- a second session, a different person ------------------------------
   const second = await context.browser()!.newContext();
   const sme = await second.newPage();

@@ -1704,3 +1704,238 @@ how somebody concludes that nobody is answering their page.
 Nothing on these screens is computed in the browser either way: the countdowns
 are the server's own numbers, so a stale screen lags reality and never disagrees
 with it.
+
+---
+
+## 11. The Incident Brain: a response becomes an argument (REQ-050, REQ-052, REQ-053, REQ-054)
+
+Sprint 4 ended with a room, a blast radius and a task board. What it could not do
+is say *why*. This section is that: a versioned record of what the platform
+believes about an incident, what it believes it from, and how confident it is -
+built so that an incident commander can disagree with it.
+
+Full architecture in `docs/08-agent-architecture.md`; what is asserted about it in
+`docs/15-ai-eval.md`.
+
+### 11.1 What the brain is
+
+A graph of nine node kinds - fact, assumption, hypothesis, evidence, impact, risk,
+action, approval, communication - and **nothing in it is ever overwritten**.
+
+Every node carries a `derived_key` (a stable identity for the thing it is about)
+and a `version`. When a belief changes, a new version is written naming the one it
+supersedes, and the old row stays readable with what it said and when it stopped
+being current. A belief withdrawn without a replacement is `retracted`, kept, and
+excluded from the current view - a ruled-out hypothesis is often the most
+interesting row at a post-incident review.
+
+Two consequences that matter more than the storage detail:
+
+- **"Why did hypothesis #2 move from 65% to 32%?" is answered by reading rows**,
+  six months later, without re-deriving anything.
+- **An agent running every twenty seconds against an unchanged world writes
+  nothing.** A version is a change of belief, not a heartbeat.
+
+Every node also carries where it came from: the source, the actor type, the
+authority - authoritative, observed or inferred - and, only where a model was
+involved, the model, its classification and whether it degraded. **Anything an
+agent concluded is `inferred`, without exception.** The brain correlates things
+other subsystems measured; recording its output as observed would put a
+correlation into the audit chain wearing the authority of a measurement.
+
+### 11.2 Confirmed and predicted are different words
+
+A service is **confirmed** as affected when something was measured on it - an
+anomaly, a failing probe, an alert naming it. A service is **predicted** when it
+depends on something confirmed and *nothing has been measured on it at all*.
+
+The two are computed separately, stored separately, returned as separate lists,
+and rendered under two legends with two colours. The reason is not tidiness. A
+predicted downstream outage shown like an observed one is how a war room pages
+four teams for an outage that never happened - and once that has happened twice,
+people stop believing the blast radius at all.
+
+Propagation is bounded at three hops with a likelihood decaying per hop, because
+a real dependency graph is connected enough that an unbounded walk reaches
+everything, and "everything is predicted to be affected" is the same sentence as
+"we have no idea".
+
+Topology versions are kept forever, so an incident can be read against the map
+that was in force when it started, and "has the shape of this estate changed since
+this began?" is a question with an answer.
+
+### 11.3 Where a confidence comes from
+
+**Arithmetic, never a model.**
+
+Each piece of evidence linked to a hypothesis has a kind with a published base
+weight, scaled by the source's authority and by a strength the measurement itself
+supplies. Weights sum - supporting positive, refuting negative - and pass through
+a logistic anchored at a prior of 0.35.
+
+Three properties are deliberate:
+
+- **A hypothesis with no evidence sits at the prior, not at zero.** Zero reads as
+  "ruled out"; an unevidenced hypothesis has not been ruled out, it has merely not
+  been tested, and the screen says so.
+- **Inferred evidence counts a quarter** of authoritative evidence. That is what
+  stops a chain of model inferences manufacturing certainty out of nothing
+  measured.
+- **Historical similarity is capped in total.** However many prior incidents
+  agree, history alone cannot carry a hypothesis past even odds - and cannot rule
+  one out either. One real measurement outweighs the entire advisory budget.
+
+Every recomputation writes a history entry naming the previous value, the new one,
+the net weight, the evidence on each side, and which evidence is new. The
+explanation is written from those numbers, so it says the same thing with or
+without a model. A model may write one sentence beside it; its schema has no
+number field for a confidence to arrive in.
+
+**Three competing hypotheses are always offered** - a change-induced one, a
+saturation or dependency one, and an infrastructure or regional one - plus the
+proximate change by name and any recurrence of a prior incident's recorded cause.
+A room that sees one hypothesis tests one hypothesis.
+
+Each card also carries the **discriminating test**: what would most move this
+next. A percentage without a next step is a number to argue about rather than act
+on.
+
+### 11.4 What the bridge is understood to be saying
+
+Every message is classified deterministically first - fact, assumption, question,
+decision, commitment, blocker, chatter - by rules that run with no network, no
+key and no budget. The model then sees *only* the lines the rules could not place,
+and may promote from those and from nothing else. When the rules say "commitment"
+they have matched an explicit promise, and a model talking them out of it would
+lose a task somebody made at 03:00; when they say "chatter" they have merely
+failed to match a pattern, and that is exactly where *"Sam, can you check the
+pool?"* lives.
+
+**Contradictions** are found by comparing a human health claim about a named
+subject against what the platform measured about that subject. "The database is
+fine" while its connectivity probe is failing is either a stale belief driving the
+wrong work or a measurement pointed at the wrong thing, and both are worth twenty
+minutes of an incident. It becomes a risk node, a timeline event, and a row on the
+guidance panel.
+
+Sprint 4's commitment harvester still owns the task board. This layer creates no
+tasks; two writers with two key schemes producing two rows for one sentence is a
+failure avoided by not having two writers.
+
+### 11.5 Learning from before, without repeating it
+
+Prior incidents in the same tenant are reduced to structured fingerprints -
+signal families, services, regions, change types, application, severity - and
+compared. An embedding cosine from the same gateway blends in as a minority term
+and, when it degrades, the structural score stands alone at full weight: a
+degraded model path must not look like a lack of similarity.
+
+Relevance decays with a four-month half life and the *decayed* number is the one
+shown, because an operator comparing "82% similar" between a two-year-old incident
+and last week's is comparing the wrong numbers.
+
+The most useful output is not "this was the cause". It is **"we spent forty
+minutes on this last time and it was not it"** - a warning drawn from what a prior
+incident *ruled out*, pinned where somebody will read it. Every row carries the
+sentence that says what it is: guidance from a prior incident, never a finding
+about this one.
+
+### 11.6 Evidence is gathered broad, then aggregate, then narrow
+
+The naive way to answer "why is this happening" is to put the transcript, the
+telemetry and the change log into a prompt. It works once, on a small incident,
+and then it costs in proportion to how bad the incident is - the six-hour P0 being
+exactly the one that blows the budget and exactly the one a truncated prompt
+damages most.
+
+So: a **broad** pass of cheap structured reads producing counts; an **aggregate**
+pass collapsing them into rows a person would write (the worst signal per family,
+alert clusters rather than alerts); and a **narrow** pass, per hypothesis, under
+its own query budget, which is the only one carrying excerpts - each capped, each
+masked by the platform's one redaction function, each carrying a reference so the
+whole thing is one click away rather than in the prompt.
+
+A refused query is recorded rather than skipped. "Nothing was found" and "we
+stopped looking" are different findings, and a bundle that could not tell them
+apart would let a budget quietly become a conclusion.
+
+### 11.7 The copilot answers, or says it cannot
+
+Ask a question about an incident; get an answer drawn only from that incident's
+graph, with a chip per citation.
+
+Every citation must resolve to a node the retrieval actually returned. An answer
+citing anything else - or asserting a fact with no citation at all - is
+**discarded**, not annotated, and the insufficient-evidence answer is served
+instead. An ungrounded answer displayed with a warning is displayed.
+
+The refusal is a real answer: it lists what the incident *does* hold near the
+question, because "no" alone teaches an operator to stop asking.
+
+Four states, four badges: grounded, insufficient evidence, answer discarded, and
+degraded.
+
+### 11.8 Untrusted text stays untrusted
+
+Bridge messages, chat, logs, alert annotations, ticket bodies, retrieved
+documents, tool results - all of it is text this platform did not write, and some
+of it may be hostile.
+
+It is fenced inside a per-call, unguessable delimiter, in a user message,
+underneath a standing instruction that says plainly that content inside is
+evidence and never an instruction. Attempts to instruct the assistant are
+**flagged and kept verbatim** - stripping the sentence would destroy the evidence
+and teach an attacker what the filter looks for - and surface as a risk node, a
+timeline event and a row on the guidance panel.
+
+The control that actually holds is simpler than any of that: **no agent holds a
+tool.** No invoker, no gateway, no write path. A model fully persuaded by an
+injected instruction has nothing to do about it.
+
+### 11.9 What happens when there is no model
+
+Everything below still works, which is the point of building it this way:
+
+| | With a model | Without |
+|---|---|---|
+| Statement classification | rules + promotion | rules |
+| Contradictions, telemetry, topology, change | deterministic | unchanged |
+| Historical similarity | structural + embeddings | structural at full weight |
+| Confidence and its history | deterministic | unchanged |
+| "Why it moved" | explanation + narrative | explanation |
+| Join brief | model rewrite, caveats welded on | template, badged degraded |
+| Copilot | grounded answer with citations | the record, listed, with citations |
+
+The badge is read from what the last pass actually did, not from whether a key is
+configured. A revoked key still looks configured; only the trace knows.
+
+### 11.10 The screens
+
+**S10 - AI Incident Brain.** Three hypothesis cards, each with the computed
+confidence, a sparkline of every recomputation, the deterministic explanation of
+the last delta, evidence for and against as two separate lists, and the
+discriminating test. Beneath them the ledger, tabbed by node type so a fact and an
+assumption are never read in one column, every row carrying its authority chip and
+- where a belief has been revised - a button that opens every version.
+
+The sparkline is fixed to the full range rather than scaled to the data: an
+auto-scaled one would make a wobble between 61% and 63% look identical to a
+collapse from 65% to 32%.
+
+**S13 - Affected Services.** A layered dependency graph laid out by hops from a
+confirmed fault, two impact lists under two legends, a version switcher over the
+kept maps, and a changed-since line.
+
+**S14 - Warning and Guidance.** Contradictions, pinned mistake warnings, similar
+prior incidents with their relevance movement, and any content that tried to
+instruct the assistant. The caveat comes from the server rather than the
+component, because a client that *could* render the rows without it eventually
+would.
+
+**S18 - IC Copilot.** A question box, the verdict badge before the prose, and a
+citation chip per node with its provenance in the tooltip.
+
+All four share the cockpit's existing socket. There is one WebSocket store in this
+application and it stays that way; the server's cockpit consumer subscribes to
+`brain.*` alongside `incident.*` and `warroom.*`, so a hypothesis that moved
+arrives on the frame the platform was already sending.

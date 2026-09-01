@@ -28,6 +28,7 @@ from signalforge.application.brain.agents.base import (
     AgentOutcome,
     EdgeProposal,
     NodeProposal,
+    inferred,
     observed,
 )
 from signalforge.application.brain.evidence import IncidentContext
@@ -67,7 +68,7 @@ class TelemetryAgent(Agent):
                             + ". Every conclusion below rests on the declaration, "
                             "on changes, and on what people have said."
                         ),
-                        provenance=observed(self.name),
+                        provenance=inferred(self.name),
                         tags=("degraded-input",),
                     ),
                 ),

@@ -427,9 +427,21 @@ class IncidentBrainService:
         Budgeted like every other pass, and idempotent: a pass against an
         unchanged world writes nothing and produces no new versions, so a person
         pressing the button twice does not fill the ledger.
+
+        The existence check is here rather than left to the governor because the
+        two are answering different questions. The governor is a background
+        worker: "this incident is not mine to reason about" is a normal outcome
+        it reports and moves on from. This is a route, and an incident the caller
+        cannot see has to answer exactly the way one that does not exist answers
+        - a 404, the same as every other incident read - rather than a 200
+        carrying the word "no".
         """
         if self._governor is None:
             raise BrainNotFoundError("no incident governor is wired on this node")
+        async with self._uow_factory() as uow:
+            incident = await uow.incidents.get(principal.tenant_id, incident_id)
+        if incident is None:
+            raise BrainNotFoundError(f"incident {incident_id} not found")
         return await self._governor.run_for(
             principal.tenant_id, incident_id, trigger="manual"
         )

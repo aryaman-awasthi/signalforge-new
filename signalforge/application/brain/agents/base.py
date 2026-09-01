@@ -182,6 +182,30 @@ def observed(
     )
 
 
+def inferred(
+    source: str, *, result_ref: str = "", detail: Optional[Mapping[str, Any]] = None
+) -> Provenance:
+    """Provenance for something an agent derived rather than read.
+
+    The default for anything the brain concludes, and the one that matters to
+    the arithmetic: `AUTHORITY_FACTOR` scales inferred evidence to a quarter, so
+    a correlation stamped `observed` would be weighted like a measurement.
+    Available as a free function as well as on `ModelBackedAgent` because the
+    deterministic agents need it too - a prediction is an inference whether or
+    not a model was involved.
+    """
+    from signalforge.contracts.envelope import ActorType, Authority
+
+    return Provenance(
+        source=source,
+        actor_type=ActorType.AGENT,
+        actor_id=source,
+        authority=Authority.INFERRED,
+        result_ref=result_ref,
+        detail=dict(detail or {}),
+    )
+
+
 def authoritative(
     source: str, *, result_ref: str = "", detail: Optional[Mapping[str, Any]] = None
 ) -> Provenance:

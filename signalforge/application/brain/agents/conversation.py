@@ -42,6 +42,7 @@ from signalforge.application.brain.agents.base import (
     EdgeProposal,
     ModelBackedAgent,
     NodeProposal,
+    inferred,
     observed,
 )
 from signalforge.application.brain.common import CONTRADICTION_TOPIC, INJECTION_TOPIC
@@ -156,7 +157,7 @@ class ConversationAgent(ModelBackedAgent):
                         "or the measurement is pointed at the wrong thing. Both "
                         "are worth twenty minutes of an incident."
                     ),
-                    provenance=observed(
+                    provenance=inferred(
                         self.name, result_ref=contradiction.statement.ref
                     ),
                     untrusted=True,
@@ -212,7 +213,7 @@ class ConversationAgent(ModelBackedAgent):
                         "holds no tool and can change no state. Patterns seen: "
                         + ", ".join(sorted({finding.pattern for finding in findings}))
                     ),
-                    provenance=observed(self.name),
+                    provenance=inferred(self.name),
                     untrusted=True,
                     detail={
                         "findings": [str(finding) for finding in findings[:10]],

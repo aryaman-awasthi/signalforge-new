@@ -10,8 +10,8 @@ integrations and onboarding, and is the one Alembic migrates. `rollups.db`
 holds derived detection telemetry, is created from its models at startup, and
 can be deleted without losing any record of anything that happened.
 
-Generated: 2026-09-01T12:43:17+00:00
-Tables: 35 in signalforge.db, 4 in rollups.db
+Generated: 2026-09-01T14:29:34+00:00
+Tables: 39 in signalforge.db, 4 in rollups.db
 
 ## 1. Entity relationship diagram
 
@@ -599,6 +599,73 @@ Tables not yet placed in a group - add them to GROUPS in scripts/gen_erd.py.
 
 ```mermaid
 erDiagram
+    incident_confidence_history {
+        integer id "PK"
+        string tenant_id
+        string incident_id
+        string hypothesis_key
+        datetime at
+        float previous
+        float current
+        float net_weight
+        json supporting
+        json refuting
+        json added
+        json removed
+        string trigger
+        text narrative
+        boolean narrative_degraded
+        json detail
+    }
+    incident_graph_edges {
+        string id "PK"
+        string tenant_id
+        string incident_id
+        string source_id
+        string target_id
+        string relation
+        float weight
+        string note
+        datetime created_at
+        json detail
+    }
+    incident_graph_nodes {
+        string id "PK"
+        string tenant_id
+        string incident_id
+        string node_type
+        string derived_key
+        integer version
+        integer seq
+        string status
+        string label
+        text content
+        boolean untrusted
+        float confidence
+        string confirmation
+        string supersedes
+        string superseded_by
+        datetime retired_at
+        string retired_reason
+        datetime created_at
+        json provenance
+        json tags
+        json detail
+    }
+    incident_situation_snapshots {
+        string id "PK"
+        string tenant_id
+        string incident_id
+        datetime taken_at
+        string reason
+        json node_ids
+        json hypotheses
+        string topology_version
+        integer max_seq
+        boolean degraded
+        string fingerprint
+        json detail
+    }
     llm_cache {
         string tenant_id "PK"
         string cache_key "PK"
@@ -1414,6 +1481,99 @@ Indexes: `ix_agent_runs_incident`, `ix_agent_runs_tenant_id`, `ix_agent_runs_ten
 | `detail` | json | no |  |
 
 Indexes: `ix_agent_run_steps_run`, `ix_agent_run_steps_run_id`
+
+
+#### `incident_confidence_history`
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | integer | no | primary key |
+| `tenant_id` | string | no |  |
+| `incident_id` | string | no |  |
+| `hypothesis_key` | string | no |  |
+| `at` | datetime | no |  |
+| `previous` | float | yes |  |
+| `current` | float | no |  |
+| `net_weight` | float | no |  |
+| `supporting` | json | no |  |
+| `refuting` | json | no |  |
+| `added` | json | no |  |
+| `removed` | json | no |  |
+| `trigger` | string | no |  |
+| `narrative` | text | no |  |
+| `narrative_degraded` | boolean | no |  |
+| `detail` | json | no |  |
+
+Indexes: `ix_confidence_history_hypothesis`, `ix_incident_confidence_history_tenant_id`
+
+
+#### `incident_graph_edges`
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | string | no | primary key |
+| `tenant_id` | string | no |  |
+| `incident_id` | string | no |  |
+| `source_id` | string | no |  |
+| `target_id` | string | no |  |
+| `relation` | string | no |  |
+| `weight` | float | no |  |
+| `note` | string | no |  |
+| `created_at` | datetime | no |  |
+| `detail` | json | no |  |
+
+Indexes: `ix_graph_edges_source`, `ix_graph_edges_target`, `ix_incident_graph_edges_tenant_id`  
+Constraints: unique (tenant_id, incident_id, source_id, target_id, relation)
+
+
+#### `incident_graph_nodes`
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | string | no | primary key |
+| `tenant_id` | string | no |  |
+| `incident_id` | string | no |  |
+| `node_type` | string | no |  |
+| `derived_key` | string | no |  |
+| `version` | integer | no |  |
+| `seq` | integer | no |  |
+| `status` | string | no |  |
+| `label` | string | no |  |
+| `content` | text | no |  |
+| `untrusted` | boolean | no |  |
+| `confidence` | float | yes |  |
+| `confirmation` | string | yes |  |
+| `supersedes` | string | yes |  |
+| `superseded_by` | string | yes |  |
+| `retired_at` | datetime | yes |  |
+| `retired_reason` | string | no |  |
+| `created_at` | datetime | no |  |
+| `provenance` | json | no |  |
+| `tags` | json | no |  |
+| `detail` | json | no |  |
+
+Indexes: `ix_graph_nodes_current`, `ix_graph_nodes_incident`, `ix_graph_nodes_key`, `ix_incident_graph_nodes_tenant_id`  
+Constraints: unique (tenant_id, incident_id, derived_key, version)
+
+
+#### `incident_situation_snapshots`
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | string | no | primary key |
+| `tenant_id` | string | no |  |
+| `incident_id` | string | no |  |
+| `taken_at` | datetime | no |  |
+| `reason` | string | no |  |
+| `node_ids` | json | no |  |
+| `hypotheses` | json | no |  |
+| `topology_version` | string | no |  |
+| `max_seq` | integer | no |  |
+| `degraded` | boolean | no |  |
+| `fingerprint` | string | no |  |
+| `detail` | json | no |  |
+
+Indexes: `ix_incident_situation_snapshots_tenant_id`, `ix_situation_snapshots_incident`
 
 
 #### `llm_cache`

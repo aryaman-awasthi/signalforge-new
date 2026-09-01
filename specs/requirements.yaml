@@ -389,7 +389,7 @@ requirements:
     area: incident-brain
     sprint: S5
     priority: must
-    status: planned
+    status: built
     acceptance: >
       Node types fact/assumption/hypothesis/evidence/impact/risk/action/approval/
       communication with provenance, confidence and supersedes; nothing deleted;
@@ -412,7 +412,7 @@ requirements:
     area: incident-brain
     sprint: S5
     priority: must
-    status: planned
+    status: built
     acceptance: >
       Conversation understanding (statement types, contradiction detection), telemetry,
       topology, change intelligence, historical learning with mistake warnings,
@@ -424,7 +424,7 @@ requirements:
     area: incident-brain
     sprint: S5
     priority: must
-    status: planned
+    status: built
     acceptance: >
       Deterministic confidence from weighted evidence with full history; a scripted
       evidence sequence moves three hypotheses with explainable deltas; the LLM writes
@@ -435,7 +435,7 @@ requirements:
     area: incident-brain
     sprint: S5
     priority: must
-    status: planned
+    status: built
     acceptance: >
       Broad-to-narrow evidence gathering under per-hypothesis query budgets with size
       caps, redaction and result_ref drill-down.
@@ -445,7 +445,7 @@ requirements:
     area: incident-brain
     sprint: S5
     priority: must
-    status: planned
+    status: built
     acceptance: >
       Copilot answers strictly from graph nodes with provenance chips; ai-eval covers
       grounding, hallucination probes, classification accuracy, low-confidence

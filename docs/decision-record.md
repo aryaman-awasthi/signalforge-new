@@ -6,6 +6,81 @@ graph" section at the bottom is the authored pre-build decision record
 (signalforge-memory-graph.md, provided and imported 2026-09-01) - every N-line there
 is treated as already decided.
 
+## DR-100 (2026-09-01, S5-T03) The Incident Governor is written in-house rather than on LangGraph
+`application/brain/governor.py` is a two-phase orchestrator of ~350 lines with an explicit agent
+roster, an in-process wake set and a scheduled drain. The sprint plan and N11 both name LangGraph.
+Why not: it is not in the virtualenv, and adding it pulls langchain-core and its tree into a
+deliberately lean 47-package environment for a pattern this platform has to implement itself
+anyway. Everything the governor actually needs - per-incident token budgets, query budgets,
+provenance stamping, an execution trace on the tables S2 created for it, idempotent graph merges,
+and a degradation contract in which a model failure is a *result* rather than an exception - is
+SignalForge behaviour that no orchestration library provides. What would have been left for
+LangGraph is a state dict and a call order. Consequence: a deviation from the sprint text, recorded
+here and in the sprint log; a governor whose control flow is readable in one file and testable
+without a framework; and no third-party code on the path between an incident's evidence and what
+the platform believes about it. Revisit if a future sprint needs branching, cyclic or human-in-the-
+loop graph execution, where a library would start earning its dependencies.
+
+## DR-099 (2026-09-01, S5-T01) Advisory evidence is capped, so history cannot become causality
+`domain/brain/confidence.py` splits net weight into firm and advisory, sums firm in full, and
+clamps the advisory total to ±`ADVISORY_CAP` (0.35). Why: the low base weight on
+`HISTORICAL_SIMILARITY` (0.45, the lowest in the table) was written to keep history advisory, and it
+did not. The first eval case that offered four similar prior incidents scored the hypothesis at 88%
+- the platform asserting a cause from history alone, which is the single failure Historical Learning
+exists to avoid. A weight per item cannot express "no amount of this is enough"; a cap can.
+Consequence: a hypothesis supported by nothing but history stays below even odds however many priors
+agree, and cannot be ruled out by history either - the cap is symmetric. One real measurement
+outweighs the whole advisory budget, which is the ordering this platform wants. Found by an eval
+case, fixed in the policy rather than in the case.
+
+## DR-098 (2026-09-01, S5-T03) The model may promote an unclassified line and may never overturn a classified one
+`domain/brain/statements.MODEL_UPGRADABLE = {chatter, question}`. `reconcile()` accepts a model
+classification only when the deterministic pass produced one of those two, and otherwise keeps the
+rule's answer while recording that the model disagreed. Why: the two passes fail in opposite
+directions. When the rules say "commitment" they have matched an explicit promise, and a model
+talking them out of it loses a task somebody made on a bridge at 03:00. When they say "chatter" or
+"question" they have merely failed to match a pattern - and that is exactly where *"Sam, can you
+check the pool?"* lives, an indirect commitment no honest regular expression will ever catch.
+Consequence: the model can only add, which makes its worst case a missed promotion rather than a
+lost commitment; disagreements are recorded rather than discarded, so a disagreement rate is
+measurable later; and the deterministic classifier remains the floor that runs with no key, no
+budget and no gateway.
+
+## DR-097 (2026-09-01, S5-T03) An agent returns proposals and holds nothing that can act
+Every agent in `application/brain/agents/` is a function from gathered evidence to node and edge
+*proposals*. None holds a repository, a unit of work, a bus, an invoker or an HTTP client; the
+governor writes and the governor publishes. Why: the honest control against prompt injection is not
+a filter. Fencing and a standing system instruction reduce the chance a model is persuaded; they do
+not bound the damage if one is. What bounds it is that there is nothing on the other side of the
+model call to do - no tool, no write path, no state change. Consequence: idempotency, versioning,
+provenance stamping and the audit entry live in one place instead of once per agent; a security test
+reads the source of every exported agent and fails if one grows a `self._invoker`; and the sentence
+"a model fully persuaded by an injected instruction has nothing to do about it" is a structural
+claim rather than a hope.
+
+## DR-096 (2026-09-01, S5-T01) Confidence is arithmetic and the model writes only the sentence beside it
+Hypothesis confidence comes from `score()` over authority-scaled weighted evidence; the model is
+asked for a narrative whose JSON schema has no number field at all. Why: a model asked "how
+confident are you?" answers 83% with identical fluency on three corroborating signals and on none,
+and that number then travels onto a screen an incident commander is deciding from. Deriving it
+instead makes it reproducible, order-independent after a redelivery, explainable from stored rows
+six months later, and arguable - the weight table is a page somebody can disagree with. Consequence:
+`ConfidenceEntry.explain()` is written from the stored numbers and says the same thing with or
+without a model, so the "why did #2 move from 65% to 32%?" panel works in degraded mode; the
+narrative is decoration, labelled as such, and its absence costs nothing.
+
+## DR-095 (2026-09-01, S5-T03) The bus wakes the brain; a job runs it
+`IncidentBrainConsumer` records `(tenant, incident)` in an in-process set and returns; a
+`ScheduledJob` drains it. Why: a governor pass reads several stores, may call a model over the
+network and writes a transaction of its own. Running that inside the dispatcher's transaction would
+hold a SQLite write lock for seconds against a loop meant to take milliseconds, and opening a second
+connection while the first is held is a deadlock waiting for a busy night. Consequence: waking is
+free and redelivery is harmless (a wake is a key in a set); the pass is idempotent anyway, because a
+graph write against an unchanged world writes nothing; tests drive `drain()` or `run_for()`
+explicitly rather than waiting for a tick; and `brain.*` is deliberately absent from the trigger
+patterns, because an agent reacting to its own output is a loop and a budgeted reasoning system must
+not be able to feed itself.
+
 ## DR-094 (2026-09-01, S4 carry-over) A consumer group is tested through the dispatcher's report
 `test_socket_push.py` asserts `DispatchReport.dead_lettered == 0` on every pass, not only that a
 frame arrived. Why: found the hard way. `signalforge_socket_nudges_total` was never declared, so
