@@ -203,31 +203,42 @@ export type ChangeWindow = {
   change_type: string;
   service: string;
   status: string;
+  started_at: string;
+  completed_at: string | null;
   version: string | null;
   actor: string | null;
-  started_at: string | null;
-  completed_at: string | null;
-  last_event_at: string | null;
-  open: boolean;
-  /** Open for longer than the platform's ceiling. The chip goes out, because a
-   * chip that stays lit for three days is a chip people stop seeing - but the
-   * row stays listed, saying how long it has been open. */
-  stale: boolean;
-  age_s: number | null;
+  diff_ref: string | null;
+  source_system: string;
+  simulated: boolean;
   announced_started: boolean;
   announced_completed: boolean;
-  simulated: boolean;
+  open: boolean;
+  /** Open for longer than `max_age_s`. The chip goes out, because a chip that
+   * stays lit for three days is a chip people stop seeing - but the row stays
+   * listed, saying how long it has been open. It is never closed on a guess:
+   * nobody knows whether that deploy landed. */
+  stale: boolean;
+  age_s: number;
+  duration_s: number | null;
   detail: string;
 };
 
 export type ChangeWindowView = {
   app_id: string;
-  open_count: number;
-  stale_count: number;
-  /** What the chip beside the health score reads from. */
-  chip: boolean;
+  at: string;
+  /** **This is the chip.** A deployment announced its start and never announced
+   * its completion. Read from the API rather than derived from a count, because
+   * the platform - not the browser - decides when an unfinished change has been
+   * open long enough to stop being news. */
+  open: boolean;
+  max_age_s: number;
+  /** In flight now. */
   windows: ChangeWindow[];
-  max_open_s: number;
+  /** Open past the ceiling: the pipeline stopped talking. Listed, not hidden. */
+  stale: ChangeWindow[];
+  /** Finished, with which of the three endings it was. */
+  recent: ChangeWindow[];
+  detail: string;
 };
 
 // --- the lifecycle ------------------------------------------------------------

@@ -188,9 +188,15 @@ def test_the_health_panel_toggles_to_grafana_and_always_states_the_fallback():
 @pytest.mark.req("REQ-044")
 def test_the_change_window_chip_is_lit_by_the_api_and_a_stale_window_is_still_listed():
     source = read("features", "incidents", "components", "ChangeWindow.tsx")
-    assert "view.chip" in source, "the chip is the API's decision, not a count"
+    assert "view.open" in source, "the chip is the API's decision, not a count"
     assert "never announced completion" in source
     assert "change.stale" in source
+    # The three groups the API actually publishes. An earlier version of this
+    # screen read a `chip` field that does not exist, and rendered nothing.
+    for group in ("windows", "stale", "recent"):
+        assert f"view?.{group}" in source or f"view.{group}" in source, (
+            f"the screen must render the API's `{group}` group"
+        )
 
 
 @pytest.mark.req("REQ-045")
@@ -273,8 +279,20 @@ def test_the_new_routes_are_thin_and_all_data_goes_through_the_typed_proxy():
 def test_the_cockpits_types_match_the_apis_response_models():
     """Pinned field by field against the API's own schemas, so a contract that
     gains a field fails here rather than quietly going unrendered."""
-    from signalforge.api.schemas.warroom import PageOut, TaskOut, WarRoomOut
-    from signalforge.api.schemas.incidents import LifecycleOut
+    from signalforge.api.schemas.warroom import (
+        BlastRadiusOut,
+        BriefOut,
+        MemberOut,
+        PageOut,
+        TaskOut,
+        WarRoomOut,
+    )
+    from signalforge.api.schemas.incidents import (
+        ChangeWindowItemOut,
+        ChangeWindowOut,
+        IncidentOut,
+        LifecycleOut,
+    )
 
     api = read("features", "warroom", "api.ts")
     incidents = read("features", "incidents", "api.ts")
@@ -283,7 +301,15 @@ def test_the_cockpits_types_match_the_apis_response_models():
         (PageOut, api),
         (TaskOut, api),
         (WarRoomOut, api),
+        (MemberOut, api),
+        (BlastRadiusOut, api),
+        (BriefOut, api),
         (LifecycleOut, incidents),
+        (IncidentOut, incidents),
+        # Pinned after a real miss: the cockpit typed a `chip` field the API
+        # never served and rendered nothing, because nothing checked.
+        (ChangeWindowOut, incidents),
+        (ChangeWindowItemOut, incidents),
     ):
         for field in model.model_fields:
             assert f"{field}:" in source, (
