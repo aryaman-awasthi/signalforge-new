@@ -386,3 +386,188 @@ credential-scope floor allows this capability on this credential; the credential
 for this call and nothing caches it; and the call is bounded. The floor is re-checked at *call*
 time rather than at bind time, which is what makes a permission change mid-flow safe - the next
 call is refused even though the binding, the runtime and the credential are all still there.
+
+## 3. Onboarding: the wizard and what it is allowed to decide (REQ-036)
+
+An application is onboarded through public contracts only. Nothing in `api`, `application` or
+`domain` names an application, an adapter or a vendor: the wizard reads the frozen observe
+contract to know what to probe, the adapter registry to know what could read it, and the roles
+matrix to know who may approve what. Every step is one commit of the change, its audit entry and
+its timeline event, so what the platform is watching and what the audit chain says can never
+disagree.
+
+The seven steps and what each one is responsible for:
+
+| Step | What it captures | What it refuses |
+|---|---|---|
+| Basics | app_id, name, tier, environment, owner, **base URL** | a non-kebab-case app_id, a base URL that is not an absolute http(s) root |
+| Connect | per-adapter config rendered from the adapter's own `config_schema`, plus auto-discovery and a direction-correct test | a credential scope the manifest does not offer, a duplicate binding at the same scope |
+| Map | golden signals incl. business counters, region label, journeys, probe templates, actions imported from the application's manifest | a selector that could never match, a probe or SLO naming an undeclared journey, a business counter outside the business family |
+| Topology | an uploaded map, versioned by its content | a document with a dangling edge - imported whole or not at all |
+| SLOs | SLO targets, the severity matrix, the policy defaults | an SLO with no error budget, burn rates that cannot tell fast from slow, a matrix that cannot express P0, and every floor violation in section 3.5 |
+| Baseline | what normal looks like per mapped signal | a baseline computed from fewer samples than the domain's floor |
+| Test | every connector in its own direction, every probe in every region, and the readiness score | nothing - it reports, it does not gate |
+
+### 3.1 The base URL does real work
+
+Basics is not a description form. The base URL it captures is what auto-discovery walks and what
+pre-fills every adapter whose `config_schema` declares a `base_url` property. That is the whole
+of "the app base URL prefills the observe adapters": the wizard renders the adapter's own schema
+and the field arrives filled. Nothing is invented - an adapter that does not ask for a base URL
+gets an empty prefill.
+
+It is also the first place a control is needed. The platform later makes requests to whatever is
+stored there, so a scheme that is not `http` or `https` is refused at the point somebody types
+it, and so is a URL carrying a query string or fragment: a root URL is a root URL.
+
+### 3.2 Auto-discovery asks two questions
+
+Discovery is unauthenticated, writes no binding, and probes:
+
+1. **the application's own base URL**, once per path in `contracts/observe.py` - so the question
+   is "which parts of the contract do you serve?" rather than "are you the application we know
+   about?";
+2. **the machine's well-known monitoring ports** - Prometheus on 9090 and Grafana on 3000 -
+   matched to adapters by the `vendor` their manifests declare, never by an adapter id compiled
+   into the core. A deployment that installs a different Prometheus adapter gets that one
+   suggested with no code change, and the URLs are configurable for a deployment that runs them
+   elsewhere.
+
+A `401` or `403` counts as **found**. Discovery has no credential, so that is the normal answer
+from an application that protects its observe surface; treating it as absence would make
+discovery useless against exactly the applications that are configured correctly. A `404` is a
+definite no. Unreachable is unreachable, and says so.
+
+What comes back is a suggestion per finding: the adapter, whether this node can actually run it,
+its credential scope and field names, and its config already pre-filled. A push-mode adapter is
+suggested as an **ingest key with a path to configure**, not as a connector to poll, because
+suggesting a binding for something that posts to us would be direction-wrong.
+
+### 3.3 A connection test is direction-correct or it is theatre
+
+The three adapter modes are three different questions, and one answer would be wrong for two of
+them:
+
+| Mode | What the test does | What a green tick means |
+|---|---|---|
+| `pull` | pings, then performs one read-only capability chosen per kind from the frozen SPI, and reports what came back ("read 6 metric series", "health is degraded across 2 components") | SignalForge can read it |
+| `invoke` | reads the manifest the application publishes and stops | SignalForge can see what it may ask for - **it never executes an action to prove it can** |
+| `push` | calls nothing; reports whether a key exists and when something last arrived | traffic is actually arriving |
+
+The push row is the one that matters most. A push binding tested by calling out would always
+pass, because SignalForge is the server: it is reachable whether or not the sender died a week
+ago. So it reads **pending** with the reason until real traffic arrives, and freshness - not
+reachability - is its measure.
+
+The failure states are as carefully separated as the successes, because the operator's next
+action differs: a rejected credential, an unreachable host, a target answering 500 and a timeout
+are four different messages; a connector nobody enabled is *skipped*, not red; and an adapter
+with no runtime on this node is skipped with the availability named. Nothing retries - a test
+that retries is measuring the retry.
+
+A test is a real observation, so its verdict is written back to the binding's health columns.
+That closes the gap S3-T01 recorded: a binding created between two health polls used to read
+`unknown` with no detail for up to the poll interval, and now the explicit test answers
+immediately, into the same columns the health loop writes and the integration health screen
+reads.
+
+### 3.4 Mapping: signals, journeys, probes and actions
+
+Golden signals are `traffic`, `errors`, `latency`, `saturation`, `availability` and `business`.
+Business is a first-class family rather than a metric tag, because a payments counter falling is
+the signal that matters most and the one no infrastructure dashboard carries. Each mapping names
+a metric selector - parsed with the same code the metrics adapter uses, so a selector that could
+never match is refused while somebody is looking at the field - and a *direction*, because
+`errors_total` rising and `success_ratio` falling are the same event and nothing in the string
+says so.
+
+The profile reports whether the mapping **can corroborate**: two independent families with one
+customer-facing, which is what the detection rule needs. An operator learns their mapping cannot
+corroborate anything now rather than during the first incident.
+
+Journeys are the unit customers experience and the unit the severity matrix reasons about. A
+probe template belongs to a journey, fans out across the declared regions, and carries a
+synthetic header so the application can exclude the platform's own health traffic from the
+business counters it reports.
+
+Actions are **imported from the application's own manifest**, never typed. The import keeps what
+the application declared beside what the operator decided, permanently: "the app said this was
+low risk and we raised it" is a fact an audit will want. A re-import refreshes the manifest side
+and preserves the override, an action withdrawn from the manifest is dropped, and an action the
+application reclassified into a high-risk class loses any `auto` setting rather than carrying it
+into a class that may never auto-execute.
+
+### 3.5 The policy floor, at the point somebody types it
+
+The SLO step is where a human first types something the floor has to refuse, and the refusal is
+structural rather than advisory. Refused for an **org owner**, who holds every permission this
+platform grants - the floor is not a permission:
+
+- a **high-risk class can never auto-execute**. Not by configuration, not by an operator's risk
+  override, not by an import. The six classes are frozen in `contracts/canonical.py`;
+- a **risk override may raise risk, never lower it** - neither below what the application
+  declared, nor below `high` for a high-risk class;
+- an **approver must actually hold `approve_high_risk`** in the frozen roles matrix. Naming the
+  Executive as the approver for a rollback is a separation-of-duties violation and is refused;
+- a **high-risk action may not be left with no approver at all**;
+- the **approval TTL is capped** (1 hour), and the high-risk classes cannot be removed from the
+  set that requires approval;
+- **audit is not a field**. It cannot be disabled, so it cannot be configured.
+
+Two consequences worth stating. First, the floor is enforced on the *merged* policy, so a partial
+edit cannot widen it by omission. Second, the floor is now data as well as code: a profile row is
+only as safe as what refuses to load it, so a row doctored past every route and service still
+fails to load rather than loading as something the floor would have refused.
+
+A refusal is evidence. It writes an audit entry and a timeline event
+(`system.app.policy.refused`) before the 422 goes back, because the error response is seen only
+by whoever tried, and "somebody tried to make a rollback auto-execute" is exactly what an audit
+wants to hold.
+
+The severity matrix is a deterministic function from observed impact - journey tier, regions
+affected, success rate, customer impact - to a proposed severity. Most severe matching rule
+wins; nothing matching is the default. It proposes; a human declares (REQ-043).
+
+### 3.6 Topology is versioned by content
+
+An uploaded map's version is the document's own when it declares one and a content fingerprint
+when it does not, ignoring capture time and node order. Re-uploading an unchanged document
+therefore finds the existing version and produces **no new version and no second event** - an
+operator who is not sure the first upload worked cannot manufacture a fake map change by trying
+again. That is what keeps "has the topology changed since the incident started" answerable.
+
+When the application has a bound topology adapter, the upload is normalised *through it*, so an
+upload and a scheduled pull produce the same snapshot from the same content; otherwise the domain
+importer does it and the profile records which. Versions are never overwritten and never pruned
+while the application exists.
+
+### 3.7 Baselines complete partially, on purpose
+
+Learning a baseline reads the metrics binding several times and summarises each mapped signal
+over what came back. One scrape answers every signal - the metrics contract is a point-in-time
+exposition, so reading it once per sample and selecting locally costs one call instead of one per
+signal, and every signal in a sample is measured at the same instant.
+
+The failure design matters more than the arithmetic. A signal whose selector matched nothing is
+**reported by name** and the signals that did match are still stored, because a run that
+discarded four good baselines over one bad selector would be unusable against a real application.
+Fewer usable samples than the domain's floor is a miss, not a baseline computed from two points.
+A run that fails outright changes nothing. And a baseline belongs to its signal: re-mapping the
+signals drops the baselines that no longer have one, rather than keeping a number nothing can be
+compared against.
+
+### 3.8 The readiness score
+
+Thirteen weighted checks summing to exactly 100, asserted by a test, because a score that drifts
+as checks are added is not comparable between two applications. Every point is a check somebody
+can act on: each names the wizard step that fixes it and says in one sentence what is missing.
+
+Five checks are **blocking** - a base URL, at least one integration, integrations actually
+answering, at least one golden signal, and at least one SLO. `ready` requires every blocking
+check to pass *and* the score to clear 80, so a high number can never mean "watchable" while a
+blocking check is red. The outstanding list is ordered blocking-first, then by points lost, so it
+reads as "what to do next".
+
+The test page is the step that turns the last checks green: it runs every connector test in its
+own direction and every journey probe in every declared region, stores the summary, and
+recomputes the score from what came back.

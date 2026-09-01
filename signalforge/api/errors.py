@@ -6,6 +6,7 @@ from __future__ import annotations
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from signalforge.contracts.errors import AdapterError, AdapterTimeoutError
 from signalforge.domain.identity.errors import (
     AuthenticationError,
     ConflictError,
@@ -52,3 +53,24 @@ def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(DomainValidationError)
     async def _invalid(request: Request, exc: DomainValidationError):
         return JSONResponse(status_code=422, content={"detail": str(exc)})
+
+    @app.exception_handler(AdapterError)
+    async def _adapter_failed(request: Request, exc: AdapterError):
+        """The integrated system failed, not this one.
+
+        502 rather than 500 so an operator can tell "SignalForge is broken" from
+        "the thing SignalForge was asked to call is broken", and 504 for a
+        timeout because the outcome of a timed-out call is unknown rather than
+        failed - a distinction the whole uncertain-execution design rests on.
+        The adapter's own message is passed through: it names a URL and a status
+        the operator can act on, and it never carries a credential (the error
+        taxonomy is raised by the transport, whose repr is redacted).
+        """
+        timed_out = isinstance(exc, AdapterTimeoutError)
+        return JSONResponse(
+            status_code=504 if timed_out else 502,
+            content={
+                "detail": str(exc),
+                "error": type(exc).__name__,
+            },
+        )

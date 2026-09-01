@@ -10,6 +10,11 @@ from signalforge.domain.adapters.ports import ConnectorBindingRepository
 from signalforge.domain.events.ports import EventStore
 from signalforge.domain.ingest.ports import IngestKeyRepository, IngestReceiptStore
 from signalforge.domain.integrations.ports import NotificationStore
+from signalforge.domain.onboarding.ports import (
+    ApplicationRepository,
+    OnboardingProfileRepository,
+    TopologyVersionRepository,
+)
 from signalforge.domain.identity.ports import (
     AuditWriter,
     EscalationRepository,
@@ -48,6 +53,14 @@ class IdentityUnitOfWork(ABC):
     one commit of four things: the idempotency receipts, the events they became,
     the counters on the key and the audit entry for anything refused. A receipt
     written without its event would silently swallow the sender's retry."""
+    applications: ApplicationRepository
+    onboarding: OnboardingProfileRepository
+    topologies: TopologyVersionRepository
+    """Onboarding (S3-T04). Here because every wizard step is one commit of the
+    change, its audit entry and its event: a profile that saved while its audit
+    entry did not would make the timeline disagree with what the platform is
+    actually watching, and a topology version stored without its event would be
+    invisible to replay."""
     audit: AuditWriter
     events: EventStore
     """The outbox: an event published here shares the use case's transaction."""

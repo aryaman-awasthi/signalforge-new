@@ -6,6 +6,78 @@ graph" section at the bottom is the authored pre-build decision record
 (signalforge-memory-graph.md, provided and imported 2026-09-01) - every N-line there
 is treated as already decided.
 
+## DR-044 (2026-09-01, S3) A connection test writes its verdict onto the binding
+The wizard's explicit test updates the binding's health columns - status, detail,
+last_ok_at, consecutive_failures - exactly as the 30-second health loop does. Why:
+S3-T01 recorded that a binding created between two polls reads `unknown` with no
+detail until the next one, and an operator who has just pressed "Test" and seen a
+green result should not then look at the integration health screen and see grey.
+Consequence: the two writers share the domain's transition methods, so a manual
+test and a poll cannot disagree about what DEGRADED means; three failed manual
+tests in a row read DOWN, which is correct and was not designed for separately.
+
+## DR-043 (2026-09-01, S3) Readiness is thirteen fixed weights and five blocking checks
+The score sums to exactly 100, asserted by a test, and `ready` requires every
+blocking check to pass as well as the score clearing 80. Why: a percentage that
+drifts as checks are added is not comparable between two applications, and a
+score alone would let an application read 85% "ready" with its only metrics
+connector failing. Consequence: adding a check means re-weighting the others -
+deliberately friction - and `connect.healthy` is blocking, so an application whose
+integrations are not answering is never ready however complete the wizard is.
+
+## DR-042 (2026-09-01, S3) Auto-discovery matches adapters by kind and vendor, never by id
+Observe endpoints are probed from the frozen `OBSERVE_PATHS` and matched to
+adapters by `kind`; the two well-known local services are matched by the `vendor`
+their manifests declare. Why: `infrastructure/adapters/builtin.py` is the only
+file in the platform that names an adapter, and discovery living in the
+application layer must not become the second. Consequence: a deployment that
+installs a different Prometheus adapter gets it suggested with no code change; the
+cost is that a vendor string is now load-bearing, which is documented in the
+adapters README. A 401 or 403 counts as *found*, because discovery is
+unauthenticated and that is the correct answer from a protected observe surface.
+
+## DR-041 (2026-09-01, S3) A push connector's test reads freshness, not reachability
+Testing a push binding calls nothing. It reports whether an ingest key exists and
+when something last arrived, and reads PENDING - not green, not red - until real
+traffic does. Why: SignalForge is the server for a push binding, so an outbound
+test would always pass even if the sender died a week ago. Consequence: the wizard
+has a fourth outcome (PENDING) beside passed/failed/skipped, and the test page's
+"all green" excludes pending, so an application is not "ready" on the strength of
+a push integration nobody has ever posted to.
+
+## DR-040 (2026-09-01, S3) An imported action keeps the manifest's declaration beside the override
+`MappedAction` stores `manifest_risk` and `risk_override` separately and forever,
+and a re-import refreshes the manifest side while preserving the operator's
+decision. Why: "the application said this was low risk and we raised it" is a fact
+an audit will want, and overwriting the override on every manifest redeploy would
+silently undo a risk decision. Consequence: an action reclassified by the
+application into a high-risk class loses an existing `auto` setting rather than
+carrying it in, and an override that would now *lower* the declared risk is
+dropped rather than applied.
+
+## DR-039 (2026-09-01, S3) Topology versions by content, and a re-upload is a no-op
+An uploaded map's version is its own when declared and a content fingerprint
+otherwise; a version that already exists produces no row, no event and no profile
+change. Why: an operator who is unsure the upload worked will upload again, and a
+wizard that answered "v2 published" to identical content would make "has the map
+changed since the incident started" unanswerable - the question blast radius
+depends on. Consequence: capture time and node order deliberately do not
+participate in the fingerprint, so re-capturing an unchanged estate is not a
+change; and a document that fails to normalise is the *caller's* 422 rather than a
+502, because `normalize` touches no integrated system.
+
+## DR-038 (2026-09-01, S3) A second RBAC factory for path-named applications
+`deps.require_app` reads `app_id` from the request's path parameters;
+`deps.require` keeps reading it from the query string. Why: the wizard names the
+application in the path, and FastAPI resolves a dependency parameter declared as a
+query parameter as a query parameter even when the route has a path parameter of
+that name - so one factory could not serve both without dropping the documented
+query parameter from twenty existing routes. Consequence: an operator whose
+manage_apps binding is scoped to one application is evaluated against that
+application on the wizard routes instead of org-wide, which grants access that was
+previously (wrongly) denied and denies nothing that was previously allowed; both
+directions are covered by tests.
+
 ## DR-037 (2026-09-01, S3) A batch is one transaction, and a rejected item does not consume its id
 Receipts, the events they became, the counters on the key and any audit entry
 commit together; per-item schema failures are reported in the 202 rather than

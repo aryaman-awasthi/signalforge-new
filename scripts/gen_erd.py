@@ -65,6 +65,15 @@ GROUPS: list[tuple[str, str, tuple[str, ...]]] = [
         ("ingest_keys", "ingest_receipts"),
     ),
     (
+        "Onboarding (S3)",
+        "What the wizard learned about an application. `applications` names the "
+        "tenant-scoped app_id every other table already uses; the profile is one "
+        "document per application because its invariants cross the wizard steps; "
+        "topology versions are kept forever, because 'has the map changed since "
+        "the incident started' is answered by comparing them.",
+        ("applications", "onboarding_profiles", "topology_versions"),
+    ),
+    (
         "Agent traces (S2, filled S5)",
         "Written from Sprint 5 by the agent suite; shipped now so agents are born "
         "observable rather than instrumented afterwards.",
@@ -215,6 +224,34 @@ prevent. `event_count` records that one posted item can become several events -
 an alerts webhook batch normalises into one canonical alert per alert - so the
 receipt does not imply a 1:1 mapping that does not hold.
 
+## 6d. Onboarding
+
+`applications` does not invent an identifier. `app_id` is the tenant-scoped slug
+that role bindings, connector bindings, ingest keys, events and audit entries
+already carry, so onboarding gives that string a name, a tier and a base URL
+rather than a new key everything else would have to join through. The unique
+constraint is `(tenant_id, app_id)`: two tenants may both call an application
+`checkout` and neither can see the other's.
+
+`onboarding_profiles` is **one row per application**, not a table per wizard
+step. The aggregate's invariants cross the steps - a probe names a journey, an
+SLO names a journey, a baseline names a signal - so every write loads the whole
+profile and lets the domain refuse the result as one thing. The sections are
+separate JSON columns so a reader that wants the policy does not parse the
+topology. Three of those columns hold the policy floor in stored form: the
+policy's `require_approval_classes` always contains the six high-risk classes,
+`approval_ttl_s` is capped, and no action row can carry `execution_mode: auto`
+against a high-risk class - a row written by an older build that violated any of
+those fails to load rather than loading as something the floor would refuse.
+
+`topology_versions` is append-only and unique on `(tenant_id, app_id, version)`.
+Version is the document's own when it declares one and a content fingerprint
+when it does not, so re-uploading an unchanged map finds the existing row and
+produces no second version and no second event. Nothing prunes this table while
+the application exists; removing the application removes its maps, and removing
+the application is refused while any connector or active ingest key still points
+at it.
+
 ## 7. Indexes
 
 Every index exists for a query the platform actually makes:
@@ -241,6 +278,8 @@ Every index exists for a query the platform actually makes:
 | `ix_ingest_keys_binding` | which keys a connector binding normalises for, when it is deleted |
 | `ix_ingest_receipts_key` | what has actually arrived on one key, newest first |
 | `ix_ingest_receipts_stream` | ingest volume and freshness per stream |
+| `ix_applications_tenant` | the apps overview and every wizard route's lookup |
+| `ix_topology_versions_app` | the topology step's version list, newest first |
 
 ## 8. Portability
 

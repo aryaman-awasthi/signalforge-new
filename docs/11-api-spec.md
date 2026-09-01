@@ -134,6 +134,47 @@ Deletes the binding and exactly its own secrets, and audits `system.connector.un
 The integration health screen. Every `GET /connectors` field plus `freshness_s` - seconds since
 the last successful check, `null` when there has never been one.
 
+## Onboarding: `/apps` (REQ-036)
+
+All of these require `manage_apps`. The application is named in the **path**, and the RBAC
+dependency reads it from there (`deps.require_app`), so an operator whose `manage_apps` binding
+is scoped to one application is evaluated against that application rather than org-wide. The two
+routes with no `app_id` in the path - listing and registering - are org-level and use the query
+form (`deps.require`).
+
+| Route | Step | Notes |
+|---|---|---|
+| `GET /apps` | - | each application with its readiness score and `ready` flag |
+| `POST /apps` -> 201 | Basics | 409 if the app_id is taken in this tenant; the response carries the application, the profile (with the policy floor already stored) and the readiness score |
+| `GET /apps/{app_id}` | - | application + profile + readiness |
+| `PATCH /apps/{app_id}` | Basics | partial; `clear_base_url` removes it |
+| `DELETE /apps/{app_id}` -> 204 | - | 409 while any connector or active ingest key still points at the application |
+| `POST /apps/{app_id}/discover` | Connect | unauthenticated outbound probes; writes an event, never a binding |
+| `POST /apps/{app_id}/connection-tests` | Connect | all bindings, or one via `binding_id`; direction-correct results |
+| `PUT /apps/{app_id}/mapping` | Map | signals, region label, regions, journeys, probes - each omitted field is unchanged |
+| `POST /apps/{app_id}/actions/import` | Map | imports the application's action manifest through its bound actions connector |
+| `PATCH /apps/{app_id}/actions/{action_id}` | Map | risk override, approver roles, execution mode, enabled |
+| `PUT /apps/{app_id}/topology` | Topology | `{"document": {...}}`; answers `unchanged: true` for content already imported |
+| `GET /apps/{app_id}/topology` | Topology | the latest snapshot plus the version list |
+| `PUT /apps/{app_id}/governance` | SLOs | SLOs and the severity matrix replace whole; the policy is patched and the floor is enforced on the merge |
+| `POST /apps/{app_id}/baseline` | Baseline | `{"samples": 3..30}`; returns what was learned and what was missed, with reasons |
+| `POST /apps/{app_id}/test` | Test | runs every connector test and every journey probe, stores the summary, returns the recomputed readiness |
+| `GET /apps/{app_id}/readiness` | - | the thirteen weighted checks, the score, `ready`, and the outstanding list blocking-first |
+
+Status codes worth naming:
+
+| Code | When |
+|---|---|
+| 404 | the application is not in this tenant - identical body whether it belongs to another tenant or to nobody |
+| 409 | a duplicate app_id, or a removal blocked by a live connector or ingest key |
+| 422 | domain validation *and* every policy-floor refusal, including for an org owner |
+| 502 | the integrated system failed during an import, a test read or a baseline run - `{"detail": ..., "error": "AdapterUnavailableError"}` |
+| 504 | the integrated system did not answer in time; the outcome is unknown, not failed |
+
+502 and 504 are new with this task and belong to the whole API: they are how "the thing
+SignalForge was asked to call is broken" is told apart from "SignalForge is broken". No adapter
+error message carries a credential - the transport that raises them redacts its own repr.
+
 ## Ingest keys (REQ-032)
 
 All `manage_apps`. An ingest key is the credential a *sending application* holds: a bearer
@@ -254,9 +295,20 @@ fix the payload and resend with the same one.
 | `topology.updated` | signal | owning tenant | an accepted `topology` item |
 | `collaboration.message.received` | signal | owning tenant | an accepted `messages` item |
 | `itsm.ticket.updated` | signal | owning tenant | an accepted `tickets` item |
+| `system.app.registered` / `.updated` / `.removed` | signal | owning tenant | Basics; `.updated` carries `base_url_changed` and the previous URL |
+| `system.app.discovered` | signal | owning tenant | an auto-discovery run: what was probed, what answered, which adapters were suggested |
+| `system.connector.tested` | signal | owning tenant | one per binding tested, with the direction, the outcome and each check |
+| `system.app.mapping.updated` | signal | owning tenant | signals, region label, journeys and probes saved |
+| `system.app.actions.updated` | signal | owning tenant | an actions import, or one action's risk / approvers / mode changed |
+| `system.app.governance.updated` | signal | owning tenant | SLOs, severity matrix or policy defaults saved |
+| `system.app.policy.refused` | signal | owning tenant | the policy floor refused an edit - written *before* the 422 |
+| `topology.updated` | signal | owning tenant | a topology upload that produced a new version |
+| `system.app.baseline.learned` | signal | owning tenant | a baseline run: what was learned and what was missed, with reasons |
+| `system.app.tested` | signal | owning tenant | the wizard's test page: connector and probe outcomes |
 
 Audit topics `audit.ingest.rejected` and `audit.ingest.duplicate` carry the same facts into the
-hash chain, one entry per batch rather than one per item.
+hash chain, one entry per batch rather than one per item. Every onboarding topic above is also an
+audit entry with the same payload, written in the same transaction as the change it describes.
 
 ## `GET /ws` - the cockpit notification socket (REQ-033)
 

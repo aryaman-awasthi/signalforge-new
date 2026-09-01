@@ -550,6 +550,96 @@ class KnowledgeDocumentRow(Base):
     indexed_at: Mapped[datetime] = mapped_column(TZDateTime)
 
 
+class ApplicationRow(Base):
+    """An onboarded application (S3-T04).
+
+    `app_id` is not invented here: it is the tenant-scoped slug role bindings,
+    connector bindings, ingest keys, events and audit entries already use. This
+    table gives that string a name, a tier and - the part that does real work -
+    a base URL, which is what auto-discovery walks and what pre-fills the
+    `base_url` config field of every adapter whose schema asks for one.
+    """
+
+    __tablename__ = "applications"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "app_id", name="uq_applications_app_id"),
+        Index("ix_applications_tenant", "tenant_id", "app_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    app_id: Mapped[str] = mapped_column(String(100))
+    name: Mapped[str] = mapped_column(String(200))
+    tier: Mapped[str] = mapped_column(String(20), default="tier_2")
+    environment: Mapped[str] = mapped_column(String(20), default="production")
+    base_url: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)
+    description: Mapped[str] = mapped_column(Text, default="")
+    owner_team: Mapped[str] = mapped_column(String(200), default="")
+    created_at: Mapped[datetime] = mapped_column(TZDateTime)
+    created_by: Mapped[str] = mapped_column(String(36))
+    updated_at: Mapped[datetime] = mapped_column(TZDateTime)
+
+
+class OnboardingProfileRow(Base):
+    """Everything the wizard learned about one application, as one document.
+
+    One row per application rather than a table per step, because the aggregate's
+    invariants cross the steps - a probe names a journey, a baseline names a
+    signal, an SLO names a journey - and enforcing those needs the whole profile
+    in hand on every write. The sections are separate JSON columns so a reader
+    that wants only the policy does not parse the topology.
+    """
+
+    __tablename__ = "onboarding_profiles"
+
+    tenant_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    app_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    signals: Mapped[list] = mapped_column(JSON, default=list)
+    region_label: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    regions: Mapped[list] = mapped_column(JSON, default=list)
+    journeys: Mapped[list] = mapped_column(JSON, default=list)
+    probes: Mapped[list] = mapped_column(JSON, default=list)
+    actions: Mapped[list] = mapped_column(JSON, default=list)
+    slos: Mapped[list] = mapped_column(JSON, default=list)
+    severity_matrix: Mapped[dict] = mapped_column(JSON, default=dict)
+    policy: Mapped[dict] = mapped_column(JSON, default=dict)
+    baselines: Mapped[list] = mapped_column(JSON, default=list)
+    topology: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    last_test: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(TZDateTime)
+
+
+class TopologyVersionRow(Base):
+    """One imported map, kept forever.
+
+    Versions are never overwritten and never pruned: "has the topology changed
+    since the incident started" is answered by comparing versions, and the
+    blast-radius delta needs the older graph to still exist. The unique key on
+    (tenant, app, version) is what makes re-uploading an unchanged document a
+    no-op rather than a second version.
+    """
+
+    __tablename__ = "topology_versions"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "app_id", "version", name="uq_topology_versions_version"
+        ),
+        Index("ix_topology_versions_app", "tenant_id", "app_id", "imported_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    app_id: Mapped[str] = mapped_column(String(100))
+    version: Mapped[str] = mapped_column(String(120))
+    snapshot: Mapped[dict] = mapped_column(JSON)
+    node_count: Mapped[int] = mapped_column(Integer, default=0)
+    edge_count: Mapped[int] = mapped_column(Integer, default=0)
+    imported_at: Mapped[datetime] = mapped_column(TZDateTime)
+    imported_by: Mapped[str] = mapped_column(String(36), default="")
+    source: Mapped[str] = mapped_column(String(20), default="upload")
+    normalized_by: Mapped[str] = mapped_column(String(64), default="")
+
+
 class EventSealRow(Base):
     __tablename__ = "event_seals"
     __table_args__ = (Index("ix_event_seals_tenant", "tenant_id", "sealed_at"),)

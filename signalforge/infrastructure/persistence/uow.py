@@ -28,6 +28,11 @@ from signalforge.infrastructure.persistence.ingest import (
     SqlIngestReceiptStore,
 )
 from signalforge.infrastructure.persistence.integrations import SqlNotificationStore
+from signalforge.infrastructure.persistence.onboarding import (
+    SqlApplicationRepository,
+    SqlOnboardingProfileRepository,
+    SqlTopologyVersionRepository,
+)
 from signalforge.infrastructure.security.audit import AuditChainWriter
 from signalforge.infrastructure.security.secrets import FernetSecretStore
 
@@ -58,6 +63,9 @@ class SqlIdentityUnitOfWork(IdentityUnitOfWork):
         self.notifications = SqlNotificationStore(self._session)
         self.ingest_keys = SqlIngestKeyRepository(self._session)
         self.ingest_receipts = SqlIngestReceiptStore(self._session)
+        self.applications = SqlApplicationRepository(self._session)
+        self.onboarding = SqlOnboardingProfileRepository(self._session)
+        self.topologies = SqlTopologyVersionRepository(self._session)
         self.audit = AuditChainWriter(self._session, clock=self._clock)
         self.events = SqlEventStore(self._session, clock=self._clock)
         return self

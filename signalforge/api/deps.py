@@ -23,6 +23,13 @@ from signalforge.application.adapters.health import ConnectorHealthSources
 from signalforge.application.adapters.invoker import ConnectorInvoker
 from signalforge.application.adapters.registry_service import AdapterRegistryService
 from signalforge.application.notifications.inbox import NotificationInbox
+from signalforge.application.onboarding.apps import ApplicationService
+from signalforge.application.onboarding.discovery import DiscoveryService
+from signalforge.application.onboarding.testing import (
+    ConnectionTestService,
+    ReadinessService,
+)
+from signalforge.application.onboarding.wizard import OnboardingService
 from signalforge.application.events.bus import EventBus
 from signalforge.application.events.consumers import BUS_METRICS_GROUP, BusMetricsConsumer
 from signalforge.application.events.dead_letters import DeadLetterService
@@ -49,6 +56,7 @@ from signalforge.infrastructure.adapters.runtimes import AdapterRuntimeRegistry
 from signalforge.infrastructure.adapters.services import AdapterServices
 from signalforge.infrastructure.clock import SwitchableClock, SystemClock
 from signalforge.infrastructure.notifications.hub import InProcessNotificationHub
+from signalforge.infrastructure.onboarding.probe import HttpEndpointProbe
 from signalforge.infrastructure.persistence.integrations import (
     SqlIntegrationUnitOfWork,
 )
@@ -206,6 +214,45 @@ class Container:
             clock=self.clock,
             recording_clock=self.wall_clock,
             metrics=self.metrics,
+        )
+
+        # Onboarding (S3-T04). The wizard's services sit on top of everything
+        # above: the registry decides what can be suggested, the invoker is the
+        # only way a connection test or a baseline reaches an application, and
+        # the discovery probe is the one unauthenticated outbound call this
+        # platform makes.
+        self.applications = ApplicationService(self.uow_factory, self.bus, self.clock)
+        self.endpoint_probe = HttpEndpointProbe(self.adapter_services)
+        self.discovery = DiscoveryService(
+            self.uow_factory,
+            self.adapter_registry,
+            self.adapter_runtimes,
+            self.endpoint_probe,
+            self.bus,
+            self.clock,
+        )
+        self.onboarding = OnboardingService(
+            self.uow_factory,
+            self.adapter_registry,
+            self.invoker,
+            self.bus,
+            self.clock,
+        )
+        self.connection_tests = ConnectionTestService(
+            self.uow_factory,
+            self.adapter_registry,
+            self.adapter_runtimes,
+            self.invoker,
+            self.bus,
+            self.clock,
+        )
+        self.readiness = ReadinessService(
+            self.uow_factory,
+            self.adapter_registry,
+            self.invoker,
+            self.connection_tests,
+            self.bus,
+            self.clock,
         )
 
         # Self-observability (S2-T03).
@@ -400,6 +447,32 @@ def require(permission: Permission):
         container: Container = Depends(get_container),
         app_id: Optional[str] = Query(default=None),
     ) -> Principal:
+        await container.auth.authorize(
+            principal, permission, app_id, resource=request.url.path
+        )
+        return principal
+
+    return dependency
+
+
+def require_app(permission: Permission):
+    """The same decision for routes that name the application in the *path*.
+
+    `/apps/{app_id}/...` asks the same question `?app_id=` does - which
+    application is this call about - so a per-app role binding has to be
+    evaluated against it. It is a second factory rather than a branch in
+    `require` because FastAPI resolves a name declared as a query parameter as a
+    query parameter even when the route has a path parameter of that name; the
+    path value is read from the request instead, and `require` keeps documenting
+    its query parameter for every route that has one.
+    """
+
+    async def dependency(
+        request: Request,
+        principal: Principal = Depends(get_principal),
+        container: Container = Depends(get_container),
+    ) -> Principal:
+        app_id = request.path_params.get("app_id")
         await container.auth.authorize(
             principal, permission, app_id, resource=request.url.path
         )
