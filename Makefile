@@ -4,7 +4,7 @@
 SHELL := bash
 PY := $(shell [ -x .venv/Scripts/python.exe ] && echo .venv/Scripts/python.exe || { [ -x .venv/bin/python ] && echo .venv/bin/python || echo python; })
 
-.PHONY: run test rtm report erd openapi evidence llm-smoke clean-check help
+.PHONY: run test rtm report erd openapi nfr evidence llm-smoke clean-check help
 
 help:
 	@echo "SignalForge targets:"
@@ -13,6 +13,7 @@ help:
 	@echo "  make rtm          generate docs/20-RTM.md from specs + test results"
 	@echo "  make report       generate docs/21-test-report.md"
 	@echo "  make erd          generate docs/10-data-design.md from the models"
+	@echo "  make nfr          generate docs/16 + docs/17 from a recorded nfr run"
 	@echo "  make openapi      export docs/11-openapi.json + the docs/11 route catalogue"
 	@echo "  make evidence     pull runtime evidence for one requirement: make evidence REQ=REQ-021"
 	@echo "  make llm-smoke    check the GenAI Lab gateway (opt-in; needs GENAILAB_API_KEY)"
