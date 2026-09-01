@@ -14,7 +14,7 @@ from signalforge.domain.events.ports import (
     RetentionStore,
     SealStore,
 )
-from signalforge.domain.identity.ports import AuditWriter
+from signalforge.domain.identity.ports import AuditReader, AuditWriter
 from signalforge.domain.incidents.ports import ChangeWindowStore
 from signalforge.domain.observability.agent_runs import AgentRunStore
 
@@ -32,6 +32,10 @@ class EventUnitOfWork(ABC):
     consumer that folded a deployment event outside the dispatcher's transaction
     could advance its offset without having stored what it read."""
     audit: AuditWriter
+    audit_log: AuditReader
+    """The chain, read back (REQ-072). Beside the writer rather than behind a
+    second unit of work, because an auditor reading a replay and the seal it is
+    checked against must be looking at one consistent snapshot."""
 
     @abstractmethod
     async def __aenter__(self) -> "EventUnitOfWork": ...

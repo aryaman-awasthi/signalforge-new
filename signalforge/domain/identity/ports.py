@@ -19,6 +19,7 @@ from signalforge.domain.identity.entities import (
     Tenant,
     User,
 )
+from signalforge.domain.audit.entries import AuditRecord as AuditRecordLike
 from signalforge.domain.identity.oncall import EscalationPolicy, OnCallRotation
 
 
@@ -217,6 +218,37 @@ class AuditWriter(ABC):
         payload: dict[str, Any],
         app_id: Optional[str] = None,
     ) -> None: ...
+
+
+class AuditReader(ABC):
+    """Reading the chain back (REQ-072).
+
+    Separate from AuditWriter on purpose. Writing is something almost every use
+    case does; reading the whole chain of a tenant is something an auditor and a
+    post-incident review do, and keeping them apart means the read path can be
+    given to a read-only role without handing anybody the pen.
+
+    Every method takes the tenant explicitly and none of them accepts a
+    cross-tenant option, because the one thing a replay must never do is show
+    somebody another organisation's incident.
+    """
+
+    @abstractmethod
+    async def read(
+        self,
+        tenant_id: str,
+        *,
+        incident_id: Optional[str] = None,
+        after_seq: int = 0,
+        until_seq: Optional[int] = None,
+        limit: int = 1000,
+    ) -> Sequence["AuditRecordLike"]: ...
+
+    @abstractmethod
+    async def verify(
+        self, tenant_id: str, *, until_seq: Optional[int] = None
+    ) -> tuple[int, tuple[int, ...]]:
+        """Returns (records checked, seqs whose hash or link no longer holds)."""
 
 
 class RateLimiter(ABC):

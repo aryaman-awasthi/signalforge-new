@@ -488,6 +488,31 @@ steps:
     capture: comms_user
     identity: {name: comms, token_path: tokens.access_token, user_id_path: user.id}
 
+  - id: invite-auditor
+    kind: machine
+    actor: owner
+    label: "An auditor is invited - read the record, change nothing"
+    call:
+      method: POST
+      path: /invites
+      body: {email: "ash@northwind.test", roles: [auditor], app_id: null}
+      expect_status: [201]
+    capture: auditor_invite
+
+  - id: accept-auditor
+    kind: machine
+    label: "Ash Auditor accepts"
+    call:
+      method: POST
+      path: /auth/accept-invite
+      body:
+        token: "{{auditor_invite.token}}"
+        password: drill-strong-password
+        display_name: Ash Auditor
+      expect_status: [201]
+    capture: auditor_user
+    identity: {name: auditor, token_path: tokens.access_token, user_id_path: user.id}
+
   - id: rotation
     kind: machine
     actor: owner
@@ -1528,3 +1553,84 @@ steps:
     label: "CP-32 closed by a person, after the platform agreed it could be"
     expect:
       closed.state: closed
+
+  # ==========================================================================
+  # 9. Afterwards: an auditor reconstructs it, and the review is generated
+  #    from the record rather than from anybody's recollection.
+  # ==========================================================================
+
+  - id: refresh-auditor
+    kind: machine
+    label: "Ash signs back in the next morning"
+    call:
+      method: POST
+      path: /auth/refresh
+      body: {refresh_token: "{{auditor_user.tokens.refresh_token}}"}
+      expect_status: [200]
+    capture: auditor_session
+    identity: {name: auditor, token_path: access_token}
+
+  - id: replay
+    kind: human
+    actor: auditor
+    label: "The whole incident, replayed from the hash-chained record"
+    call: {method: GET, path: "/incidents/{{incident.id}}/replay"}
+    capture: replay
+
+  - id: cp-replay
+    kind: checkpoint
+    label: "CP-33 the chain verifies, and the sequence is all there"
+    note: >-
+      An auditor holds `read_audit` and nothing else. What comes back is the
+      incident, in order, with who did each thing and what justified it - and a
+      chain status that would say so if any of it had been edited.
+    expect:
+      - {path: replay.chain.valid, equals: true}
+      - {path: replay.chain.checked, gt: 0}
+      - {path: replay.count, gte: 20}
+      - {path: "replay.entries[].topic", contains: incident.declared}
+      - {path: "replay.entries[].topic", contains: execution.blocked}
+      - {path: "replay.entries[].topic", contains: execution.approval.granted}
+      - {path: "replay.entries[].topic", contains: execution.uncertain}
+      - {path: "replay.entries[].topic", contains: execution.retry.blocked}
+      - {path: "replay.entries[].topic", contains: execution.reconciled}
+      - {path: "replay.entries[].topic", contains: execution.duplicate.prevented}
+      - {path: "replay.entries[].topic", contains: incident.closure.blocked}
+      - {path: "replay.entries[].topic", contains: comms.issued}
+      - {path: "replay.entries[].topic", contains: incident.closed}
+
+  - id: pir
+    kind: human
+    actor: auditor
+    label: "The post-incident review is generated from those records"
+    call:
+      method: POST
+      path: "/incidents/{{incident.id}}/pir"
+      body: {}
+      expect_status: [201]
+    capture: pir
+
+  - id: cp-pir
+    kind: checkpoint
+    label: "CP-34 the review is deterministic, complete, and its lessons are gated"
+    note: >-
+      `degraded: true` is the point: this review was written with no model at
+      all. Every verified lesson cites a record this incident produced; anything
+      that could not be shown is still on the page, marked proposed.
+    expect:
+      - {path: pir.chain_valid, equals: true}
+      - {path: pir.degraded, equals: true}
+      - {path: pir.model, equals: deterministic}
+      - {path: pir.sections, length: 16}
+      - {path: pir.verified_lesson_count, gte: 1}
+      - {path: "pir.sections[].key", contains: uncertain}
+      - {path: "pir.sections[].key", contains: communications}
+      - {path: "pir.sections[].key", contains: lessons}
+      - {path: pir.markdown, matches: "Post-incident review"}
+
+  - id: cp-lessons-gated
+    kind: checkpoint
+    label: "CP-35 no lesson is verified without citations"
+    expect:
+      - {path: "pir.lessons[].status", each_in: [verified, proposed]}
+      - {path: pir.lessons, min_length: 1}

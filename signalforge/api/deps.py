@@ -71,7 +71,9 @@ from signalforge.application.governance.nba_service import NextBestActionService
 from signalforge.application.governance.policy_service import PolicyService
 from signalforge.application.governance.validation_service import ValidationService
 from signalforge.application.events.dispatcher import Dispatcher
+from signalforge.application.audit.replay_service import IncidentReplayService
 from signalforge.application.events.replay import ReplayService
+from signalforge.application.pir.service import PirService
 from signalforge.application.events.retention import RetentionService
 from signalforge.application.events.sealing import SealService
 from signalforge.application.ingest.ingest_service import (
@@ -567,6 +569,20 @@ class Container:
         )
         self.incidents.closure_guards.append(self.validation.assert_closable)
 
+        # Audit replay and the post-incident review it feeds (S7-T03, S7-T04).
+        # The replay's actor directory turns user ids into names, because a
+        # replay that said "user 4f1c8a2b approved the rollback" would be
+        # complete and useless.
+        self.incident_replay = IncidentReplayService(
+            self.event_uow_factory,
+            reader_factory=lambda uow: uow.audit_log,
+            clock=self.clock,
+            directory=self._actor_labels,
+        )
+        self.pir = PirService(
+            self.uow_factory, replay=self.incident_replay, clock=self.clock
+        )
+
         # Self-observability (S2-T03).
         self.health = ConnectorHealthService(
             self.event_uow_factory, self.bus, clock=self.wall_clock, metrics=self.metrics
@@ -665,6 +681,17 @@ class Container:
             metrics=self.metrics,
         )
         return jobs
+
+    async def _actor_labels(self, tenant_id: str) -> dict[str, str]:
+        """Every user in the tenant, id to display name, for a readable replay.
+
+        Tenant-scoped like everything else, and read once per replay rather than
+        per entry - a two-hundred-line timeline should not be two hundred
+        queries.
+        """
+        async with self.uow_factory() as uow:
+            users = await uow.users.list(tenant_id)
+        return {user.id: (user.display_name or user.email) for user in users}
 
     async def _stand_down(self, incident) -> None:
         """The incident closed: stop ringing phones, and close the room.

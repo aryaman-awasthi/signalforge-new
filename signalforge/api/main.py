@@ -20,6 +20,7 @@ from signalforge.api.middleware import RequestContextMiddleware
 from signalforge.api.openapi import build_openapi
 from signalforge.api.routers import (
     adapters,
+    audit,
     auth,
     brain,
     detection,
@@ -109,6 +110,7 @@ app.include_router(incidents.apps_router)
 app.include_router(warroom.router)
 app.include_router(brain.router)
 app.include_router(governance.router)
+app.include_router(audit.router)
 app.include_router(ingest_keys.router)
 app.include_router(ingest.router)
 app.include_router(platform.router)

@@ -18,7 +18,7 @@ from signalforge.infrastructure.persistence.event_store import (
 )
 from signalforge.infrastructure.persistence.agent_runs import SqlAgentRunStore
 from signalforge.infrastructure.persistence.incidents import SqlChangeWindowStore
-from signalforge.infrastructure.security.audit import AuditChainWriter
+from signalforge.infrastructure.security.audit import AuditChainWriter, SqlAuditReader
 
 
 class SqlEventUnitOfWork(EventUnitOfWork):
@@ -48,6 +48,7 @@ class SqlEventUnitOfWork(EventUnitOfWork):
         self.agent_runs = SqlAgentRunStore(self._session)
         self.changes = SqlChangeWindowStore(self._session)
         self.audit = AuditChainWriter(self._session, clock=self._clock)
+        self.audit_log = SqlAuditReader(self._session)
         return self
 
     async def __aexit__(self, exc_type, exc, tb) -> None:
