@@ -107,7 +107,7 @@ catalogue below and its frame protocol is written out later in this document.
 
 <!-- BEGIN GENERATED ROUTE CATALOGUE (scripts/gen_openapi.py) -->
 
-131 routes: 120 need a human session, 5 a sending application's ingest key, and 6 no credential at all - and that last number is the one the security suite pins to a closed list.
+134 routes: 123 need a human session, 5 a sending application's ingest key, and 6 no credential at all - and that last number is the one the security suite pins to a closed list.
 
 The permission column is read from each route's own RBAC dependency, so a route guarded by the wrong permission is documented as guarded by the wrong permission. It also says where a per-application role binding is evaluated from: `?app_id=`, the optional query parameter every route guarded by `deps.require` accepts, or `path`, the application named in the URL on the wizard's own routes.
 
@@ -261,6 +261,16 @@ The incident lifecycle: steady, watch and proposed are detection's stances; acti
 | POST | `/incidents/{incident_id}/itsm-sync` | session | `declare_incident` | Try the ITSM again now instead of waiting for the retry sweep. |
 | PATCH | `/incidents/{incident_id}/severity` | session | `change_severity` | Re-grade an open incident. |
 | POST | `/incidents/{incident_id}/state` | session | `declare_incident` | Move an incident to recovering, or back to active after a regression. |
+
+### `audit`
+
+Reconstructing a closed incident from the hash-chained record, and the post-incident review generated from it. Read-only and behind read_audit, which is the Auditor role's only permission. The tenant comes from the session and appears in no parameter, so a cross-tenant replay is not a check that could be got wrong. A replay reports whether the chain still verifies and names the first record that does not; the review refuses to generate at all when it does not, because a PIR is quoted.
+
+| Method | Path | Credential | Permission | Purpose |
+|---|---|---|---|---|
+| GET | `/incidents/{incident_id}/pir` | session | `read_audit` (`?app_id=`) | The same document, regenerated. |
+| POST | `/incidents/{incident_id}/pir` | session | `read_audit` (`?app_id=`) | Generate the post-incident review from the incident's own records. |
+| GET | `/incidents/{incident_id}/replay` | session | `read_audit` (`?app_id=`) | Reconstruct the incident from the hash-chained audit log. |
 
 ### `ingest`
 

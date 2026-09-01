@@ -525,7 +525,7 @@ requirements:
     area: drills-audit
     sprint: S7
     priority: must
-    status: planned
+    status: built
     acceptance: >
       Scenario YAML replays human/machine/inject/checkpoint events on a visible virtual
       clock with speeds and stepping; chaos adapter locked to drill scope; one-command
@@ -536,7 +536,7 @@ requirements:
     area: drills-audit
     sprint: S7
     priority: must
-    status: planned
+    status: built
     acceptance: >
       The flagship drill lives entirely in drills/ against the reference harness; two
       full rehearsals warm the LLM cache; deleting drills leaves a working product.
@@ -546,7 +546,7 @@ requirements:
     area: drills-audit
     sprint: S7
     priority: must
-    status: planned
+    status: built
     acceptance: >
       Scrubber re-renders graph, hypotheses and blast radius at any seq; PIR generates
       timeline, verified causes, wrong assumptions, comms corrections and action items
@@ -557,7 +557,7 @@ requirements:
     area: drills-audit
     sprint: S7
     priority: must
-    status: planned
+    status: built
     acceptance: >
       Non-functional, performance, security (incl. prompt-injection probes) and
       vulnerability suites executed and reported; release package and user guide

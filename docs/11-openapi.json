@@ -2347,6 +2347,49 @@
         "title": "CausalChainOut",
         "type": "object"
       },
+      "ChainStatusOut": {
+        "properties": {
+          "broken_seqs": {
+            "default": [],
+            "items": {
+              "type": "integer"
+            },
+            "title": "Broken Seqs",
+            "type": "array"
+          },
+          "checked": {
+            "title": "Checked",
+            "type": "integer"
+          },
+          "first_broken_seq": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Broken Seq"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "valid": {
+            "description": "False means the stored audit records no longer match their hashes. A replay that reports false is not evidence and the PIR generator refuses to build on it.",
+            "title": "Valid",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "valid",
+          "checked",
+          "reason"
+        ],
+        "title": "ChainStatusOut",
+        "type": "object"
+      },
       "ChangeWindowItemOut": {
         "properties": {
           "actor": {
@@ -2589,6 +2632,29 @@
           "open"
         ],
         "title": "ChangeWindowOut",
+        "type": "object"
+      },
+      "CitationOut": {
+        "properties": {
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "kind"
+        ],
+        "title": "CitationOut",
         "type": "object"
       },
       "ClockOut": {
@@ -6642,6 +6708,64 @@
         "title": "LedgerOut",
         "type": "object"
       },
+      "LessonOut": {
+        "properties": {
+          "citations": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CitationOut"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "description": "verified or proposed. A lesson is verified only when every one of its citations resolves to a record this incident produced.",
+            "title": "Status",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "unresolved": {
+            "default": [],
+            "description": "Citations that did not resolve. Present on a proposed lesson so a reviewer can see what could not be shown.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Unresolved",
+            "type": "array"
+          },
+          "verified_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified At"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "status",
+          "source"
+        ],
+        "title": "LessonOut",
+        "type": "object"
+      },
       "LifecycleOut": {
         "properties": {
           "app_id": {
@@ -7654,6 +7778,106 @@
         ],
         "title": "Permission",
         "type": "string"
+      },
+      "PirOut": {
+        "properties": {
+          "app_id": {
+            "title": "App Id",
+            "type": "string"
+          },
+          "chain_detail": {
+            "title": "Chain Detail",
+            "type": "string"
+          },
+          "chain_valid": {
+            "title": "Chain Valid",
+            "type": "boolean"
+          },
+          "degraded": {
+            "title": "Degraded",
+            "type": "boolean"
+          },
+          "followups": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Followups",
+            "type": "array"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "incident_id": {
+            "title": "Incident Id",
+            "type": "string"
+          },
+          "lessons": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/LessonOut"
+            },
+            "title": "Lessons",
+            "type": "array"
+          },
+          "markdown": {
+            "description": "The exported review. Deterministic, so two exports of one incident are byte-identical.",
+            "title": "Markdown",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "Metadata",
+            "type": "object"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "proposed_lesson_count": {
+            "default": 0,
+            "title": "Proposed Lesson Count",
+            "type": "integer"
+          },
+          "reference": {
+            "title": "Reference",
+            "type": "string"
+          },
+          "sections": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SectionOut"
+            },
+            "title": "Sections",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "verified_lesson_count": {
+            "default": 0,
+            "title": "Verified Lesson Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "incident_id",
+          "reference",
+          "title",
+          "app_id",
+          "generated_at",
+          "chain_valid",
+          "chain_detail",
+          "degraded",
+          "model",
+          "markdown"
+        ],
+        "title": "PirOut",
+        "type": "object"
       },
       "PlanIn": {
         "properties": {
@@ -8705,6 +8929,144 @@
         "title": "RegistryOut",
         "type": "object"
       },
+      "ReplayEntryOut": {
+        "properties": {
+          "actor_id": {
+            "title": "Actor Id",
+            "type": "string"
+          },
+          "actor_label": {
+            "title": "Actor Label",
+            "type": "string"
+          },
+          "actor_type": {
+            "title": "Actor Type",
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "consequence": {
+            "description": "consequential, decision, observation or administrative - how much a reviewer should care.",
+            "title": "Consequence",
+            "type": "string"
+          },
+          "effect": {
+            "default": "",
+            "title": "Effect",
+            "type": "string"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "headline": {
+            "title": "Headline",
+            "type": "string"
+          },
+          "justification": {
+            "description": "Why this was allowed: the policy rules hit, the approval spent, the evidence cited, the reason given.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Justification",
+            "type": "array"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "Payload",
+            "type": "object"
+          },
+          "references": {
+            "description": "Things that can be opened to check it: result refs, execution ids, node ids, seals.",
+            "items": {
+              "type": "string"
+            },
+            "title": "References",
+            "type": "array"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "topic": {
+            "title": "Topic",
+            "type": "string"
+          }
+        },
+        "required": [
+          "seq",
+          "event_id",
+          "topic",
+          "at",
+          "headline",
+          "actor_type",
+          "actor_id",
+          "actor_label",
+          "consequence",
+          "justification",
+          "references"
+        ],
+        "title": "ReplayEntryOut",
+        "type": "object"
+      },
+      "ReplayOut": {
+        "properties": {
+          "chain": {
+            "$ref": "#/components/schemas/ChainStatusOut"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "entries": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ReplayEntryOut"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "from_seq": {
+            "title": "From Seq",
+            "type": "integer"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "incident_id": {
+            "title": "Incident Id",
+            "type": "string"
+          },
+          "seals": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/signalforge__api__schemas__audit__SealOut"
+            },
+            "title": "Seals",
+            "type": "array"
+          },
+          "to_seq": {
+            "title": "To Seq",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "incident_id",
+          "generated_at",
+          "chain",
+          "count",
+          "from_seq",
+          "to_seq"
+        ],
+        "title": "ReplayOut",
+        "type": "object"
+      },
       "RequeueOut": {
         "properties": {
           "attempts": {
@@ -9203,84 +9565,6 @@
         "title": "SealIn",
         "type": "object"
       },
-      "SealOut": {
-        "properties": {
-          "event_count": {
-            "title": "Event Count",
-            "type": "integer"
-          },
-          "from_seq": {
-            "title": "From Seq",
-            "type": "integer"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "incident_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Incident Id"
-          },
-          "plane": {
-            "title": "Plane",
-            "type": "string"
-          },
-          "prev_seal_hash": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Prev Seal Hash"
-          },
-          "scope": {
-            "title": "Scope",
-            "type": "string"
-          },
-          "seal_hash": {
-            "title": "Seal Hash",
-            "type": "string"
-          },
-          "sealed_at": {
-            "format": "date-time",
-            "title": "Sealed At",
-            "type": "string"
-          },
-          "sealed_by": {
-            "title": "Sealed By",
-            "type": "string"
-          },
-          "to_seq": {
-            "title": "To Seq",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "id",
-          "scope",
-          "plane",
-          "incident_id",
-          "from_seq",
-          "to_seq",
-          "event_count",
-          "seal_hash",
-          "prev_seal_hash",
-          "sealed_at",
-          "sealed_by"
-        ],
-        "title": "SealOut",
-        "type": "object"
-      },
       "SealVerificationOut": {
         "properties": {
           "broken_seqs": {
@@ -9320,6 +9604,40 @@
           "detail"
         ],
         "title": "SealVerificationOut",
+        "type": "object"
+      },
+      "SectionOut": {
+        "properties": {
+          "citations": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CitationOut"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "lines": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "title"
+        ],
+        "title": "SectionOut",
         "type": "object"
       },
       "SetRolesRequest": {
@@ -11593,6 +11911,50 @@
         "title": "WsTicketOut",
         "type": "object"
       },
+      "signalforge__api__schemas__audit__SealOut": {
+        "properties": {
+          "event_count": {
+            "title": "Event Count",
+            "type": "integer"
+          },
+          "from_seq": {
+            "title": "From Seq",
+            "type": "integer"
+          },
+          "seal_hash": {
+            "title": "Seal Hash",
+            "type": "string"
+          },
+          "seal_id": {
+            "title": "Seal Id",
+            "type": "string"
+          },
+          "sealed_at": {
+            "format": "date-time",
+            "title": "Sealed At",
+            "type": "string"
+          },
+          "sealed_by": {
+            "title": "Sealed By",
+            "type": "string"
+          },
+          "to_seq": {
+            "title": "To Seq",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "seal_id",
+          "from_seq",
+          "to_seq",
+          "event_count",
+          "seal_hash",
+          "sealed_at",
+          "sealed_by"
+        ],
+        "title": "SealOut",
+        "type": "object"
+      },
       "signalforge__api__schemas__brain__AgentRunOut": {
         "properties": {
           "agent": {
@@ -11869,6 +12231,84 @@
           "customer_impacting"
         ],
         "title": "ImpactOut",
+        "type": "object"
+      },
+      "signalforge__api__schemas__events__SealOut": {
+        "properties": {
+          "event_count": {
+            "title": "Event Count",
+            "type": "integer"
+          },
+          "from_seq": {
+            "title": "From Seq",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "incident_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Incident Id"
+          },
+          "plane": {
+            "title": "Plane",
+            "type": "string"
+          },
+          "prev_seal_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prev Seal Hash"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          },
+          "seal_hash": {
+            "title": "Seal Hash",
+            "type": "string"
+          },
+          "sealed_at": {
+            "format": "date-time",
+            "title": "Sealed At",
+            "type": "string"
+          },
+          "sealed_by": {
+            "title": "Sealed By",
+            "type": "string"
+          },
+          "to_seq": {
+            "title": "To Seq",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "scope",
+          "plane",
+          "incident_id",
+          "from_seq",
+          "to_seq",
+          "event_count",
+          "seal_hash",
+          "prev_seal_hash",
+          "sealed_at",
+          "sealed_by"
+        ],
+        "title": "SealOut",
         "type": "object"
       },
       "signalforge__api__schemas__governance__PolicyIn": {
@@ -15383,7 +15823,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/SealOut"
+                    "$ref": "#/components/schemas/signalforge__api__schemas__events__SealOut"
                   },
                   "title": "Response List Seals Events Seals Get",
                   "type": "array"
@@ -15451,7 +15891,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SealOut"
+                  "$ref": "#/components/schemas/signalforge__api__schemas__events__SealOut"
                 }
               }
             },
@@ -17903,6 +18343,138 @@
         "x-signalforge-permission": "declare_incident"
       }
     },
+    "/incidents/{incident_id}/pir": {
+      "get": {
+        "description": "The same document, regenerated.\n\nA PIR is derived, not stored: regenerating it from the record is the whole\nguarantee, and a stored copy would be the thing that drifts.",
+        "operationId": "read_pir_incidents__incident_id__pir_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "app_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "App Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PirOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Read Pir",
+        "tags": [
+          "audit"
+        ],
+        "x-signalforge-app-scope": "query",
+        "x-signalforge-auth": "session",
+        "x-signalforge-permission": "read_audit"
+      },
+      "post": {
+        "description": "Generate the post-incident review from the incident's own records.\n\n409 when the audit chain does not verify. A PIR is the artefact people quote\nsix months later, so it is not produced at all from records that no longer\nmatch their hashes.",
+        "operationId": "generate_pir_incidents__incident_id__pir_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "app_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "App Id"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PirOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Generate Pir",
+        "tags": [
+          "audit"
+        ],
+        "x-signalforge-app-scope": "query",
+        "x-signalforge-auth": "session",
+        "x-signalforge-permission": "read_audit"
+      }
+    },
     "/incidents/{incident_id}/plan": {
       "get": {
         "description": "Plan versions, newest first. The diff triad reads the top two.",
@@ -18025,6 +18597,92 @@
         "x-signalforge-app-scope": "incident",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "declare_incident"
+      }
+    },
+    "/incidents/{incident_id}/replay": {
+      "get": {
+        "description": "Reconstruct the incident from the hash-chained audit log.\n\nReturns a document whether or not the chain verifies, and says which it is.\nHiding a broken chain would be the one unforgivable behaviour here; refusing\nto return anything would deny an auditor the very view that shows what was\ntampered with.",
+        "operationId": "replay_incident_incidents__incident_id__replay_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Replay only up to this audit seq - the scrubber position.",
+            "in": "query",
+            "name": "until_seq",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Replay only up to this audit seq - the scrubber position.",
+              "title": "Until Seq"
+            }
+          },
+          {
+            "in": "query",
+            "name": "app_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "App Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplayOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Replay Incident",
+        "tags": [
+          "audit"
+        ],
+        "x-signalforge-app-scope": "query",
+        "x-signalforge-auth": "session",
+        "x-signalforge-permission": "read_audit"
       }
     },
     "/incidents/{incident_id}/severity": {
@@ -20117,6 +20775,10 @@
     {
       "description": "The incident lifecycle: steady, watch and proposed are detection's stances; active, recovering and closed are an incident, and only a person moves between the two halves. Reads are session-scoped to the caller's tenant and carry no permission, because the frozen roles matrix gives the SME - the role that answers a page - none; every write names declare_incident, change_severity or close_incident. Also the change window: a deployment announced as started and never announced as completed.",
       "name": "incidents"
+    },
+    {
+      "description": "Reconstructing a closed incident from the hash-chained record, and the post-incident review generated from it. Read-only and behind read_audit, which is the Auditor role's only permission. The tenant comes from the session and appears in no parameter, so a cross-tenant replay is not a check that could be got wrong. A replay reports whether the chain still verifies and names the first record that does not; the review refuses to generate at all when it does not, because a PIR is quoted.",
+      "name": "audit"
     },
     {
       "description": "Ingest keys, and the five frozen push endpoints a sending application posts to.",

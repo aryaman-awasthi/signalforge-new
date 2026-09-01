@@ -110,6 +110,14 @@ TAGS: list[dict[str, str]] = [
         "write names declare_incident, change_severity or close_incident. Also "
         "the change window: a deployment announced as started and never "
         "announced as completed."},
+    {"name": "audit", "description":
+        "Reconstructing a closed incident from the hash-chained record, and the "
+        "post-incident review generated from it. Read-only and behind read_audit, "
+        "which is the Auditor role's only permission. The tenant comes from the "
+        "session and appears in no parameter, so a cross-tenant replay is not a "
+        "check that could be got wrong. A replay reports whether the chain still "
+        "verifies and names the first record that does not; the review refuses to "
+        "generate at all when it does not, because a PIR is quoted."},
     {"name": "ingest", "description":
         "Ingest keys, and the five frozen push endpoints a sending application "
         "posts to."},
