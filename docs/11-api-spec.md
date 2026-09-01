@@ -1,15 +1,314 @@
 # 11 - API specification
 
-Owner: engineering. Sections are written as endpoints land; the exported OpenAPI document and
-the complete route catalogue arrive with S3-T07. Every route except `/health`, `/metrics` and
-the four `/auth` bootstrap endpoints resolves a real credential before its handler runs, and
-the permission each one needs is named below. The five `/api/v1/ingest/*` routes are the one
-exception to "credential means human session": they resolve a machine credential - an ingest
-key with an HMAC over the body - and are described under Ingest keys below.
+Owner: engineering. This is the prose half of the API contract. The machine-readable half is
+[`docs/11-openapi.json`](11-openapi.json), exported from the running application by
+`scripts/gen_openapi.py` (`make openapi`) and byte-identical to what `GET /openapi.json`
+serves. Prose carries what a schema cannot: why a route refuses something, which of two
+directions a number describes, and what a status code means for the caller's *next* action.
+Where the two disagree the export is right and this file is stale, and a test says so before
+anyone reads it.
 
-Errors are mapped once, in `signalforge/api/errors.py`: 401 authentication, 403 permission
-denied (with `permission` and `reason`), 404 not found, 409 conflict, 422 domain validation,
-429 rate limited with `Retry-After`.
+How to read it: **Conventions** first (they apply to every route and are not repeated),
+then the generated **route catalogue** - every route, its credential and its permission -
+then a section per area with the bodies and the refusals that matter, then the events the API
+emits, the notification socket, and the observe contract an onboarded application serves.
+
+## Conventions
+
+### Credentials
+
+Three kinds, and every operation in the exported document states which it wants in
+`x-signalforge-auth`:
+
+| Credential | Who holds it | How it is presented | Routes |
+|---|---|---|---|
+| **session** | a person | `Authorization: Bearer <access token>` from `/auth/signup`, `/auth/login` or `/auth/refresh`; 15 minutes, rotated by the refresh token | everything except the rows below |
+| **ingest key** | a sending application | `Authorization: Bearer sfi_…` **plus** an HMAC-SHA256 over `"<timestamp>.<raw body>"` in `X-SignalForge-Signature`, timestamped within 300s | the five `/api/v1/ingest/*` paths |
+| **none** | anyone | - | `/health`, `/metrics` and the four `/auth` bootstrap routes: signup, login, refresh, accept-invite |
+
+That third row is a closed list. A test in the security suite reads the published document and
+fails if any other operation is reachable without a credential, so "we accidentally shipped an
+unauthenticated route" is a failing build rather than a finding.
+
+A session is not a permission. `/auth/me`, `/roles/matrix`, `/orgs/current`, `/users`,
+`/oncall/rotations` (read) and `/escalation/policies` (read) need a valid session and nothing
+more - every member of a tenant may see who is on call and which policies exist. Everything
+that writes, and everything that reads another party's material, names a permission from the
+frozen roles matrix.
+
+### Per-application scope
+
+`manage_apps` can be granted org-wide or bound to one application. Which application a call is
+about therefore has to be readable before the handler runs, and it comes from one of two places:
+the `?app_id=` query parameter (`deps.require`) or the `{app_id}` path segment
+(`deps.require_app`). The catalogue names which, per route, and the exported document repeats it
+in `x-signalforge-app-scope`. Both resolve to the same decision; the split exists because
+FastAPI resolves a dependency parameter declared as a query parameter as a query parameter even
+when the route has a path parameter of that name (DR-038).
+
+### Errors
+
+Mapped once, in `signalforge/api/errors.py`, so a new route cannot invent its own vocabulary:
+
+| Code | Meaning | Body |
+|---|---|---|
+| 401 | no credential, or one that no longer authenticates | `{"detail": "authentication failed"}` - deliberately uninformative on the ingest paths |
+| 403 | authenticated, not allowed | `{"detail": "permission denied", "permission": ..., "reason": ...}`, and an `audit.authz.denied` entry |
+| 404 | not in this tenant - identical whether it belongs to somebody else or to nobody | `{"detail": ...}` |
+| 409 | a duplicate, or a removal something live still depends on | names the conflicting object |
+| 413 | body over the configured cap (2 MiB default), refused before it is read | |
+| 422 | domain validation **and** every policy-floor refusal, including for an org owner | the domain's own sentence, not a schema dump |
+| 429 | rate limited, with `Retry-After` | login and ingest have separate limits |
+| 502 | the integrated system SignalForge was asked to call failed | `{"detail": ..., "error": "AdapterUnavailableError"}` |
+| 504 | the integrated system did not answer in time - the outcome is **unknown**, not failed | |
+
+502 and 504 are the pair worth internalising: they are how "the thing SignalForge called is
+broken" is told apart from "SignalForge is broken", and 504 never means the call did not happen.
+
+### Tenancy, idempotency and time
+
+Every read and write carries the tenant predicate inside the repository, not in the handler, so
+a cross-tenant id is a 404 rather than a leak. Producer-assigned ids are the idempotency unit
+where one exists: `event_id` on ingest (unique per tenant), the topology document's content
+fingerprint on upload, and the caller's `idempotency_key` on an action execution. Repeating one
+is acknowledged, never re-applied. All timestamps are RFC 3339 with an offset; `occurred_at` can
+follow a drill clock while `recorded_at` is always wall time.
+
+## The exported document
+
+`docs/11-openapi.json` is OpenAPI 3.1, generated by `signalforge/api/openapi.py` from the live
+route table. Beyond the stock FastAPI export it carries, per operation:
+
+| Field | Value |
+|---|---|
+| `security` | `sessionBearer`, or the three ingest schemes together (`ingestKey` + `ingestSignature` + `ingestTimestamp`, all required), or `[]` for the six routes that need nothing |
+| `x-signalforge-auth` | `session`, `ingest-key` or `none` |
+| `x-signalforge-permission` | the permission the route's RBAC dependency closes over; absent when a session alone is enough |
+| `x-signalforge-app-scope` | `path` or `query` - where the application id for a per-app role binding is read from |
+| `x-signalforge-ingest-stream` | which stream an ingest key must be scoped to; a correctly signed request from a key bound to another stream is a 403 |
+| `x-signalforge-optional-headers` | `X-SignalForge-Key-Id` on the ingest paths |
+
+Those fields are **read out of the route's own guard**, not from a list kept beside it.
+That is the whole point: a route guarded by the wrong permission is published as guarded by the
+wrong permission, where a reviewer and a test can both see it, and an unguarded route is
+published as `none` - which is a closed list the security suite pins.
+
+Regenerate with `make openapi` (or `python scripts/gen_openapi.py`) whenever a route, a schema
+or a guard changes; `python scripts/gen_openapi.py --check` fails without writing, for a hook.
+The suite fails if the committed export is not what the application would serve today.
+
+The one route the export cannot describe is `GET /ws`: OpenAPI has no WebSocket. It is in the
+catalogue below and its frame protocol is written out later in this document.
+
+## Route catalogue
+
+<!-- BEGIN GENERATED ROUTE CATALOGUE (scripts/gen_openapi.py) -->
+
+72 routes: 61 need a human session, 5 a sending application's ingest key, and 6 no credential at all - and that last number is the one the security suite pins to a closed list.
+
+The permission column is read from each route's own RBAC dependency, so a route guarded by the wrong permission is documented as guarded by the wrong permission. It also says where a per-application role binding is evaluated from: `?app_id=`, the optional query parameter every route guarded by `deps.require` accepts, or `path`, the application named in the URL on the wizard's own routes.
+
+### `auth`
+
+Session bootstrap: signup, login, refresh, invite acceptance, logout and the caller's own identity. The only routes that need no credential are here, because they are how a caller gets one.
+
+| Method | Path | Credential | Permission | Purpose |
+|---|---|---|---|---|
+| POST | `/auth/accept-invite` | **none** | - | Accept invite |
+| POST | `/auth/login` | **none** | - | Login |
+| POST | `/auth/logout` | session | (session only) | Logout |
+| GET | `/auth/me` | session | (session only) | Me |
+| POST | `/auth/refresh` | **none** | - | Refresh |
+| POST | `/auth/signup` | **none** | - | Signup |
+
+### `orgs`
+
+The calling session's own tenant.
+
+| Method | Path | Credential | Permission | Purpose |
+|---|---|---|---|---|
+| GET | `/orgs/current` | session | (session only) | Current org |
+| PATCH | `/orgs/current` | session | `manage_org` (`?app_id=`) | Rename org |
+
+### `users`
+
+Members of the tenant and their role bindings, org-wide or per application.
+
+| Method | Path | Credential | Permission | Purpose |
+|---|---|---|---|---|
+| GET | `/users` | session | (session only) | List users |
+| PUT | `/users/{user_id}/roles` | session | `manage_org` (`?app_id=`) | Set user roles |
+
+### `invites`
+
+Invitations into the tenant. The invite token is in the 201 and nowhere else; revoking one is immediate.
+
+| Method | Path | Credential | Permission | Purpose |
+|---|---|---|---|---|
+| GET | `/invites` | session | `manage_org` (`?app_id=`) | List invites |
+| POST | `/invites` | session | `manage_org` (`?app_id=`) | Create invite |
+| DELETE | `/invites/{invite_id}` | session | `manage_org` (`?app_id=`) | Revoke invite |
+
+### `roles`
+
+The frozen roles and permissions matrix, read-only for everyone.
+
+| Method | Path | Credential | Permission | Purpose |
+|---|---|---|---|---|
+| GET | `/roles/matrix` | session | (session only) | Roles matrix |
+
+### `oncall`
+
+Rotations that escalation policies page.
+
+| Method | Path | Credential | Permission | Purpose |
+|---|---|---|---|---|
+| GET | `/oncall/rotations` | session | (session only) | List rotations |
+| POST | `/oncall/rotations` | session | `manage_org` (`?app_id=`) | Create rotation |
+| DELETE | `/oncall/rotations/{rotation_id}` | session | `manage_org` (`?app_id=`) | Delete rotation |
+| PUT | `/oncall/rotations/{rotation_id}` | session | `manage_org` (`?app_id=`) | Update rotation |
+
+### `escalation`
+
+Escalation policies, their ordered steps and a test fire that pages nobody.
+
+| Method | Path | Credential | Permission | Purpose |
+|---|---|---|---|---|
+| GET | `/escalation/policies` | session | (session only) | List policies |
+| POST | `/escalation/policies` | session | `manage_org` (`?app_id=`) | Create policy |
+| DELETE | `/escalation/policies/{policy_id}` | session | `manage_org` (`?app_id=`) | Delete policy |
+| PUT | `/escalation/policies/{policy_id}` | session | `manage_org` (`?app_id=`) | Update policy |
+| POST | `/escalation/policies/{policy_id}/test` | session | `run_drills` (`?app_id=`) | Test fire policy |
+
+### `events`
+
+Replay of the event log, the causal chain of one event, and the seals that make a stored chain provable.
+
+| Method | Path | Credential | Permission | Purpose |
+|---|---|---|---|---|
+| GET | `/events` | session | `read_audit` (`?app_id=`) | Replay |
+| GET | `/events/seals` | session | `read_audit` (`?app_id=`) | List seals |
+| POST | `/events/seals` | session | `close_incident` (`?app_id=`) | Create seal |
+| POST | `/events/seals/{seal_id}/verify` | session | `read_audit` (`?app_id=`) | Verify seal |
+| GET | `/events/{event_id}` | session | `read_audit` (`?app_id=`) | Get event |
+| GET | `/events/{event_id}/chain` | session | `read_audit` (`?app_id=`) | Causal chain |
+
+### `adapters`
+
+The adapter registry read off the manifests on disk, the capability matrix, and per-application connector bindings with their health.
+
+| Method | Path | Credential | Permission | Purpose |
+|---|---|---|---|---|
+| GET | `/adapters` | session | `manage_apps` (`?app_id=`) | List adapters |
+| GET | `/adapters/capability-matrix` | session | `manage_apps` (`?app_id=`) | Capability matrix |
+| GET | `/adapters/{adapter_id}` | session | `manage_apps` (`?app_id=`) | Get adapter |
+| GET | `/connectors` | session | `manage_apps` (`?app_id=`) | List connectors |
+| POST | `/connectors` | session | `manage_apps` (`?app_id=`) | Create connector |
+| GET | `/connectors/health` | session | `manage_apps` (`?app_id=`) | What the S23 integration health screen reads: direction, last pull, last push, freshness, errors and the SIMULATED flag - the bindings the health... |
+| DELETE | `/connectors/{binding_id}` | session | `manage_apps` (`?app_id=`) | Delete connector |
+| GET | `/connectors/{binding_id}` | session | `manage_apps` (`?app_id=`) | Get connector |
+| PATCH | `/connectors/{binding_id}` | session | `manage_apps` (`?app_id=`) | Update connector |
+
+### `onboarding`
+
+The seven wizard steps: basics, connect and discover, map, topology, SLOs and policy, baseline, test - plus the readiness score.
+
+| Method | Path | Credential | Permission | Purpose |
+|---|---|---|---|---|
+| GET | `/apps` | session | `manage_apps` (`?app_id=`) | List applications |
+| POST | `/apps` | session | `manage_apps` (`?app_id=`) | Register application |
+| DELETE | `/apps/{app_id}` | session | `manage_apps` (path) | Remove application |
+| GET | `/apps/{app_id}` | session | `manage_apps` (path) | Get application |
+| PATCH | `/apps/{app_id}` | session | `manage_apps` (path) | Update application |
+| POST | `/apps/{app_id}/actions/import` | session | `manage_apps` (path) | Import the actions the application publishes in its own manifest. |
+| PATCH | `/apps/{app_id}/actions/{action_id}` | session | `manage_apps` (path) | Override action |
+| POST | `/apps/{app_id}/baseline` | session | `manage_apps` (path) | Learn baseline |
+| POST | `/apps/{app_id}/connection-tests` | session | `manage_apps` (path) | Run connection tests |
+| POST | `/apps/{app_id}/discover` | session | `manage_apps` (path) | Probe the application's base URL for the frozen observe contract, and the machine's well-known monitoring ports, without a credential and without... |
+| PUT | `/apps/{app_id}/governance` | session | `manage_apps` (path) | SLO targets, the severity matrix and the policy defaults. |
+| PUT | `/apps/{app_id}/mapping` | session | `manage_apps` (path) | Set mapping |
+| GET | `/apps/{app_id}/readiness` | session | `manage_apps` (path) | Get readiness |
+| POST | `/apps/{app_id}/test` | session | `manage_apps` (path) | Everything at once: every connector tested in its own direction, every journey probe run in every declared region, and the readiness score... |
+| GET | `/apps/{app_id}/topology` | session | `manage_apps` (path) | Get topology |
+| PUT | `/apps/{app_id}/topology` | session | `manage_apps` (path) | Upload topology |
+
+### `ingest`
+
+Ingest keys, and the five frozen push endpoints a sending application posts to.
+
+| Method | Path | Credential | Permission | Purpose |
+|---|---|---|---|---|
+| POST | `/api/v1/ingest/alerts` | ingest key + HMAC | - | Accept a batch of alerts |
+| POST | `/api/v1/ingest/changes` | ingest key + HMAC | - | Accept a batch of change events (deployments, config, flags) |
+| POST | `/api/v1/ingest/messages` | ingest key + HMAC | - | Accept a batch of collaboration messages |
+| POST | `/api/v1/ingest/tickets` | ingest key + HMAC | - | Accept a batch of ITSM tickets |
+| POST | `/api/v1/ingest/topology` | ingest key + HMAC | - | Accept a topology snapshot |
+| GET | `/ingest-keys` | session | `manage_apps` (`?app_id=`) | List ingest keys |
+| POST | `/ingest-keys` | session | `manage_apps` (`?app_id=`) | Issue ingest key |
+| DELETE | `/ingest-keys/{key_id}` | session | `manage_apps` (`?app_id=`) | Revoke ingest key |
+| GET | `/ingest-keys/{key_id}` | session | `manage_apps` (`?app_id=`) | Get ingest key |
+| POST | `/ingest-keys/{key_id}/rotate` | session | `manage_apps` (`?app_id=`) | Issue a successor. |
+
+### `platform`
+
+Liveness, the Prometheus scrape, platform status, the dead-letter queue and agent-run traces.
+
+| Method | Path | Credential | Permission | Purpose |
+|---|---|---|---|---|
+| GET | `/health` | **none** | - | Health |
+| GET | `/metrics` | **none** | - | Metrics |
+| GET | `/platform/agent-runs` | session | `read_audit` (`?app_id=`) | List agent runs |
+| GET | `/platform/agent-runs/{run_id}` | session | `read_audit` (`?app_id=`) | Get agent run |
+| GET | `/platform/dead-letters` | session | `manage_apps` (`?app_id=`) | List dead letters |
+| POST | `/platform/dead-letters/{dead_letter_id}/requeue` | session | `manage_apps` (`?app_id=`) | Requeue dead letter |
+| GET | `/platform/status` | session | `manage_apps` (`?app_id=`) | Platform status |
+| WS | `/ws` | session | (session only) | Notification socket |
+
+<!-- END GENERATED ROUTE CATALOGUE -->
+
+## Identity, org and on-call (REQ-010, REQ-012, REQ-014)
+
+Bootstrap first. `POST /auth/signup` creates a tenant, its first user (org owner) and a session
+in one transaction; `POST /auth/accept-invite` does the same for an invited user against an
+existing tenant. Both answer 201 with `{user, org, tokens}`. `POST /auth/login` answers the same
+shape, rate limited per `(org, email)` so one account being attacked never locks out the
+tenant, and a rate-limited attempt is itself audited. `POST /auth/refresh` rotates: the presented
+refresh token is spent and a new pair comes back, so a stolen refresh token is usable at most
+once and its use is detectable. `POST /auth/logout` revokes the session; the access token is
+short-lived by design and the revocation store is what makes logout immediate.
+
+`GET /auth/me` is what a cockpit calls on load: the principal's ids, display name, role bindings
+and the *resolved* permission set, so the UI never re-derives the matrix. `GET /roles/matrix`
+returns the frozen matrix itself, for screens that need to explain a denial.
+
+Org management is `manage_org`, which the roles matrix grants to the org owner alone:
+`PATCH /orgs/current` (rename), `POST|GET /invites` and `DELETE /invites/{id}` (issue, list,
+revoke - the invite token is in the 201 and nowhere else), `PUT /users/{user_id}/roles`
+(replaces the whole binding set, org-wide or per application), `POST|PUT|DELETE
+/oncall/rotations…` and `POST|PUT|DELETE /escalation/policies…`.
+`POST /escalation/policies/{id}/test` is `run_drills` rather than `manage_org`: it returns the
+page plan the policy would produce, step by step with its timers, and pages nobody.
+
+## Events, replay and the platform surface (REQ-023, REQ-025)
+
+`GET /events` replays the log: `after_seq`, `until`, repeated `topics`, `incident_id`, `plane`
+and `limit`, answering a page plus the head sequence, so a client resumes from `lastSeq` rather
+than re-reading. `GET /events/{id}` is one envelope and `GET /events/{id}/chain` is its causal
+chain - the events that caused it and the events it caused - which is what makes "why did this
+happen" answerable out of interleaved noise. All three are `read_audit`.
+
+Seals make a stored chain provable. `POST /events/seals` (`close_incident`) freezes the chain up
+to a sequence with a hash binding `seq`, `event_id`, `payload_hash` and the previous hash;
+`GET /events/seals` lists them and `POST /events/seals/{id}/verify` recomputes, both
+`read_audit`. The split is deliberate: an auditor can verify everything and seal nothing.
+
+The operator surface is `GET /platform/status` (components, bus head and per-group lag,
+dead-letter counts, the clock source with a visible drill badge, worker jobs and retention
+watermarks), `GET /platform/dead-letters` with
+`POST /platform/dead-letters/{id}/requeue`, and `GET /platform/agent-runs[/{id}]`
+(`read_audit`) for what the agents did and what it cost. Requeue records the intent, audits it,
+and reports `drained_here` honestly: on a node that runs no consumer for that group, the requeue
+is real and the drain happens elsewhere.
 
 ## Adapter registry and connectors (REQ-030)
 

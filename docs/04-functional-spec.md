@@ -2,8 +2,11 @@
 
 Owner: engineering. Written per feature area as features land (artifact 04, due S3 onward).
 Each section describes behaviour that exists in the running product, with the REQ id it
-satisfies and the tests that hold it in place. Sections for onboarding, detection, the war
-room, the incident brain, governance and drills arrive with their sprints.
+satisfies and the tests that hold it in place. Chapters 1 and 2 cover integrations, 3 to 5 cover
+onboarding - what the platform decides, what the operator sees, and one real application taken
+through it - and chapter 6 states onboarding as a contract an integrating team can implement
+against. Sections for detection, the war room, the incident brain, governance and drills arrive
+with their sprints. The API shapes behind every route named here are in `docs/11-api-spec.md`.
 
 ## 1. Integrations: the adapter registry (REQ-030)
 
@@ -796,3 +799,138 @@ server, and the bytes and headers it actually sent - not a re-serialisation of t
 replayed at the real ingest endpoint. They are accepted; the same run repeated is a duplicate
 that publishes nothing; and a run signed with the wrong secret is refused with a bare 401, with
 the reason on the key row, in the tenant's timeline and in the audit chain.
+
+## 6. Onboarding as a contract (REQ-036, REQ-030, REQ-032, REQ-038)
+
+Chapter 3 is what the platform does with an application, chapter 4 is what the operator sees,
+chapter 5 is one application that went through it. This chapter is the one an *integrating team*
+reads: what SignalForge needs, what it will never ask for, in what order it has to arrive, and
+what happens to each part of it when something breaks. Every step names the routes it drives, so
+an application that would rather be onboarded by a script than by seven screens can make the same
+calls in the same order; the shapes are in `docs/11-api-spec.md` and `docs/11-openapi.json`.
+
+### 6.1 What an application must provide
+
+Onboarding is scored, not gated, and the score says exactly what is missing. Five checks are
+**blocking**: without them an application can be registered, but nothing should claim to be
+watching it.
+
+| What SignalForge needs | Points | Blocking | Provided by | Without it |
+|---|---|---|---|---|
+| An application id, name, tier, environment and owning team | - | - | Basics | there is nothing to attach a role binding, an event or an incident to |
+| A base URL that is an absolute `http(s)` root | 10 | **yes** | Basics | auto-discovery and journey probes have nothing to resolve against |
+| At least one integration - a connector binding or an ingest key | 10 | **yes** | Connect | no signal arrives at all |
+| Those integrations actually answering | 10 | **yes** | Connect | the map is a plan, not a feed |
+| At least one golden signal with a selector that parses | 10 | **yes** | Map | nothing to evaluate |
+| At least one SLO with an error budget | 10 | **yes** | SLOs | burn rate, and therefore proposal, is undefined |
+| A business counter | 5 | no | Map | customer impact is inferred from infrastructure only |
+| A region label | 5 | no | Map | per-region health cannot be separated, so a one-region fault reads as a whole-application fault |
+| Journeys with probe templates | 10 | no | Map | severity has no customer-facing unit to reason about |
+| Actions imported from the application's manifest | 5 | no | Map | the platform can advise and never act |
+| A topology document | 10 | no | Topology | blast radius cannot be computed |
+| A severity matrix | 5 | no | SLOs | the shipped default is used - it exists from the first second on purpose |
+| Baselines | 5 | no | Baseline | anomalies have nothing to be anomalous against |
+| A green end-to-end test | 5 | no | Test | nobody has confirmed the whole path since it was configured |
+
+`ready` requires every blocking check *and* a score of 80. The weights sum to exactly 100 and a
+test asserts it, so two applications' scores mean the same thing.
+
+Note what is not on the list: an SDK, an agent, a library, a callback registration, a schema in
+the application's database, or any awareness on the application's part that SignalForge exists.
+The application serves the frozen observe contract - or posts to the frozen ingest paths, or
+both - and the rest is configuration the operator types once.
+
+### 6.2 What SignalForge does not ask for, on purpose
+
+- **No credential wider than the capability.** Credentials are bound per scope: `read_only` for
+  telemetry, `remediation` for actions, `drill` for chaos. A manifest that declares a mutating
+  capability may not offer `read_only`, and the floor is re-checked at call time, not only when
+  the binding is created.
+- **No deployment access.** The platform is never given a way to release. The pipeline direction
+  is inbound only, one signed POST, and it holds a key that reaches exactly one stream.
+- **No write access to anything it reads.** A metrics, logs, traces, health or topology binding
+  is bound at `read_only` and the SPI kind has no mutating method to call.
+- **No standing execution.** An `invoke` binding is tested by *reading the manifest the
+  application publishes*, never by executing something to prove it can.
+- **No credential ever comes back out.** Connector credentials go in write-only and are stored
+  Fernet-encrypted; an ingest token and its HMAC secret are readable exactly once, in the 201
+  that issues them. Losing one is answered by rotating, which issues a successor and leaves the
+  original live until it is revoked.
+
+### 6.3 The order, and why it is an order
+
+| # | Step | Routes | Needs first | Writes | Event |
+|---|---|---|---|---|---|
+| 1 | Basics | `POST /apps`, `PATCH /apps/{app_id}` | nothing | the application | `system.app.registered` / `.updated` |
+| 2 | Connect | `POST /apps/{app_id}/discover`, `POST /connectors`, `POST /ingest-keys`, `POST /apps/{app_id}/connection-tests` | a base URL, for discovery to have a target | bindings, ingest keys, health verdicts | `system.app.discovered`, `system.connector.bound`, `system.ingest.key.issued`, `system.connector.tested` |
+| 3 | Map | `PUT /apps/{app_id}/mapping`, `POST /apps/{app_id}/actions/import`, `PATCH .../actions/{action_id}` | an actions binding, to import from the manifest; nothing for the rest - a selector is parsed here, not resolved against live series | signals, region label, journeys, probes, actions | `system.app.mapping.updated`, `system.app.actions.updated` |
+| 4 | Topology | `PUT` / `GET /apps/{app_id}/topology` | nothing; a bound topology adapter normalises the upload when there is one | a version, append-only | `topology.updated` |
+| 5 | SLOs and policy | `PUT /apps/{app_id}/governance` | journeys, because an SLO names one | SLOs, severity matrix, policy defaults | `system.app.governance.updated`, or `system.app.policy.refused` |
+| 6 | Baseline | `POST /apps/{app_id}/baseline` | mapped signals and a metrics binding | baselines per signal | `system.app.baseline.learned` |
+| 7 | Test | `POST /apps/{app_id}/test`, `GET /apps/{app_id}/readiness` | whatever exists - it reports, it does not gate | the test summary | `system.app.tested` |
+
+The order is a dependency order, not a ceremony. Discovery needs somewhere to probe; importing
+actions needs the connector that reads the manifest; an SLO names a journey the mapping declared;
+a baseline is a measurement, so it needs both a signal to measure and a binding to measure it
+through. Everything else is free: an operator who already knows the map can skip discovery, and
+an application with no actions manifest simply never scores those five points.
+
+Each step is one commit of the change, its audit entry and its event, so the profile and the
+audit chain cannot disagree about what the platform was told to watch and when.
+
+### 6.4 Two directions in, and one that is neither
+
+| Direction | The application's part | SignalForge's part | Freshness means |
+|---|---|---|---|
+| **pull** | serve the contract and hold still | polls on a schedule and on demand, with the manifest's timeout and rate limit | when SignalForge last read successfully |
+| **push** | POST a signed batch when something happens | issues the credential, verifies, deduplicates on `event_id`, answers 202 | when something last **arrived** |
+| **simulated** | nothing - there is no integrated system | runs a built-in stand-in and marks everything it produces SIMULATED | not applicable; the card says "built-in" |
+
+A push integration cannot be tested by calling out and a pull integration cannot be measured by
+waiting, which is why one connection test would have been wrong for two of the three modes and
+why the health row carries two different freshness numbers. A push-only application is entirely
+valid: it never lets the platform in, gets its changes, alerts, tickets and messages on the
+timeline, and gives up the things that need reading - probes, baselines and the actions the
+platform could otherwise offer.
+
+### 6.5 Onboarding is re-entrant
+
+Every step is a route with a stable URL, and every write is idempotent in the way that step
+needs. A half-finished onboarding is a link that can be sent to whoever holds the credential for
+step 2; nothing is staged in a browser and lost. Re-running a step is safe by design: an
+identical topology document is one version and no second event, an actions re-import refreshes
+what the application declared and preserves what the operator overrode, a re-test replaces the
+summary, and rotating a credential issues a successor rather than swapping one atomically.
+
+That matters more than it sounds. The alternative - a wizard whose steps only work in sequence
+and only once - is the reason onboarding half-finishes in most tools, and a half-onboarded
+application is exactly the one nobody is watching during the incident.
+
+### 6.6 Where every onboarding failure lands
+
+| Failure | Where it shows up | What the platform does | Held by |
+|---|---|---|---|
+| **Timeout** | a probe, a connection test, an actions import, a baseline read | reports unreachable rather than absent; a timed-out capability is `504` because the outcome is unknown, never `502`; the run keeps what it got | `test_discovery.py`, `test_connection_tests.py` |
+| **Uncertain external state** | a push binding with no traffic yet | reads `pending` with the reason - never green, because SignalForge is the server and would always answer its own ping - and turns green when something arrives | `test_connection_tests.py`, `test_integration_health.py` |
+| **Partial completion** | a baseline run over five signals where two selectors match nothing | stores the three, names the two with their reasons, leaves earlier baselines intact; a failed run changes nothing; a topology document with a dangling edge is refused whole | `test_baseline.py`, `test_topology_upload.py` |
+| **Duplicates** | a re-uploaded topology, a re-triggered pipeline, a repeated batch | one version, one event; `event_id` deduplicates per tenant and the repeat is counted, not applied | `test_topology_upload.py`, `test_ingest_idempotency.py` |
+| **Model / adapter failure** | a manifest that will not parse, an adapter with no runtime on this node, a target answering 500 | the broken manifest is listed with its path and reason and the rest of the registry still loads; a runtime-less adapter is bindable and honestly `unknown`; a 500 is a named failure on the connector row, never a silent success | `test_registry.py`, `test_connector_health.py` |
+| **Human override** | a risk override, a disabled binding, a revoked key | the override survives a re-import unless the application itself raised the risk; a disabled binding leaves the health loop on the next poll and keeps its last verdict; a revoked key takes the integration off the health row while its receipts survive | `test_mapping.py`, `test_integration_health.py` |
+| **Permission change mid-flow** | an operator narrowed to one application between two steps | the next write is refused with a 403 naming the permission, everything already saved stays, and the screen says so rather than blanking | `test_onboarding_isolation.py` |
+
+The floor's refusals are the eighth case and behave the same way: `422` with the domain's own
+sentence, an audit entry and a `system.app.policy.refused` event written *before* the response,
+because the response is seen only by whoever tried.
+
+### 6.7 Offboarding, and what survives it
+
+`DELETE /apps/{app_id}` answers `409` while any connector binding or live ingest key still points
+at the application: removal is not a way to orphan a credential. With those gone, the application,
+its onboarding profile and its topology versions are deleted, and its secrets are destroyed with
+the bindings that owned them.
+
+What does not go is the record. Events already on the timeline, audit entries, ingest receipts and
+seals are the history of what happened while the application was watched, and nothing in the
+onboarding path can delete an event - the only code that removes a recorded event is the
+retention sweep, it works on the signal plane only, and it refuses to cross a seal. Offboarding
+therefore stops the watching and keeps the evidence, which is the correct way round.

@@ -6,6 +6,52 @@ graph" section at the bottom is the authored pre-build decision record
 (signalforge-memory-graph.md, provided and imported 2026-09-01) - every N-line there
 is treated as already decided.
 
+## DR-059 (2026-09-01, S3) The route catalogue is spliced into docs/11, not kept beside it
+`scripts/gen_openapi.py` rewrites the region between two markers inside
+`docs/11-api-spec.md` rather than writing a second generated file the prose links to.
+Why: the catalogue is only useful next to the conventions that explain it - which
+credential, which permission, which of two places `app_id` is read from - and a reader
+who has to open a second document to find out whether a route is guarded will not.
+Consequence: the artifact is one file with an authored half and a generated half, and
+the generator refuses to run if the markers are missing rather than appending a second
+copy. Regeneration is byte-stable (no timestamp inside the block), so a diff in docs/11
+means the API changed.
+
+## DR-058 (2026-09-01, S3) The RBAC factories declare their permission as an attribute
+`deps.require` and `deps.require_app` now set `required_permission` and `app_id_source`
+on the dependency they return, in addition to closing over the permission. Why: the
+security suite reads the permission out of the closure, which is right for a test - it
+proves the guard itself - but product code that introspected `__closure__` to publish a
+document would be reading an implementation detail of CPython. Consequence: one declared
+attribute serves the published document, the closure still serves the tests, and the two
+cannot disagree because they come from the same call. No behaviour changed: nothing reads
+the attribute at request time.
+
+## DR-057 (2026-09-01, S3) The published document names the permission each route enforces
+`/openapi.json` is unauthenticated, and it now states, per operation, the credential and
+the permission required. Why: the alternative is a document that describes shapes and
+hides the access model, which pushes every integrator into trial and error against a
+production API and makes an unguarded route invisible to review. The information is not
+secret - the roles matrix is served at `/roles/matrix` to any member and is published in
+docs - and knowing that `POST /apps` wants `manage_apps` does not help anybody obtain it.
+Consequence: the set of routes reachable with no credential became a closed list a
+security test pins (six), an ingest key is pinned to the five frozen paths, and a write
+route shipped without a permission fails the build. The residual risk accepted: an
+anonymous caller can enumerate the API's shape and its access model, which was already
+true of the shapes.
+
+## DR-056 (2026-09-01, S3) Artifact 11 is generated from the running application
+`docs/11-openapi.json` is produced by `signalforge/api/openapi.py` from the live route
+table and is the same document `GET /openapi.json` serves; the prose in
+`docs/11-api-spec.md` is authored, and a test fails when the export is not what the
+application would serve today. Why: an API specification maintained by hand is wrong the
+first time somebody adds a route, and the fields that matter most to a caller - what
+credential, what permission - are exactly the ones nobody remembers to update.
+Consequence: `make openapi` joins `make rtm`, `make report` and `make erd` as a step after
+any change to a route, a schema or a guard; `--check` fails without writing, for a hook.
+The cost is one more generated artifact to regenerate; the benefit is that the document
+cannot describe an API that is not being served.
+
 ## DR-055 (2026-09-01, S3) The reference harness announces deployments with a derived event id
 `deploy.sh` computes `event_id` as a UUIDv5-shaped digest of (release, region, status)
 rather than generating one. Why: pipelines are re-triggered constantly, and a

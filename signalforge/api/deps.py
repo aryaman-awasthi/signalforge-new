@@ -434,12 +434,19 @@ def require_ingest(stream: IngestStream):
         return AuthenticatedIngest(key=key, stream=stream, body=body)
 
     dependency.resolves_ingest_credential = True
+    dependency.ingest_stream = stream
     return dependency
 
 
 def require(permission: Permission):
     """RBAC dependency factory. app_id comes from the query string so per-app
-    bindings apply; the denied path writes the audit event before raising."""
+    bindings apply; the denied path writes the audit event before raising.
+
+    The permission and where the application is named are attached to the
+    dependency as well as closed over, so the published API document can state
+    what each route requires by reading the route's own guard rather than a
+    hand-kept list (S3-T07, signalforge/api/openapi.py).
+    """
 
     async def dependency(
         request: Request,
@@ -452,6 +459,8 @@ def require(permission: Permission):
         )
         return principal
 
+    dependency.required_permission = permission
+    dependency.app_id_source = "query"
     return dependency
 
 
@@ -478,4 +487,6 @@ def require_app(permission: Permission):
         )
         return principal
 
+    dependency.required_permission = permission
+    dependency.app_id_source = "path"
     return dependency

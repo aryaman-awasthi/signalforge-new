@@ -17,6 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from signalforge.api import deps
 from signalforge.api.errors import register_error_handlers
 from signalforge.api.middleware import RequestContextMiddleware
+from signalforge.api.openapi import build_openapi
 from signalforge.api.routers import (
     adapters,
     auth,
@@ -61,6 +62,12 @@ async def lifespan(application: FastAPI):
 configure_logging(load_settings().log_level)
 
 app = FastAPI(title="SignalForge API", version=VERSION, lifespan=lifespan)
+
+# The published document says what credential and what permission each route
+# wants, read from the route's own guard (api/openapi.py). Assigned rather than
+# subclassed so GET /openapi.json and the exported docs/11-openapi.json are the
+# same bytes.
+app.openapi = lambda: build_openapi(app)
 
 app.add_middleware(RequestContextMiddleware, container_provider=current_container)
 
