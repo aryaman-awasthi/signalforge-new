@@ -97,6 +97,19 @@ class LedgerState(str, Enum):
         """A person owes this row a decision before anything else may run."""
         return self in (LedgerState.UNCERTAIN, LedgerState.PARTIAL)
 
+    @property
+    def nothing_was_sent(self) -> bool:
+        """The attempt ended without any request reaching the target.
+
+        These two rows must not stand in the way of a later, legitimate attempt
+        at the same action with the same arguments. Somebody asking for a
+        rollback to auto-execute is refused (`blocked`) and then, quite properly,
+        asks for it the approved way - and a duplicate check that matched the
+        refusal would tell them the rollback had already happened. It had not:
+        nothing left this process.
+        """
+        return self in (LedgerState.BLOCKED, LedgerState.CANCELLED)
+
 
 _TERMINAL: frozenset[LedgerState] = frozenset(
     {

@@ -418,4 +418,91 @@ def build_registry() -> MetricsRegistry:
         "ungrounded or degraded",
         ("verdict",),
     )
+    # Governance and safe execution (S6). Same discipline again, and it matters
+    # more here than anywhere else: these counters describe changes to somebody's
+    # production estate, /metrics is unauthenticated, and no label may name an
+    # incident, an application's action arguments or a person. `app` appears on
+    # the two policy counters only - an application id is already public in this
+    # deployment's dashboards and the alternative is a floor rejection nobody
+    # could attribute.
+    registry.declare(
+        "signalforge_policy_decisions_total", MetricType.COUNTER,
+        "Policy decisions, by outcome and risk class",
+        ("outcome", "risk_class"),
+    )
+    registry.declare(
+        "signalforge_policy_versions_total", MetricType.COUNTER,
+        "Policy versions written", ("app",),
+    )
+    registry.declare(
+        "signalforge_policy_floor_rejections_total", MetricType.COUNTER,
+        "Policy edits the platform safety floor refused, by rule. A non-zero "
+        "value is a control actively preventing an unsafe configuration",
+        ("app", "rule"),
+    )
+    registry.declare(
+        "signalforge_executions_total", MetricType.COUNTER,
+        "Consequential executions, by outcome and risk class",
+        ("outcome", "risk_class"),
+    )
+    registry.declare(
+        "signalforge_execution_blocked_total", MetricType.COUNTER,
+        "Executions refused before any adapter was called",
+        ("risk_class", "floor", "intent"),
+    )
+    registry.declare(
+        "signalforge_execution_duplicates_total", MetricType.COUNTER,
+        "Duplicate submits that did not reach the target, by the state of the "
+        "execution they matched",
+        ("state",),
+    )
+    registry.declare(
+        "signalforge_execution_retries_blocked_total", MetricType.COUNTER,
+        "Retries refused because the previous outcome was not established",
+        ("state",),
+    )
+    registry.declare(
+        "signalforge_execution_reconciliations_total", MetricType.COUNTER,
+        "Reconcile-before-retry verdicts", ("outcome",),
+    )
+    registry.declare(
+        "signalforge_executions_unreconciled", MetricType.GAUGE,
+        "Executions left uncertain with nobody reconciling them", (),
+    )
+    registry.declare(
+        "signalforge_approvals_total", MetricType.COUNTER,
+        "Approval decisions, by outcome", ("outcome", "action"),
+    )
+    registry.declare(
+        "signalforge_response_plans_total", MetricType.COUNTER,
+        "Response-plan revisions, by how many actions were kept and paused",
+        ("kept", "paused"),
+    )
+    registry.declare(
+        "signalforge_communications_total", MetricType.COUNTER,
+        "Communications, by audience and lifecycle state", ("audience", "state"),
+    )
+    registry.declare(
+        "signalforge_communications_contradicted_total", MetricType.COUNTER,
+        "Issued communications flagged because their grounding was superseded",
+        (),
+    )
+    registry.declare(
+        "signalforge_validation_cycles_total", MetricType.COUNTER,
+        "Layered validation cycles, by verdict", ("verdict",),
+    )
+    registry.declare(
+        "signalforge_validation_layer", MetricType.GAUGE,
+        "Whether each validation layer is satisfied, from the last cycle",
+        ("layer",),
+    )
+    registry.declare(
+        "signalforge_validation_escalations_total", MetricType.COUNTER,
+        "Incidents escalated after repeated failed revalidation", (),
+    )
+    registry.declare(
+        "signalforge_closure_blocked_total", MetricType.COUNTER,
+        "Closures refused by the validation gate, by the layer that refused",
+        ("layer",),
+    )
     return registry

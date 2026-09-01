@@ -132,6 +132,13 @@ GET_EXECUTION = "get_execution"
 
 MAX_ARGS = 40
 
+MAX_KEY_PROBES = 12
+"""How far `_claim_key` will walk past attempts that never reached the target.
+
+Bounded so a pathological history cannot make a request scan forever, and
+comfortably above the policy retry ceiling (five) so an ordinary incident never
+reaches it."""
+
 
 @dataclass(frozen=True)
 class GatewayResult:
@@ -199,18 +206,14 @@ class ToolGateway:
         decision = PolicyEngine.decide(action, policy, intent=intent)
 
         digest = args_hash(arguments)
-        key = idempotency_key(
-            tenant_id=principal.tenant_id,
+        # The duplicate check *before* the decision is recorded, so a resubmit
+        # does not mint a second ledger row for the same request.
+        existing, key, attempt = await self._claim_key(
+            principal.tenant_id,
             incident_id=incident_id,
             action_id=action_id,
             args_digest=digest,
-            attempt=1,
         )
-
-        # The duplicate check *before* the decision is recorded, so a resubmit
-        # does not mint a second ledger row for the same request.
-        async with self._uow_factory() as uow:
-            existing = await uow.executions.find_by_key(principal.tenant_id, key)
         if existing is not None:
             return await self._duplicate(principal, incident, existing, decision)
 
@@ -224,7 +227,7 @@ class ToolGateway:
             risk_class=decision.risk_class,
             state=LedgerState.PENDING,
             idempotency_key=key,
-            attempt=1,
+            attempt=attempt,
             requested_by=principal.user_id,
             requested_at=now,
             args=redact_args(arguments),
@@ -1348,6 +1351,50 @@ class ToolGateway:
         return GatewayResult(
             execution=existing, decision=decision, duplicate=True
         )
+
+    async def _claim_key(
+        self,
+        tenant_id: str,
+        *,
+        incident_id: str,
+        action_id: str,
+        args_digest: str,
+    ) -> tuple[Optional[ExecutionRecord], str, int]:
+        """The idempotency key this request should use, and what already holds it.
+
+        Returns `(existing, key, attempt)`. `existing` is non-None only when a
+        *real* attempt already holds the key - one that reached the target or is
+        on its way there - and the caller then returns it as a duplicate without
+        sending anything.
+
+        Attempts whose row shows nothing was sent - refused by policy, cancelled
+        before it ran - are stepped over rather than treated as duplicates. A
+        commander whose auto-execute attempt was refused by the floor and who
+        then asks for the same rollback properly is making a new request, not
+        repeating one, and answering "you already did that" would be false in the
+        most dangerous possible direction.
+
+        The loop is bounded by the retry ceiling plus headroom, so a pathological
+        history cannot make this scan forever; a caller that exhausts it gets the
+        last row back and is told it is a duplicate, which fails closed.
+        """
+        last: Optional[ExecutionRecord] = None
+        for attempt in range(1, MAX_KEY_PROBES + 1):
+            key = idempotency_key(
+                tenant_id=tenant_id,
+                incident_id=incident_id,
+                action_id=action_id,
+                args_digest=args_digest,
+                attempt=attempt,
+            )
+            async with self._uow_factory() as uow:
+                found = await uow.executions.find_by_key(tenant_id, key)
+            if found is None:
+                return None, key, attempt
+            last = found
+            if not found.state.nothing_was_sent:
+                return found, key, attempt
+        return last, last.idempotency_key if last else "", MAX_KEY_PROBES
 
     async def _actions_binding(
         self, tenant_id: str, app_id: str

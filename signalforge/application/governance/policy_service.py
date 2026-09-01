@@ -302,7 +302,14 @@ class PolicyService:
         current = stored or default_policy(
             principal.tenant_id, app_id, at=self._clock.now(), author_id="platform"
         )
-        version = current.version + 1 if stored is not None else 1
+        # Always n+1, even for the first stored edit. The seeded default *is*
+        # version 1, so the first thing an operator writes is version 2 - and
+        # that matters: an approval carries the version it was granted under and
+        # the gateway refuses it when the version has moved. A first edit that
+        # reused version 1 would change the rules while leaving outstanding
+        # approvals looking valid, which is the exact silent re-interpretation
+        # the mid-incident rule exists to prevent.
+        version = current.version + 1
 
         try:
             candidate = self._parse(

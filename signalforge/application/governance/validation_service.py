@@ -97,7 +97,7 @@ from signalforge.domain.onboarding.profile import GoldenSignal, OnboardingProfil
 
 logger = logging.getLogger("signalforge.governance")
 
-HEALTH_CAPABILITY = "check"
+HEALTH_CAPABILITY = "get_health"
 SOURCE_HEALTH = "observe-health"
 SOURCE_ROLLUPS = "detection-rollups"
 SOURCE_PROBES = "probe-runner"
@@ -457,15 +457,15 @@ class ValidationService:
                 component_ok = component.status is HealthStatus.UP
                 checks.append(
                     LayerCheck(
-                        check_id=f"component:{component.name}",
-                        label=f"{component.name} dependency",
+                        check_id=f"component:{component.component}",
+                        label=f"{component.component} dependency",
                         verdict=(
                             LayerVerdict.PASS if component_ok else LayerVerdict.FAIL
                         ),
                         source=SOURCE_HEALTH,
                         observed=component.status.value,
                         expected=HealthStatus.UP.value,
-                        result_ref=f"health:{incident.app_id}:{component.name}",
+                        result_ref=f"health:{incident.app_id}:{component.component}",
                         detail=component.detail or "",
                     )
                 )
