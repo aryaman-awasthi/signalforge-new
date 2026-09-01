@@ -213,7 +213,14 @@ explain and draft; it may never execute, approve, close or send.**
   a duplicate submits nothing, UNCERTAIN blocks retry, reconcile comes before retry,
   secrets are redacted from arguments and audit, customer validation blocks closure, and
   a communication cannot auto-send.
-- suite result: see `docs/21-test-report.md`.
+- suite result: **1218 passed, 5 skipped, 0 failed** (11m50s). Recorded in
+  `docs/21-test-report.md`; the RTM shows 48 of 52 requirements with linked tests, and
+  all six S6 requirements linked and passing.
+- The first full run of this sprint came back **1212 passed, 5 failed**, and all five
+  were the repository's own census tests refusing something rather than a defect in the
+  feature: three were stale (the OpenAPI tag had been added after the run started) and
+  two were the exemptions now written down under "Security notes". That is the intended
+  behaviour of those tests and the reason they exist.
 
 ## Artifacts updated
 
