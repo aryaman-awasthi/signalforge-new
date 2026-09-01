@@ -14,6 +14,14 @@ from signalforge.domain.brain.ports import (
     SituationSnapshotRepository,
 )
 from signalforge.domain.events.ports import EventStore
+from signalforge.domain.governance.ports import (
+    ApprovalRepository,
+    CommunicationRepository,
+    ExecutionLedgerRepository,
+    PolicyRepository,
+    ResponsePlanRepository,
+    ValidationRepository,
+)
 from signalforge.domain.incidents.ports import (
     ChangeWindowStore,
     IncidentRepository,
@@ -111,6 +119,19 @@ class IdentityUnitOfWork(ABC):
     entry and the incident-plane event. A confidence that moved without its
     history row would be exactly the unexplained number this sprint exists to
     make impossible."""
+    policies: PolicyRepository
+    executions: ExecutionLedgerRepository
+    approvals: ApprovalRepository
+    response_plans: ResponsePlanRepository
+    communications: CommunicationRepository
+    validations: ValidationRepository
+    """Governance and execution (S6). On this unit of work because one pass
+    through the Tool Gateway is one commit of things that must never disagree:
+    the ledger row, the approval it spent, the audit entry naming the policy
+    version that authorised it and the incident-plane event. A ledger row that
+    committed without its audit entry would be a production change nobody
+    performed; an approval marked spent without the execution it was spent on
+    would be an approval available twice."""
     audit: AuditWriter
     events: EventStore
     """The outbox: an event published here shares the use case's transaction."""

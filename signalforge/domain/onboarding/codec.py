@@ -160,6 +160,9 @@ def action_to_mapping(action: MappedAction) -> dict[str, Any]:
         "idempotent": action.idempotent,
         "enabled": action.enabled,
         "description": action.description,
+        "params_schema": dict(action.params_schema),
+        "verification": list(action.verification),
+        "preconditions": list(action.preconditions),
         "imported_at": _iso(action.imported_at),
     }
 
@@ -186,6 +189,10 @@ def action_from_mapping(raw: Mapping[str, Any]) -> MappedAction:
         idempotent=bool(raw.get("idempotent", False)),
         enabled=bool(raw.get("enabled", True)),
         description=str(raw.get("description", "") or ""),
+        # Both default empty so a profile stored before S6 still loads.
+        params_schema=dict(raw.get("params_schema") or {}),
+        verification=tuple(raw.get("verification") or ()),
+        preconditions=tuple(raw.get("preconditions") or ()),
         imported_at=_dt(raw.get("imported_at")),
     )
 

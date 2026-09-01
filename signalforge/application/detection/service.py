@@ -59,6 +59,7 @@ from signalforge.domain.detection.engine import (
 )
 from signalforge.domain.detection.errors import DetectionValidationError
 from signalforge.domain.detection.ports import DetectionUnitOfWork
+from signalforge.domain.detection.probes import ProbeRecord
 from signalforge.domain.detection.rollups import (
     MAX_ROLLUP_WINDOW_S,
     ROLLUP_RETENTION_S,
@@ -302,6 +303,55 @@ class DetectionService:
                 region=region,
             )
         return tuple(rows)
+
+    async def latest_probe_results(
+        self, tenant_id: str, app_id: str, *, window_s: float = 900.0
+    ) -> tuple[ProbeRecord, ...]:
+        """The most recent result per probe, newest first (S6-T05).
+
+        Read rather than re-run, deliberately: layered validation must measure
+        the same instant the war room is looking at, and a validator that fired
+        its own probes would produce a second answer to "is the journey working"
+        that could disagree with the screen.
+
+        Tenant-scoped like every other read here, and carrying no permission of
+        its own - the caller has already resolved the incident inside the
+        tenant.
+        """
+        start, end = window_bounds(self._clock.now(), window_s)
+        async with self._detection_uow_factory() as detection:
+            rows = await detection.probes.window(tenant_id, app_id, start, end)
+        newest: dict[tuple[str, str], ProbeRecord] = {}
+        for row in rows:
+            key = (row.probe_id, row.region)
+            held = newest.get(key)
+            if held is None or row.at >= held.at:
+                newest[key] = row
+        return tuple(sorted(newest.values(), key=lambda r: (r.probe_id, r.region)))
+
+    async def latest_against_baseline(
+        self, tenant_id: str, app_id: str, signal_key: str
+    ) -> Optional[tuple[float, float]]:
+        """`(current value, baseline mean)` for one mapped signal, or None.
+
+        Read from the durable signal states the detector already writes every
+        evaluation, so validation costs one indexed read and cannot disagree with
+        what the detection screen is showing. The worst region wins: a signal
+        that recovered in one region and not another has not recovered.
+        """
+        async with self._detection_uow_factory() as detection:
+            states = await detection.states.list(tenant_id, app_id)
+        readings = [
+            state
+            for state in states
+            if state.signal_key == signal_key
+            and state.value is not None
+            and state.baseline_mean is not None
+        ]
+        if not readings:
+            return None
+        worst = max(readings, key=lambda state: state.deviation)
+        return float(worst.value), float(worst.baseline_mean)
 
     async def prune(self, retention_s: float = ROLLUP_RETENTION_S) -> int:
         """Retention for the derived store. Rollups and probe results age out by

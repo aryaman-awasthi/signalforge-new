@@ -23,6 +23,12 @@ COCKPIT_TOPIC_PATTERNS: tuple[str, ...] = (
     "incident.*",
     "warroom.*",
     "brain.*",
+    "execution.*",
+    "policy.*",
+    "comms.*",
+    "validation.*",
+    "nba.*",
+    "plan.*",
 )
 """What a war-room screen is refreshed by. Deliberately not `detection.*`: the
 app-detail screen reads a stance that is recomputed every five seconds anyway,
@@ -32,7 +38,14 @@ push with more moving parts and no more truth.
 `brain.*` joins the same subscription rather than opening a second socket
 (S5-T05): a hypothesis that moved is exactly the kind of thing a cockpit should
 learn about without waiting for a poll, and the frame still carries no payload -
-the screen re-reads through the authorised route it was already polling."""
+the screen re-reads through the authorised route it was already polling.
+
+The Sprint 6 families join for the same reason and matter more (S6-T06). An
+execution that has just landed `uncertain`, an approval whose countdown started,
+a communication the platform has flagged as contradicted and a validation cycle
+that refused closure are all things a war room must not learn about on the next
+poll. The frame still carries no payload: the screen re-reads through the route
+it is already authorised for, so a push can never widen what a viewer can see."""
 
 
 class BusMetricsConsumer(EventHandler):

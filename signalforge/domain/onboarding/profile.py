@@ -339,6 +339,20 @@ class MappedAction:
     idempotent: bool = False
     enabled: bool = True
     description: str = ""
+    params_schema: Mapping[str, Any] = field(default_factory=dict)
+    """The application's own JSON schema for this action's arguments, kept from
+    the manifest so the Tool Gateway can validate arguments before anything is
+    authorised (S6-T02, step 1). Empty means "no parameters", which the gateway
+    reads as "reject any"; an application that publishes no schema for an action
+    that takes arguments gets a refusal rather than an unvalidated call."""
+    verification: tuple[str, ...] = ()
+    """Post-execution checks the application declares. The technical validation
+    layer runs these, and the NBA card's expected validation time is computed
+    from how many there are."""
+    preconditions: tuple[str, ...] = ()
+    """What the application says must be true before this action makes sense.
+    The next-best-action engine checks the ones the platform can evaluate and
+    shows the rest as declared-but-unverifiable rather than pretending to."""
     imported_at: Optional[datetime] = None
 
     def __post_init__(self) -> None:
@@ -495,6 +509,9 @@ def action_from_definition(
         reverse_action_id=definition.reverse_action_id,
         idempotent=definition.idempotent,
         description=definition.description[:400],
+        params_schema=dict(definition.params_schema or {}),
+        verification=tuple(definition.verification or ())[:20],
+        preconditions=tuple(definition.preconditions or ())[:20],
         imported_at=imported_at,
     )
 

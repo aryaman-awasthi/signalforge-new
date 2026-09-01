@@ -248,6 +248,12 @@ class OnboardingService:
                     idempotent=fresh.idempotent,
                     enabled=previous.enabled,
                     description=fresh.description,
+                    # The application's own declarations, always refreshed: an
+                    # argument schema and a verification list are facts about the
+                    # manifest, not operator decisions to preserve (S6-T02).
+                    params_schema=fresh.params_schema,
+                    verification=fresh.verification,
+                    preconditions=fresh.preconditions,
                     imported_at=now,
                 )
             )

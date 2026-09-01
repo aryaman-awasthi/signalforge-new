@@ -1141,3 +1141,277 @@ class SituationSnapshotRow(Base):
     degraded: Mapped[bool] = mapped_column(Boolean, default=False)
     fingerprint: Mapped[str] = mapped_column(String(64), default="")
     detail: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+# --- governance and execution (S6) --------------------------------------------
+
+
+class GovernancePolicyRow(Base):
+    """One version of one application's policy (REQ-060).
+
+    Append-only: an edit inserts version n+1 and the old row stays. `author_id`
+    is not nullable because an unattributed rule change is not auditable, and
+    `source` keeps the YAML the author actually submitted rather than a
+    re-serialisation of what was parsed.
+
+    There is no `audit_enabled` column, and there never will be. Audit is not a
+    configurable field, so it cannot be configured off (CLAUDE.md rule 4).
+    """
+
+    __tablename__ = "governance_policies"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "app_id", "version", name="uq_governance_policy_version"
+        ),
+        Index("ix_governance_policies_app", "tenant_id", "app_id", "version"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    app_id: Mapped[str] = mapped_column(String(100))
+    version: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime)
+    author_id: Mapped[str] = mapped_column(String(36))
+    author_label: Mapped[str] = mapped_column(String(200), default="")
+    note: Mapped[str] = mapped_column(Text, default="")
+    approval_ttl_s: Mapped[int] = mapped_column(Integer, default=900)
+    stability_window_s: Mapped[int] = mapped_column(Integer, default=900)
+    stability_samples: Mapped[int] = mapped_column(Integer, default=3)
+    max_action_retries: Mapped[int] = mapped_column(Integer, default=1)
+    revalidation_cycles: Mapped[int] = mapped_column(Integer, default=3)
+    blocked_classes: Mapped[list] = mapped_column(JSON, default=list)
+    require_approval_classes: Mapped[list] = mapped_column(JSON, default=list)
+    approver_roles: Mapped[list] = mapped_column(JSON, default=list)
+    action_rules: Mapped[dict] = mapped_column(JSON, default=dict)
+    checksum: Mapped[str] = mapped_column(String(32), default="")
+    source: Mapped[str] = mapped_column(Text, default="")
+
+
+class ExecutionLedgerRow(Base):
+    """One attempt to change somebody's production estate (REQ-061, REQ-062).
+
+    `idempotency_key` is unique per tenant, and that constraint *is* the
+    duplicate-prevention control: two concurrent submits of the same request
+    derive the same key, and the second insert fails rather than reaching the
+    adapter. Doing it with a unique index rather than a read-then-write is the
+    difference between preventing a double rollback and usually preventing one.
+
+    `args` is already redacted before it arrives (`ledger.redact_args`); the
+    ledger is not a place credentials are stored.
+    """
+
+    __tablename__ = "execution_ledger"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "idempotency_key", name="uq_execution_idempotency"
+        ),
+        Index("ix_execution_ledger_incident", "tenant_id", "incident_id", "requested_at"),
+        Index("ix_execution_ledger_state", "state", "requested_at"),
+        Index("ix_execution_ledger_action", "tenant_id", "incident_id", "action_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    incident_id: Mapped[str] = mapped_column(String(36))
+    app_id: Mapped[str] = mapped_column(String(100))
+    action_id: Mapped[str] = mapped_column(String(100))
+    action_class: Mapped[str] = mapped_column(String(30))
+    risk_class: Mapped[str] = mapped_column(String(20))
+    state: Mapped[str] = mapped_column(String(24))
+    idempotency_key: Mapped[str] = mapped_column(String(64))
+    attempt: Mapped[int] = mapped_column(Integer, default=1)
+    requested_by: Mapped[str] = mapped_column(String(36))
+    requested_at: Mapped[datetime] = mapped_column(TZDateTime)
+    args: Mapped[dict] = mapped_column(JSON, default=dict)
+    args_digest: Mapped[str] = mapped_column(String(32), default="")
+    decision: Mapped[str] = mapped_column(String(20), default="block")
+    decision_reason: Mapped[str] = mapped_column(Text, default="")
+    rules_hit: Mapped[list] = mapped_column(JSON, default=list)
+    policy_version: Mapped[int] = mapped_column(Integer, default=0)
+    policy_ref: Mapped[str] = mapped_column(String(120), default="")
+    floor_version: Mapped[str] = mapped_column(String(40), default="")
+    decision_fingerprint: Mapped[str] = mapped_column(String(32), default="")
+    approval_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    binding_id: Mapped[str] = mapped_column(String(36), default="")
+    adapter_execution_id: Mapped[str] = mapped_column(String(120), default="")
+    started_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, nullable=True)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, nullable=True)
+    error: Mapped[str] = mapped_column(Text, default="")
+    error_category: Mapped[str] = mapped_column(String(20), default="none")
+    retry_blocked: Mapped[bool] = mapped_column(Boolean, default=False)
+    reconcile_outcome: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    reconciled_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, nullable=True)
+    reconcile_detail: Mapped[dict] = mapped_column(JSON, default=dict)
+    compensates_execution_id: Mapped[Optional[str]] = mapped_column(
+        String(36), nullable=True
+    )
+    compensated_by_execution_id: Mapped[Optional[str]] = mapped_column(
+        String(36), nullable=True
+    )
+    supersedes_execution_id: Mapped[Optional[str]] = mapped_column(
+        String(36), nullable=True
+    )
+    takeover_by: Mapped[str] = mapped_column(String(36), default="")
+    takeover_note: Mapped[str] = mapped_column(Text, default="")
+    result_ref: Mapped[str] = mapped_column(String(400), default="")
+    detail: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class ApprovalRow(Base):
+    """One person's decision about one execution (CTL-AUD-03).
+
+    Every clause of the claim is a column - who, which roles, which permission,
+    from when to when, under which policy version, bound to which decision - so
+    that "was this approval valid at the moment it was spent" is answerable from
+    the row rather than reconstructed.
+    """
+
+    __tablename__ = "execution_approvals"
+    __table_args__ = (
+        Index("ix_approvals_execution", "tenant_id", "execution_id", "requested_at"),
+        Index("ix_approvals_incident", "tenant_id", "incident_id", "requested_at"),
+        Index("ix_approvals_expiry", "state", "expires_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    incident_id: Mapped[str] = mapped_column(String(36))
+    app_id: Mapped[str] = mapped_column(String(100))
+    execution_id: Mapped[str] = mapped_column(String(36))
+    action_id: Mapped[str] = mapped_column(String(100))
+    state: Mapped[str] = mapped_column(String(20))
+    requested_by: Mapped[str] = mapped_column(String(36))
+    requested_at: Mapped[datetime] = mapped_column(TZDateTime)
+    decision_fingerprint: Mapped[str] = mapped_column(String(32))
+    policy_version: Mapped[int] = mapped_column(Integer, default=0)
+    policy_ref: Mapped[str] = mapped_column(String(120), default="")
+    required_roles: Mapped[list] = mapped_column(JSON, default=list)
+    approver_user_id: Mapped[str] = mapped_column(String(36), default="")
+    approver_label: Mapped[str] = mapped_column(String(200), default="")
+    approver_roles: Mapped[list] = mapped_column(JSON, default=list)
+    permission: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    issued_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, nullable=True)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, nullable=True)
+    used_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, nullable=True)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, nullable=True)
+    note: Mapped[str] = mapped_column(Text, default="")
+    detail: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class ResponsePlanRow(Base):
+    """A version of the response plan (REQ-063).
+
+    Versioned rather than replaced, so the kept/paused/added diff is computed
+    from two stored rows instead of from a memory of what the screen used to
+    show.
+    """
+
+    __tablename__ = "response_plans"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "incident_id", "version", name="uq_response_plan_version"
+        ),
+        Index("ix_response_plans_incident", "tenant_id", "incident_id", "version"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    incident_id: Mapped[str] = mapped_column(String(36))
+    version: Mapped[int] = mapped_column(Integer)
+    previous_version: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime)
+    created_by: Mapped[str] = mapped_column(String(36))
+    items: Mapped[list] = mapped_column(JSON, default=list)
+    changed_assumptions: Mapped[list] = mapped_column(JSON, default=list)
+    evidence_refs: Mapped[list] = mapped_column(JSON, default=list)
+    note: Mapped[str] = mapped_column(Text, default="")
+    detail: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class CommunicationRow(Base):
+    """One piece of text for one audience (REQ-064).
+
+    `grounded_node_ids` is scanned rather than indexed, deliberately: the
+    contradiction sweep runs per incident over tens of rows, and a JSON
+    containment index would be a Postgres-only feature this SQLite deployment
+    cannot have. `issued_at` being null is what "nothing auto-sends" looks like
+    in the data.
+    """
+
+    __tablename__ = "incident_communications"
+    __table_args__ = (
+        Index("ix_communications_incident", "tenant_id", "incident_id", "created_at"),
+        Index("ix_communications_state", "tenant_id", "incident_id", "state"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    incident_id: Mapped[str] = mapped_column(String(36))
+    app_id: Mapped[str] = mapped_column(String(100))
+    audience: Mapped[str] = mapped_column(String(24))
+    state: Mapped[str] = mapped_column(String(20))
+    subject: Mapped[str] = mapped_column(String(200))
+    body: Mapped[str] = mapped_column(Text)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime)
+    created_by: Mapped[str] = mapped_column(String(36))
+    grounded_node_ids: Mapped[list] = mapped_column(JSON, default=list)
+    evidence_refs: Mapped[list] = mapped_column(JSON, default=list)
+    model: Mapped[str] = mapped_column(String(120), default="")
+    model_class: Mapped[str] = mapped_column(String(40), default="")
+    degraded: Mapped[bool] = mapped_column(Boolean, default=True)
+    approved_by: Mapped[str] = mapped_column(String(36), default="")
+    approved_by_label: Mapped[str] = mapped_column(String(200), default="")
+    approved_permission: Mapped[Optional[str]] = mapped_column(
+        String(40), nullable=True
+    )
+    approved_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, nullable=True)
+    issued_by: Mapped[str] = mapped_column(String(36), default="")
+    issued_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, nullable=True)
+    contradicted_at: Mapped[Optional[datetime]] = mapped_column(
+        TZDateTime, nullable=True
+    )
+    contradiction_reason: Mapped[str] = mapped_column(String(200), default="")
+    contradicting_node_ids: Mapped[list] = mapped_column(JSON, default=list)
+    corrects_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    corrected_by_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    redline: Mapped[list] = mapped_column(JSON, default=list)
+    withdrawn_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, nullable=True)
+    note: Mapped[str] = mapped_column(Text, default="")
+    detail: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class ValidationCycleRow(Base):
+    """One pass over the four validation layers (REQ-065).
+
+    `cycle` accumulates rather than overwriting, because the escalation rule is
+    "after N failed cycles" and only a history can answer it. `layers` holds the
+    per-layer results including each check's `source` and `result_ref`, so an
+    auditor can follow a failing customer check back to the probe run it came
+    from.
+    """
+
+    __tablename__ = "validation_cycles"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "incident_id", "cycle", name="uq_validation_cycle"
+        ),
+        Index("ix_validation_cycles_incident", "tenant_id", "incident_id", "cycle"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), index=True)
+    incident_id: Mapped[str] = mapped_column(String(36))
+    app_id: Mapped[str] = mapped_column(String(100))
+    cycle: Mapped[int] = mapped_column(Integer)
+    started_at: Mapped[datetime] = mapped_column(TZDateTime)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, nullable=True)
+    requested_by: Mapped[str] = mapped_column(String(36))
+    verdict: Mapped[str] = mapped_column(String(20), default="not_recovered")
+    layers: Mapped[list] = mapped_column(JSON, default=list)
+    window: Mapped[dict] = mapped_column(JSON, default=dict)
+    escalated: Mapped[bool] = mapped_column(Boolean, default=False)
+    returned_to_active: Mapped[bool] = mapped_column(Boolean, default=False)
+    evidence_node_ids: Mapped[list] = mapped_column(JSON, default=list)
+    note: Mapped[str] = mapped_column(Text, default="")
+    detail: Mapped[dict] = mapped_column(JSON, default=dict)

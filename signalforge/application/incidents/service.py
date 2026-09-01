@@ -161,6 +161,20 @@ class IncidentService:
         self._metrics = metrics
         self._on_declared: list = []
         self._on_closed: list = []
+        self._closure_guards: list = []
+
+    @property
+    def closure_guards(self) -> list:
+        """Checks that may refuse a closure (S6-T05, REQ-065).
+
+        A list of `async (incident) -> None` callables the composition root
+        fills, exactly like `on_declared` - so the lifecycle has no import of
+        layered validation and a node without it runs Sprint 4's closure
+        unchanged. Unlike the hooks, a guard's exception is *not* swallowed:
+        that is the whole point of it. A guard that raises stops the close, and
+        the incident does not move.
+        """
+        return self._closure_guards
 
     @property
     def on_declared(self) -> list:
@@ -479,6 +493,18 @@ class IncidentService:
     async def close(
         self, principal: Principal, incident_id: str, *, reason: str = ""
     ) -> IncidentView:
+        """A person signs it off - if nothing is standing in the way.
+
+        The guards run *before* the transition and their refusal propagates.
+        Closing an incident while the platform's own customer validation says
+        people are still affected is the one thing this lifecycle will not do,
+        and there is no override parameter: the way past a failing gate is to
+        fix the thing or to re-validate, not to tell the platform to look away.
+        """
+        async with self._uow_factory() as uow:
+            incident = await self._require(uow, principal.tenant_id, incident_id)
+        for guard in self._closure_guards:
+            await guard(incident)
         return await self._move(
             principal,
             incident_id,

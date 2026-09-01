@@ -25,6 +25,7 @@ from signalforge.api.routers import (
     detection,
     escalation,
     events,
+    governance,
     health,
     incidents,
     ingest,
@@ -107,6 +108,7 @@ app.include_router(incidents.router)
 app.include_router(incidents.apps_router)
 app.include_router(warroom.router)
 app.include_router(brain.router)
+app.include_router(governance.router)
 app.include_router(ingest_keys.router)
 app.include_router(ingest.router)
 app.include_router(platform.router)

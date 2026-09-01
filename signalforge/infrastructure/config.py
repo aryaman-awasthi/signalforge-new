@@ -280,6 +280,12 @@ class Settings:
     # wakes it within milliseconds of an event; this is how often the woken set
     # is drained.
     brain_interval_s: float = 20.0
+    # Governance housekeeping (S6-T02). Neither job it drives is a control: an
+    # expired approval is refused at execution time whether or not this ever
+    # runs, and the uncertain sweep logs rather than reconciles. A minute is
+    # frequent enough that an approval board is honest about what has lapsed and
+    # slow enough to cost nothing on a quiet node.
+    approval_sweep_interval_s: float = 60.0
 
 
 def load_settings() -> Settings:
@@ -403,5 +409,8 @@ def load_settings() -> Settings:
         # spend it on a world that has not changed.
         brain_interval_s=max(
             float(os.environ.get("SIGNALFORGE_BRAIN_INTERVAL_S", 20)), 5.0
+        ),
+        approval_sweep_interval_s=max(
+            float(os.environ.get("SIGNALFORGE_APPROVAL_SWEEP_INTERVAL_S", 60)), 10.0
         ),
     )

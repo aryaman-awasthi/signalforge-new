@@ -65,6 +65,11 @@ from signalforge.application.events.consumers import (
     CockpitSocketConsumer,
 )
 from signalforge.application.events.dead_letters import DeadLetterService
+from signalforge.application.governance.comms_service import CommunicationService
+from signalforge.application.governance.gateway import ToolGateway
+from signalforge.application.governance.nba_service import NextBestActionService
+from signalforge.application.governance.policy_service import PolicyService
+from signalforge.application.governance.validation_service import ValidationService
 from signalforge.application.events.dispatcher import Dispatcher
 from signalforge.application.events.replay import ReplayService
 from signalforge.application.events.retention import RetentionService
@@ -101,6 +106,7 @@ from signalforge.infrastructure.config import (
     load_llm_settings,
     load_settings,
 )
+from signalforge.infrastructure.governance.policy_yaml import YamlPolicyCodec
 from signalforge.infrastructure.llm.embeddings import GatewayEmbeddingProvider
 from signalforge.infrastructure.llm.provider import build_llm_provider
 from signalforge.infrastructure.persistence.llm_cache import SqlResponseCache
@@ -118,6 +124,7 @@ from signalforge.infrastructure.persistence.rollups import (
 )
 from signalforge.infrastructure.persistence.uow import SqlIdentityUnitOfWork
 from signalforge.workers.brain import brain_jobs
+from signalforge.workers.governance import governance_jobs
 from signalforge.workers.lifecycle import lifecycle_jobs
 from signalforge.workers.warroom import warroom_jobs
 from signalforge.workers.pollers import detection_jobs
@@ -504,6 +511,62 @@ class Container:
             topics=BRAIN_TRIGGER_PATTERNS,
         )
 
+        # Governance and safe execution (S6). Assembled after the brain and
+        # before self-observability, because it reads almost everything above it
+        # - the invoker for the one call that mutates an estate, the onboarding
+        # profile for what an application publishes, detection for the readings
+        # validation checks against - and is read by nothing.
+        #
+        # Two wirings here are the sprint's architecture rather than plumbing:
+        #
+        # `closure_guards` is a hook on the lifecycle, not an import: the
+        # incident service has no knowledge of layered validation, and a node
+        # with governance removed closes incidents exactly as Sprint 4 did.
+        #
+        # The gateway holds the *invoker*, not an adapter. Every consequential
+        # call goes through one door, and the credential-scope floor is
+        # re-checked on that call rather than at selection time.
+        self.policy_codec = YamlPolicyCodec()
+        self.policies = PolicyService(
+            self.uow_factory,
+            self.bus,
+            self.clock,
+            self.policy_codec,
+            metrics=self.metrics,
+        )
+        self.gateway = ToolGateway(
+            self.uow_factory,
+            self.bus,
+            self.clock,
+            self.policies,
+            self.adapter_registry,
+            self.invoker,
+            metrics=self.metrics,
+        )
+        self.nba = NextBestActionService(
+            self.uow_factory,
+            self.bus,
+            self.clock,
+            self.policies,
+            self.llm,
+            self.adapter_registry,
+            metrics=self.metrics,
+        )
+        self.comms = CommunicationService(
+            self.uow_factory, self.bus, self.clock, self.llm, metrics=self.metrics
+        )
+        self.validation = ValidationService(
+            self.uow_factory,
+            self.bus,
+            self.clock,
+            self.policies,
+            self.adapter_registry,
+            self.invoker,
+            detection=self.detection,
+            metrics=self.metrics,
+        )
+        self.incidents.closure_guards.append(self.validation.assert_closable)
+
         # Self-observability (S2-T03).
         self.health = ConnectorHealthService(
             self.event_uow_factory, self.bus, clock=self.wall_clock, metrics=self.metrics
@@ -588,6 +651,18 @@ class Container:
         # on because a feature flag was off.
         jobs += brain_jobs(
             self.governor, interval_s=self.settings.brain_interval_s
+        )
+        # Governance housekeeping (S6-T02). Registered unconditionally for the
+        # same reason: neither job *is* a control - an expired approval is
+        # refused at execution whether or not this ever runs - but an execution
+        # left uncertain with nobody reconciling it is the one thing on this
+        # platform that must never go quietly unnoticed.
+        jobs += governance_jobs(
+            self.gateway,
+            self.uow_factory,
+            self.wall_clock,
+            interval_s=self.settings.approval_sweep_interval_s,
+            metrics=self.metrics,
         )
         return jobs
 

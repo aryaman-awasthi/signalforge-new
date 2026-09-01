@@ -29,6 +29,14 @@ from signalforge.infrastructure.persistence.brain import (
     SqlSituationSnapshotRepository,
 )
 from signalforge.infrastructure.persistence.event_store import SqlEventStore
+from signalforge.infrastructure.persistence.governance import (
+    SqlApprovalRepository,
+    SqlCommunicationRepository,
+    SqlExecutionLedgerRepository,
+    SqlPolicyRepository,
+    SqlResponsePlanRepository,
+    SqlValidationRepository,
+)
 from signalforge.infrastructure.persistence.incidents import (
     SqlChangeWindowStore,
     SqlIncidentRepository,
@@ -94,6 +102,12 @@ class SqlIdentityUnitOfWork(IdentityUnitOfWork):
         self.confidence_history = SqlConfidenceHistoryRepository(self._session)
         self.situation_snapshots = SqlSituationSnapshotRepository(self._session)
         self.agent_runs = SqlAgentRunRepository(self._session)
+        self.policies = SqlPolicyRepository(self._session)
+        self.executions = SqlExecutionLedgerRepository(self._session)
+        self.approvals = SqlApprovalRepository(self._session)
+        self.response_plans = SqlResponsePlanRepository(self._session)
+        self.communications = SqlCommunicationRepository(self._session)
+        self.validations = SqlValidationRepository(self._session)
         self.audit = AuditChainWriter(self._session, clock=self._clock)
         self.events = SqlEventStore(self._session, clock=self._clock)
         return self
