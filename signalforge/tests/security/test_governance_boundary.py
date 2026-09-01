@@ -36,6 +36,55 @@ from signalforge.tests.governance.conftest import (  # noqa: F401  (fixtures)
 pytestmark = pytest.mark.anyio
 
 
+INERT_DRAFT_WRITES = {
+    ("POST", "/incidents/{incident_id}/communications"),
+    ("POST", "/incidents/{incident_id}/communications/{communication_id}/correction"),
+}
+"""The fourth reason an incident write may carry no permission (S6-T04).
+
+Neither is self-scoped and both write state, so they belong to neither of the
+war room's two categories. They are exempt because a draft is **inert**: it
+cannot reach an audience by any path. `CommunicationState.TRANSITIONS` admits
+ISSUED only from APPROVED, and only `issue()` performs that move, under the
+audience's permission and by a person. Writing a draft therefore produces an
+artifact that requires a second, permissioned act by a second person to have any
+effect - which is a stronger control than a permission on the draft would be.
+
+Why that matters rather than being a technicality: `ROLE_PERMISSIONS[Role.SME]`
+is empty, and the SME is the person most likely to know what the customer-facing
+symptom actually is. A permission on drafting would mean the one person who can
+describe the symptom cannot write it down.
+
+The obligation this category takes on is asserted below and in
+tests/governance/test_communications.py: a draft citing nothing is refused, a
+draft cannot be issued without approval, its author cannot approve an externally
+visible one, and a customer body never quotes untrusted text."""
+
+AUDIENCE_SCOPED_WRITES = {
+    ("POST", "/incidents/{incident_id}/communications/{communication_id}/approve"),
+    ("POST", "/incidents/{incident_id}/communications/{communication_id}/issue"),
+}
+"""The fifth reason (S6-T04), and the only one on any of these lists where the
+route *does* enforce a permission.
+
+Which permission applies is decided by the communication's `audience`, and the
+route has not read the communication yet - so it cannot name one statically and
+the API-surface census cannot read one from its closure. It is enforced in
+`CommunicationService._assert_may_approve`, where the audience is known:
+
+    customer, customer_support -> approve_customer_comms
+    leadership                 -> approve_exec_comms
+    responders                 -> none
+
+A route-level guard would have to pick one audience's permission and would be
+wrong for the other three - it would either lock the Comms Lead out of a
+leadership note or let an Executive approve a customer statement, which is the
+separation-of-duties failure this whole area exists to prevent.
+
+Asserted from both sides: an Executive is refused a customer statement below, and
+a Comms Lead is allowed one in tests/governance/test_communications.py."""
+
+
 @pytest.mark.req("REQ-013")
 async def test_another_tenants_incident_is_not_reachable(governed):
     """A second organisation, its own incident, and no path between them.
@@ -125,6 +174,52 @@ async def test_an_executive_cannot_approve_a_customer_statement(governed):
         "approve",
         expect=403,
     )
+
+
+@pytest.mark.req("REQ-012", "REQ-064")
+async def test_an_inert_draft_cannot_reach_anybody_without_a_second_person(governed):
+    """The obligation `INERT_DRAFT_WRITES` takes on.
+
+    Drafting carries no permission, so this test has to show that a draft is
+    genuinely inert: the author cannot issue it, cannot approve it into a state
+    from which it could be issued, and the artifact reaches no audience on its
+    own.
+    """
+    from signalforge.tests.governance.conftest import (
+        communication_action,
+        communications,
+        draft_communication,
+    )
+
+    incident = governed.declare()
+    await governed.api.container.governor.run_for(governed.tenant_id, incident["id"])
+    sme = governed.api.invite_and_accept(
+        governed.owner_token,
+        email="sme@acme.io",
+        roles=["sme"],
+        display_name="Sam SME",
+        password="sme-strong-password",
+    )
+    token = sme["tokens"]["access_token"]
+
+    # The SME - who holds nothing in the frozen matrix - can draft.
+    draft = draft_communication(
+        governed.api, token, incident["id"], audience="customer"
+    )
+    assert draft["state"] == "draft"
+    assert draft["issued_at"] is None
+
+    # And can do nothing else with it.
+    communication_action(
+        governed.api, token, incident["id"], draft["communication_id"], "approve",
+        expect=403,
+    )
+    communication_action(
+        governed.api, token, incident["id"], draft["communication_id"], "issue",
+        expect=409,
+    )
+    board = communications(governed.api, token, incident["id"])
+    assert all(row["issued_at"] is None for row in board["communications"])
 
 
 @pytest.mark.req("REQ-064")

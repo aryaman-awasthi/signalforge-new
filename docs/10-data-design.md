@@ -10,8 +10,8 @@ integrations and onboarding, and is the one Alembic migrates. `rollups.db`
 holds derived detection telemetry, is created from its models at startup, and
 can be deleted without losing any record of anything that happened.
 
-Generated: 2026-09-01T14:29:34+00:00
-Tables: 39 in signalforge.db, 4 in rollups.db
+Generated: 2026-09-01T17:41:13+00:00
+Tables: 45 in signalforge.db, 4 in rollups.db
 
 ## 1. Entity relationship diagram
 
@@ -599,6 +599,126 @@ Tables not yet placed in a group - add them to GROUPS in scripts/gen_erd.py.
 
 ```mermaid
 erDiagram
+    execution_approvals {
+        string id "PK"
+        string tenant_id
+        string incident_id
+        string app_id
+        string execution_id
+        string action_id
+        string state
+        string requested_by
+        datetime requested_at
+        string decision_fingerprint
+        integer policy_version
+        string policy_ref
+        json required_roles
+        string approver_user_id
+        string approver_label
+        json approver_roles
+        string permission
+        datetime issued_at
+        datetime expires_at
+        datetime used_at
+        datetime revoked_at
+        text note
+        json detail
+    }
+    execution_ledger {
+        string id "PK"
+        string tenant_id
+        string incident_id
+        string app_id
+        string action_id
+        string action_class
+        string risk_class
+        string state
+        string idempotency_key
+        integer attempt
+        string requested_by
+        datetime requested_at
+        json args
+        string args_digest
+        string decision
+        text decision_reason
+        json rules_hit
+        integer policy_version
+        string policy_ref
+        string floor_version
+        string decision_fingerprint
+        string approval_id
+        string binding_id
+        string adapter_execution_id
+        datetime started_at
+        datetime finished_at
+        text error
+        string error_category
+        boolean retry_blocked
+        string reconcile_outcome
+        datetime reconciled_at
+        json reconcile_detail
+        string compensates_execution_id
+        string compensated_by_execution_id
+        string supersedes_execution_id
+        string takeover_by
+        text takeover_note
+        string result_ref
+        json detail
+    }
+    governance_policies {
+        string id "PK"
+        string tenant_id
+        string app_id
+        integer version
+        datetime created_at
+        string author_id
+        string author_label
+        text note
+        integer approval_ttl_s
+        integer stability_window_s
+        integer stability_samples
+        integer max_action_retries
+        integer revalidation_cycles
+        json blocked_classes
+        json require_approval_classes
+        json approver_roles
+        json action_rules
+        string checksum
+        text source
+    }
+    incident_communications {
+        string id "PK"
+        string tenant_id
+        string incident_id
+        string app_id
+        string audience
+        string state
+        string subject
+        text body
+        integer version
+        datetime created_at
+        string created_by
+        json grounded_node_ids
+        json evidence_refs
+        string model
+        string model_class
+        boolean degraded
+        string approved_by
+        string approved_by_label
+        string approved_permission
+        datetime approved_at
+        string issued_by
+        datetime issued_at
+        datetime contradicted_at
+        string contradiction_reason
+        json contradicting_node_ids
+        string corrects_id
+        string corrected_by_id
+        json redline
+        datetime withdrawn_at
+        text note
+        json detail
+    }
     incident_confidence_history {
         integer id "PK"
         string tenant_id
@@ -677,6 +797,38 @@ erDiagram
         integer completion_tokens
         integer hits
         datetime created_at
+    }
+    response_plans {
+        string id "PK"
+        string tenant_id
+        string incident_id
+        integer version
+        integer previous_version
+        datetime created_at
+        string created_by
+        json items
+        json changed_assumptions
+        json evidence_refs
+        text note
+        json detail
+    }
+    validation_cycles {
+        string id "PK"
+        string tenant_id
+        string incident_id
+        string app_id
+        integer cycle
+        datetime started_at
+        datetime finished_at
+        string requested_by
+        string verdict
+        json layers
+        json window
+        boolean escalated
+        boolean returned_to_active
+        json evidence_node_ids
+        text note
+        json detail
     }
 ```
 
@@ -1483,6 +1635,152 @@ Indexes: `ix_agent_runs_incident`, `ix_agent_runs_tenant_id`, `ix_agent_runs_ten
 Indexes: `ix_agent_run_steps_run`, `ix_agent_run_steps_run_id`
 
 
+#### `execution_approvals`
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | string | no | primary key |
+| `tenant_id` | string | no |  |
+| `incident_id` | string | no |  |
+| `app_id` | string | no |  |
+| `execution_id` | string | no |  |
+| `action_id` | string | no |  |
+| `state` | string | no |  |
+| `requested_by` | string | no |  |
+| `requested_at` | datetime | no |  |
+| `decision_fingerprint` | string | no |  |
+| `policy_version` | integer | no |  |
+| `policy_ref` | string | no |  |
+| `required_roles` | json | no |  |
+| `approver_user_id` | string | no |  |
+| `approver_label` | string | no |  |
+| `approver_roles` | json | no |  |
+| `permission` | string | yes |  |
+| `issued_at` | datetime | yes |  |
+| `expires_at` | datetime | yes |  |
+| `used_at` | datetime | yes |  |
+| `revoked_at` | datetime | yes |  |
+| `note` | text | no |  |
+| `detail` | json | no |  |
+
+Indexes: `ix_approvals_execution`, `ix_approvals_expiry`, `ix_approvals_incident`, `ix_execution_approvals_tenant_id`
+
+
+#### `execution_ledger`
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | string | no | primary key |
+| `tenant_id` | string | no |  |
+| `incident_id` | string | no |  |
+| `app_id` | string | no |  |
+| `action_id` | string | no |  |
+| `action_class` | string | no |  |
+| `risk_class` | string | no |  |
+| `state` | string | no |  |
+| `idempotency_key` | string | no |  |
+| `attempt` | integer | no |  |
+| `requested_by` | string | no |  |
+| `requested_at` | datetime | no |  |
+| `args` | json | no |  |
+| `args_digest` | string | no |  |
+| `decision` | string | no |  |
+| `decision_reason` | text | no |  |
+| `rules_hit` | json | no |  |
+| `policy_version` | integer | no |  |
+| `policy_ref` | string | no |  |
+| `floor_version` | string | no |  |
+| `decision_fingerprint` | string | no |  |
+| `approval_id` | string | yes |  |
+| `binding_id` | string | no |  |
+| `adapter_execution_id` | string | no |  |
+| `started_at` | datetime | yes |  |
+| `finished_at` | datetime | yes |  |
+| `error` | text | no |  |
+| `error_category` | string | no |  |
+| `retry_blocked` | boolean | no |  |
+| `reconcile_outcome` | string | yes |  |
+| `reconciled_at` | datetime | yes |  |
+| `reconcile_detail` | json | no |  |
+| `compensates_execution_id` | string | yes |  |
+| `compensated_by_execution_id` | string | yes |  |
+| `supersedes_execution_id` | string | yes |  |
+| `takeover_by` | string | no |  |
+| `takeover_note` | text | no |  |
+| `result_ref` | string | no |  |
+| `detail` | json | no |  |
+
+Indexes: `ix_execution_ledger_action`, `ix_execution_ledger_incident`, `ix_execution_ledger_state`, `ix_execution_ledger_tenant_id`  
+Constraints: unique (tenant_id, idempotency_key)
+
+
+#### `governance_policies`
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | string | no | primary key |
+| `tenant_id` | string | no |  |
+| `app_id` | string | no |  |
+| `version` | integer | no |  |
+| `created_at` | datetime | no |  |
+| `author_id` | string | no |  |
+| `author_label` | string | no |  |
+| `note` | text | no |  |
+| `approval_ttl_s` | integer | no |  |
+| `stability_window_s` | integer | no |  |
+| `stability_samples` | integer | no |  |
+| `max_action_retries` | integer | no |  |
+| `revalidation_cycles` | integer | no |  |
+| `blocked_classes` | json | no |  |
+| `require_approval_classes` | json | no |  |
+| `approver_roles` | json | no |  |
+| `action_rules` | json | no |  |
+| `checksum` | string | no |  |
+| `source` | text | no |  |
+
+Indexes: `ix_governance_policies_app`, `ix_governance_policies_tenant_id`  
+Constraints: unique (tenant_id, app_id, version)
+
+
+#### `incident_communications`
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | string | no | primary key |
+| `tenant_id` | string | no |  |
+| `incident_id` | string | no |  |
+| `app_id` | string | no |  |
+| `audience` | string | no |  |
+| `state` | string | no |  |
+| `subject` | string | no |  |
+| `body` | text | no |  |
+| `version` | integer | no |  |
+| `created_at` | datetime | no |  |
+| `created_by` | string | no |  |
+| `grounded_node_ids` | json | no |  |
+| `evidence_refs` | json | no |  |
+| `model` | string | no |  |
+| `model_class` | string | no |  |
+| `degraded` | boolean | no |  |
+| `approved_by` | string | no |  |
+| `approved_by_label` | string | no |  |
+| `approved_permission` | string | yes |  |
+| `approved_at` | datetime | yes |  |
+| `issued_by` | string | no |  |
+| `issued_at` | datetime | yes |  |
+| `contradicted_at` | datetime | yes |  |
+| `contradiction_reason` | string | no |  |
+| `contradicting_node_ids` | json | no |  |
+| `corrects_id` | string | yes |  |
+| `corrected_by_id` | string | yes |  |
+| `redline` | json | no |  |
+| `withdrawn_at` | datetime | yes |  |
+| `note` | text | no |  |
+| `detail` | json | no |  |
+
+Indexes: `ix_communications_incident`, `ix_communications_state`, `ix_incident_communications_tenant_id`
+
+
 #### `incident_confidence_history`
 
 | Column | Type | Null | Notes |
@@ -1592,6 +1890,52 @@ Indexes: `ix_incident_situation_snapshots_tenant_id`, `ix_situation_snapshots_in
 | `created_at` | datetime | no |  |
 
 Indexes: `ix_llm_cache_tenant_created`
+
+
+#### `response_plans`
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | string | no | primary key |
+| `tenant_id` | string | no |  |
+| `incident_id` | string | no |  |
+| `version` | integer | no |  |
+| `previous_version` | integer | yes |  |
+| `created_at` | datetime | no |  |
+| `created_by` | string | no |  |
+| `items` | json | no |  |
+| `changed_assumptions` | json | no |  |
+| `evidence_refs` | json | no |  |
+| `note` | text | no |  |
+| `detail` | json | no |  |
+
+Indexes: `ix_response_plans_incident`, `ix_response_plans_tenant_id`  
+Constraints: unique (tenant_id, incident_id, version)
+
+
+#### `validation_cycles`
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | string | no | primary key |
+| `tenant_id` | string | no |  |
+| `incident_id` | string | no |  |
+| `app_id` | string | no |  |
+| `cycle` | integer | no |  |
+| `started_at` | datetime | no |  |
+| `finished_at` | datetime | yes |  |
+| `requested_by` | string | no |  |
+| `verdict` | string | no |  |
+| `layers` | json | no |  |
+| `window` | json | no |  |
+| `escalated` | boolean | no |  |
+| `returned_to_active` | boolean | no |  |
+| `evidence_node_ids` | json | no |  |
+| `note` | text | no |  |
+| `detail` | json | no |  |
+
+Indexes: `ix_validation_cycles_incident`, `ix_validation_cycles_tenant_id`  
+Constraints: unique (tenant_id, incident_id, cycle)
 
 
 ### Detection (S4) - second database, `rollups.db`

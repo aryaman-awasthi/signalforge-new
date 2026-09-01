@@ -107,7 +107,7 @@ catalogue below and its frame protocol is written out later in this document.
 
 <!-- BEGIN GENERATED ROUTE CATALOGUE (scripts/gen_openapi.py) -->
 
-105 routes: 94 need a human session, 5 a sending application's ingest key, and 6 no credential at all - and that last number is the one the security suite pins to a closed list.
+131 routes: 120 need a human session, 5 a sending application's ingest key, and 6 no credential at all - and that last number is the one the security suite pins to a closed list.
 
 The permission column is read from each route's own RBAC dependency, so a route guarded by the wrong permission is documented as guarded by the wrong permission. It also says where a per-application role binding is evaluated from: `?app_id=`, the optional query parameter every route guarded by `deps.require` accepts, or `path`, the application named in the URL on the wizard's own routes.
 
@@ -312,6 +312,39 @@ What the platform believes about an incident and why: a versioned graph of facts
 | GET | `/incidents/{incident_id}/brain/nodes/{derived_key:path}` | session | (session only) | Every version of one belief, oldest first. |
 | POST | `/incidents/{incident_id}/brain/refresh` | session | `declare_incident` | Run a reasoning pass now. |
 | GET | `/incidents/{incident_id}/brain/topology` | session | (session only) | The dependency map, what changed, and the impact split. |
+
+### `governance`
+
+The consequential-action boundary: policy, the Tool Gateway, the execution ledger, next best action, communications and layered validation. Every call that changes an integrated system passes through one door and produces an explicit decision - `allow`, `approval_required` or `block` - carrying the ordered `rules_hit` that produced it and naming, per rule, whether it came from the hardcoded platform floor or the application's own policy. The floor is code, not configuration: the six high-risk classes (rollback, restart, failover, traffic shift, config change, customer-impacting) can never auto-execute, a read-only classification can never be given to something that mutates, an approval expires within an hour, and audit is not a field, so it cannot be switched off. A policy document contradicting any of that is refused with the rule that refused it and the attempt is written to the audit chain. An approval is bound to a fingerprint over the action, its arguments, its risk class and the policy version, and is re-checked at execution for expiry, spend, revocation, fingerprint and whether the approver still holds the permission. A timeout is `uncertain`, never failed: `retry_blocked` is set and the only move out is `reconcile`, which asks the target system what actually happened. Duplicate submits return the existing execution and send nothing. Next-best-action scores are arithmetic the server computes before any model is called; a model may write the sentence beside a score and can never change one. No route here sends a communication, closes an incident or executes without the decision chain above - there is no such path.
+
+| Method | Path | Credential | Permission | Purpose |
+|---|---|---|---|---|
+| GET | `/apps/{app_id}/policy` | session | (session only) | The policy in force, what it means for every published action, and the immutable floor above which it sits. |
+| POST | `/apps/{app_id}/policy` | session | `edit_policies` (path) | Write a new policy version. |
+| POST | `/apps/{app_id}/policy/dry-run` | session | `edit_policies` (path) | What a candidate document would do, evaluated by the engine that decides. |
+| GET | `/apps/{app_id}/policy/versions` | session | `read_audit` (path) | Every version, newest first, each naming its author. |
+| GET | `/incidents/{incident_id}/actions` | session | (session only) | The ranked actions, with the score broken into its four terms. |
+| GET | `/incidents/{incident_id}/communications` | session | (session only) | The board, having first checked whether anything on it has stopped being true. |
+| POST | `/incidents/{incident_id}/communications` | session | (session only) | Write a draft, grounded on this incident's graph nodes. |
+| POST | `/incidents/{incident_id}/communications/{communication_id}/approve` | session | (session only) | A named person with the audience's permission says the text is right. |
+| POST | `/incidents/{incident_id}/communications/{communication_id}/correction` | session | (session only) | A new draft carrying a redline against what was published. |
+| POST | `/incidents/{incident_id}/communications/{communication_id}/issue` | session | (session only) | Publish. |
+| GET | `/incidents/{incident_id}/executions` | session | (session only) | Every attempt to change this application's estate during this incident. |
+| POST | `/incidents/{incident_id}/executions` | session | `declare_incident` | Ask for an action. |
+| GET | `/incidents/{incident_id}/executions/{execution_id}` | session | (session only) | Get execution |
+| POST | `/incidents/{incident_id}/executions/{execution_id}/approve` | session | `approve_high_risk` | A person holding approve_high_risk says yes, for a bounded time. |
+| POST | `/incidents/{incident_id}/executions/{execution_id}/cancel` | session | `declare_incident` | Cancel execution |
+| POST | `/incidents/{incident_id}/executions/{execution_id}/compensate` | session | `declare_incident` | Undo what landed, through the action's declared reverse action. |
+| POST | `/incidents/{incident_id}/executions/{execution_id}/deny` | session | `approve_high_risk` | Deny execution |
+| POST | `/incidents/{incident_id}/executions/{execution_id}/reconcile` | session | `declare_incident` | Ask the target system what actually happened. |
+| POST | `/incidents/{incident_id}/executions/{execution_id}/retry` | session | `declare_incident` | A fresh attempt at something that provably did not happen. |
+| POST | `/incidents/{incident_id}/executions/{execution_id}/revoke` | session | `approve_high_risk` | Withdraw an approval that has not been spent. |
+| POST | `/incidents/{incident_id}/executions/{execution_id}/run` | session | `declare_incident` | Send an approved execution. |
+| POST | `/incidents/{incident_id}/executions/{execution_id}/takeover` | session | `declare_incident` | A person is doing the rest by hand, and says what they are doing. |
+| GET | `/incidents/{incident_id}/plan` | session | (session only) | Plan versions, newest first. |
+| POST | `/incidents/{incident_id}/plan` | session | `declare_incident` | Write plan version n+1, marking every action kept, paused or added. |
+| GET | `/incidents/{incident_id}/validation` | session | (session only) | The four layers, the stability window and whether closure is locked. |
+| POST | `/incidents/{incident_id}/validation` | session | `declare_incident` | Run one validation cycle against the application. |
 
 ### `platform`
 
@@ -777,6 +810,131 @@ somebody has to be able to close out work that was actually done.
 | 403 | completing somebody else's task |
 | 404 | the task or the incident is not in this tenant |
 | 422 | assigning to a user outside the organisation, completing a cancelled task, or reassigning a settled one |
+
+## Governance and safe execution: `/apps/{id}/policy`, `/incidents/{id}/{actions,plan,executions,communications,validation}` (REQ-060..REQ-065)
+
+This is the consequential-action surface. Everything else in this API observes,
+reasons or records; these routes change somebody's production estate, and the
+shape of the surface follows from that.
+
+### The one door
+
+`POST /incidents/{id}/executions` is the only way an action reaches an
+integrated system. There is no route that calls an adapter directly, and no
+combination of parameters that skips a step. The request produces a
+`GatewayOut`:
+
+    {
+      "execution": { "state": "approval_required", "retry_blocked": false, ... },
+      "decision":  { "outcome": "approval_required", "rules_hit": [...], ... },
+      "approval":  { "state": "requested", "required_roles": ["incident_commander"], ... },
+      "duplicate": false
+    }
+
+`decision.outcome` is `allow`, `approval_required` or `block`, and it is an
+*answer* rather than an error: a blocked action still comes back 201 with the
+row and the rule that blocked it, because an operator has to be shown why.
+
+`intent` accepts `manual`, `approval` or `auto`. Sending `auto` for a high-risk
+action does not raise - it returns `outcome: block` with
+`FLOOR-AUTO-EXECUTE-REFUSED` in `rules_hit`, a ledger row in `blocked`, and an
+audit entry. An attempt to auto-execute a rollback is something a security
+review should be able to find, not an exception a client swallowed. The cockpit
+never sends the field at all.
+
+### Reading `retry_blocked`
+
+`retry_blocked` travels beside `state` on every execution and a client **must
+not** offer retry while it is true. The server answers 409 either way, but a
+Retry button beside a rollback whose outcome is unknown is an offer to apply it
+twice, and the button is the part the operator sees.
+
+| `state` | `retry_blocked` | What a client should offer |
+|---|---|---|
+| `uncertain` | true | Reconcile, or human takeover |
+| `partial` | true | Reconcile, compensate, or takeover |
+| `completed_late` | true | nothing - it is applied |
+| `not_applied` | false | Retry |
+| `succeeded` | false | Compensate, if the action declares a reverse |
+
+### Approvals
+
+`POST .../executions/{id}/approve` carries `approve_high_risk`. It is a
+different permission from the one that requested the action (`declare_incident`)
+because they are two decisions by two people, and the domain additionally
+refuses an approval by the requester whatever permissions they hold - 422, not
+403, because it is not a statement about their authority.
+
+The response's `approval.seconds_left` is a server-computed countdown. A client
+may tick it locally for smoothness; the server is the authority, and an approval
+is refused at execution the moment `expires_at` passes whether or not any tab
+was open to watch it.
+
+### Policy
+
+`GET /apps/{id}/policy` needs no permission - reading the rules is not changing
+them, and a responder who cannot see why an action needs approval will ask in
+chat. Editing needs `edit_policies`. **The version history needs `read_audit`**,
+not `edit_policies`: an audit trail only the editor can see is not an audit
+trail.
+
+`POST /apps/{id}/policy` answers 422 for a document that contradicts the floor,
+with the floor rule in the message, and writes `policy.floor.rejected` to the
+audit chain *before* answering. It answers 409 when an incident on that
+application is open and `confirm_active_incident` was not sent.
+
+`POST /apps/{id}/policy/dry-run` answers 200 either way. A refused candidate
+comes back with `accepted: false` and `floor_rule` rather than as an error,
+because the editor has to render the refusal beside the current decisions.
+
+Each action row carries `locked` and `locked_reason`, computed in the domain
+from the action's class. A client renders the padlock from that field and never
+decides for itself which rows are the floor's.
+
+### Communications
+
+Drafting carries no permission. Approving and issuing carry the *audience's*
+permission - `approve_customer_comms` for `customer` and `customer_support`,
+`approve_exec_comms` for `leadership`, none for `responders` - and it is checked
+in the service rather than on the route, because the route has not read the
+communication and does not know its audience yet. A customer statement approved
+by somebody holding only `approve_exec_comms` is 403.
+
+There is no send, transmit, broadcast or publish operation on this surface, and
+a test walks the published document to keep it that way. `issue` is the only
+transition into a public state and it requires a person.
+
+`GET /incidents/{id}/communications` runs the contradiction sweep before it
+answers, so a statement whose grounding has just been superseded is already
+flagged when the screen opens rather than on the next background tick.
+
+### Validation
+
+`POST /incidents/{id}/validation` runs one cycle and answers 201 with the four
+layers, each check naming the `source` it was read from and a `result_ref` that
+drills down. No check may be sourced from the Incident Brain; the domain refuses
+to construct one, so the API cannot publish one either.
+
+`closure_blocked` and `closure_lock_reason` are computed from the gating layers.
+When they are set, `POST /incidents/{id}/close` answers **409** with the same
+reason - and there is no override parameter on the close route. The way past a
+failing gate is to fix the thing or re-validate, not to tell the platform to
+look away.
+
+### Status codes on this surface
+
+| Code | Means |
+|---|---|
+| 201 | the request was recorded - including when the decision was `block` |
+| 403 | the caller lacks the permission the route or the audience requires |
+| 404 | the incident, execution or communication is not in the caller's tenant |
+| 409 | the state forbids it *for now*: retry before reconciliation, closure while a layer fails, a policy edit needing confirmation, issuing an unapproved draft |
+| 422 | the instruction is refused: a floor violation, an invalid approval, arguments off-schema, an approval by the requester |
+
+The 409/422 split is deliberate. 409 says "not yet, and here is what would
+change that". 422 says "not this, however you ask" - and a floor violation is a
+422 rather than a 403 because an org owner holding every permission is refused
+exactly as firmly as anybody else. The floor is not a permission.
 
 ## Ingest keys (REQ-032)
 

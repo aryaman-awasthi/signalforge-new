@@ -217,6 +217,80 @@
         "title": "ActionPatchIn",
         "type": "object"
       },
+      "ActionRowOut": {
+        "properties": {
+          "action_class": {
+            "title": "Action Class",
+            "type": "string"
+          },
+          "action_id": {
+            "title": "Action Id",
+            "type": "string"
+          },
+          "decision": {
+            "$ref": "#/components/schemas/DecisionOut"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "execution_mode": {
+            "title": "Execution Mode",
+            "type": "string"
+          },
+          "idempotent": {
+            "title": "Idempotent",
+            "type": "boolean"
+          },
+          "locked": {
+            "description": "True for the six high-risk classes. The row is the platform safety floor: it cannot auto-execute and always needs approval, and no policy edit can change that. Computed in the domain, never a UI hint.",
+            "title": "Locked",
+            "type": "boolean"
+          },
+          "locked_reason": {
+            "title": "Locked Reason",
+            "type": "string"
+          },
+          "manifest_risk": {
+            "title": "Manifest Risk",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "reversible": {
+            "title": "Reversible",
+            "type": "boolean"
+          },
+          "risk_override": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Override"
+          }
+        },
+        "required": [
+          "action_id",
+          "name",
+          "action_class",
+          "manifest_risk",
+          "execution_mode",
+          "enabled",
+          "reversible",
+          "idempotent",
+          "decision",
+          "locked",
+          "locked_reason"
+        ],
+        "title": "ActionRowOut",
+        "type": "object"
+      },
       "ActionsImportIn": {
         "properties": {
           "binding_id": {
@@ -1210,6 +1284,122 @@
         "title": "ApplicationSummaryOut",
         "type": "object"
       },
+      "ApprovalOut": {
+        "properties": {
+          "action_id": {
+            "title": "Action Id",
+            "type": "string"
+          },
+          "approval_id": {
+            "title": "Approval Id",
+            "type": "string"
+          },
+          "approver_label": {
+            "title": "Approver Label",
+            "type": "string"
+          },
+          "approver_roles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Approver Roles",
+            "type": "array"
+          },
+          "approver_user_id": {
+            "title": "Approver User Id",
+            "type": "string"
+          },
+          "execution_id": {
+            "title": "Execution Id",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "issued_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issued At"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "permission": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Permission"
+          },
+          "policy_version": {
+            "title": "Policy Version",
+            "type": "integer"
+          },
+          "requested_at": {
+            "format": "date-time",
+            "title": "Requested At",
+            "type": "string"
+          },
+          "requested_by": {
+            "title": "Requested By",
+            "type": "string"
+          },
+          "required_roles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Roles",
+            "type": "array"
+          },
+          "seconds_left": {
+            "description": "Zero when expired or never granted. The countdown on the approval sheet - and an expired approval is refused at execution time whether or not any client noticed.",
+            "title": "Seconds Left",
+            "type": "integer"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "approval_id",
+          "execution_id",
+          "action_id",
+          "state",
+          "requested_by",
+          "requested_at",
+          "approver_user_id",
+          "approver_label",
+          "approver_roles",
+          "required_roles",
+          "seconds_left",
+          "policy_version",
+          "note"
+        ],
+        "title": "ApprovalOut",
+        "type": "object"
+      },
       "AskIn": {
         "properties": {
           "question": {
@@ -1868,6 +2058,168 @@
         "title": "BusStatusOut",
         "type": "object"
       },
+      "CandidateOut": {
+        "properties": {
+          "action_class": {
+            "title": "Action Class",
+            "type": "string"
+          },
+          "action_id": {
+            "title": "Action Id",
+            "type": "string"
+          },
+          "approver_roles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Approver Roles",
+            "type": "array"
+          },
+          "eligibility": {
+            "title": "Eligibility",
+            "type": "string"
+          },
+          "eligibility_reason": {
+            "title": "Eligibility Reason",
+            "type": "string"
+          },
+          "eligible": {
+            "title": "Eligible",
+            "type": "boolean"
+          },
+          "evidence_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "expected_validation_s": {
+            "title": "Expected Validation S",
+            "type": "integer"
+          },
+          "hypothesis_confidence": {
+            "title": "Hypothesis Confidence",
+            "type": "number"
+          },
+          "hypothesis_key": {
+            "title": "Hypothesis Key",
+            "type": "string"
+          },
+          "hypothesis_label": {
+            "title": "Hypothesis Label",
+            "type": "string"
+          },
+          "impact": {
+            "title": "Impact",
+            "type": "number"
+          },
+          "information_gain": {
+            "title": "Information Gain",
+            "type": "number"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/DecisionOut"
+          },
+          "prerequisites": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Prerequisites",
+            "type": "array"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "rationale_degraded": {
+            "description": "True when the sentence is the platform's deterministic explanation rather than a model's.",
+            "title": "Rationale Degraded",
+            "type": "boolean"
+          },
+          "requires_approval": {
+            "title": "Requires Approval",
+            "type": "boolean"
+          },
+          "reversible": {
+            "title": "Reversible",
+            "type": "boolean"
+          },
+          "risk": {
+            "title": "Risk",
+            "type": "number"
+          },
+          "risk_class": {
+            "title": "Risk Class",
+            "type": "string"
+          },
+          "rollback_action_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rollback Action Id"
+          },
+          "rollback_summary": {
+            "title": "Rollback Summary",
+            "type": "string"
+          },
+          "score": {
+            "description": "urgency x impact x information_gain - risk. Deterministic arithmetic; a model may explain it and can never change it.",
+            "title": "Score",
+            "type": "number"
+          },
+          "unmet_prerequisites": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unmet Prerequisites",
+            "type": "array"
+          },
+          "urgency": {
+            "title": "Urgency",
+            "type": "number"
+          }
+        },
+        "required": [
+          "action_id",
+          "name",
+          "action_class",
+          "risk_class",
+          "score",
+          "urgency",
+          "impact",
+          "information_gain",
+          "risk",
+          "eligible",
+          "eligibility",
+          "eligibility_reason",
+          "policy",
+          "requires_approval",
+          "approver_roles",
+          "hypothesis_key",
+          "hypothesis_label",
+          "hypothesis_confidence",
+          "evidence_refs",
+          "prerequisites",
+          "unmet_prerequisites",
+          "expected_validation_s",
+          "rollback_summary",
+          "reversible",
+          "rationale",
+          "rationale_degraded"
+        ],
+        "title": "CandidateOut",
+        "type": "object"
+      },
       "CapabilityCellOut": {
         "properties": {
           "capability": {
@@ -2278,6 +2630,257 @@
           }
         },
         "title": "CloseIn",
+        "type": "object"
+      },
+      "CommsOut": {
+        "properties": {
+          "communications": {
+            "items": {
+              "$ref": "#/components/schemas/CommunicationOut"
+            },
+            "title": "Communications",
+            "type": "array"
+          },
+          "contradicted": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Contradicted",
+            "type": "array"
+          },
+          "corrections": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Corrections",
+            "type": "array"
+          }
+        },
+        "required": [
+          "communications",
+          "contradicted",
+          "corrections"
+        ],
+        "title": "CommsOut",
+        "type": "object"
+      },
+      "CommunicationIn": {
+        "properties": {
+          "audience": {
+            "description": "responders, leadership, customer_support or customer. The audience decides which permission approves it.",
+            "title": "Audience",
+            "type": "string"
+          },
+          "body": {
+            "default": "",
+            "maxLength": 4000,
+            "title": "Body",
+            "type": "string"
+          },
+          "node_ids": {
+            "description": "Incident-graph node ids this text is drawn from. Left empty, the platform grounds the draft on the incident's current facts and impacts. A draft citing nothing is refused.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 40,
+            "title": "Node Ids",
+            "type": "array"
+          },
+          "subject": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Subject",
+            "type": "string"
+          },
+          "use_model": {
+            "default": true,
+            "title": "Use Model",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "audience"
+        ],
+        "title": "CommunicationIn",
+        "type": "object"
+      },
+      "CommunicationOut": {
+        "properties": {
+          "approved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved At"
+          },
+          "approved_by": {
+            "title": "Approved By",
+            "type": "string"
+          },
+          "approved_by_label": {
+            "title": "Approved By Label",
+            "type": "string"
+          },
+          "audience": {
+            "title": "Audience",
+            "type": "string"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "communication_id": {
+            "title": "Communication Id",
+            "type": "string"
+          },
+          "contradicted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contradicted At"
+          },
+          "contradicting_node_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Contradicting Node Ids",
+            "type": "array"
+          },
+          "contradiction_reason": {
+            "title": "Contradiction Reason",
+            "type": "string"
+          },
+          "corrected_by_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Corrected By Id"
+          },
+          "corrects_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Corrects Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "degraded": {
+            "title": "Degraded",
+            "type": "boolean"
+          },
+          "grounded_node_ids": {
+            "description": "The incident-graph nodes this text is drawn from. A communication citing nothing does not exist.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Grounded Node Ids",
+            "type": "array"
+          },
+          "incident_id": {
+            "title": "Incident Id",
+            "type": "string"
+          },
+          "issued_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issued At"
+          },
+          "issued_by": {
+            "title": "Issued By",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "redline": {
+            "items": {
+              "$ref": "#/components/schemas/RedlineOut"
+            },
+            "title": "Redline",
+            "type": "array"
+          },
+          "requires_permission": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requires Permission"
+          },
+          "state": {
+            "description": "draft, approved, issued, contradicted, corrected or withdrawn. Nothing moves to issued without a person.",
+            "title": "State",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "communication_id",
+          "incident_id",
+          "audience",
+          "state",
+          "subject",
+          "body",
+          "version",
+          "created_at",
+          "created_by",
+          "grounded_node_ids",
+          "model",
+          "degraded",
+          "approved_by",
+          "approved_by_label",
+          "issued_by",
+          "contradiction_reason",
+          "contradicting_node_ids",
+          "redline"
+        ],
+        "title": "CommunicationOut",
         "type": "object"
       },
       "ComponentOut": {
@@ -3080,6 +3683,43 @@
         "title": "ConnectorPatchIn",
         "type": "object"
       },
+      "CorrectionIn": {
+        "properties": {
+          "body": {
+            "default": "",
+            "maxLength": 4000,
+            "title": "Body",
+            "type": "string"
+          },
+          "node_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 40,
+            "title": "Node Ids",
+            "type": "array"
+          },
+          "reason": {
+            "default": "",
+            "maxLength": 400,
+            "title": "Reason",
+            "type": "string"
+          },
+          "subject": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Subject",
+            "type": "string"
+          },
+          "use_model": {
+            "default": true,
+            "title": "Use Model",
+            "type": "boolean"
+          }
+        },
+        "title": "CorrectionIn",
+        "type": "object"
+      },
       "CorroborationOut": {
         "properties": {
           "corroborated": {
@@ -3249,6 +3889,93 @@
         ],
         "title": "DeadLetterState",
         "type": "string"
+      },
+      "DecisionOut": {
+        "properties": {
+          "action_class": {
+            "title": "Action Class",
+            "type": "string"
+          },
+          "action_id": {
+            "title": "Action Id",
+            "type": "string"
+          },
+          "approval_ttl_s": {
+            "title": "Approval Ttl S",
+            "type": "integer"
+          },
+          "approver_roles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Approver Roles",
+            "type": "array"
+          },
+          "floor_version": {
+            "title": "Floor Version",
+            "type": "string"
+          },
+          "outcome": {
+            "description": "allow, approval_required or block",
+            "title": "Outcome",
+            "type": "string"
+          },
+          "policy_ref": {
+            "title": "Policy Ref",
+            "type": "string"
+          },
+          "policy_version": {
+            "title": "Policy Version",
+            "type": "integer"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "reverse_action_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reverse Action Id"
+          },
+          "reversible": {
+            "title": "Reversible",
+            "type": "boolean"
+          },
+          "risk_class": {
+            "description": "read_only, low_risk, medium_risk or high_risk - the platform's classification, not the application's declaration",
+            "title": "Risk Class",
+            "type": "string"
+          },
+          "rules_hit": {
+            "items": {
+              "$ref": "#/components/schemas/RuleHitOut"
+            },
+            "title": "Rules Hit",
+            "type": "array"
+          }
+        },
+        "required": [
+          "outcome",
+          "action_id",
+          "action_class",
+          "risk_class",
+          "reason",
+          "rules_hit",
+          "approver_roles",
+          "approval_ttl_s",
+          "policy_version",
+          "policy_ref",
+          "floor_version",
+          "reversible"
+        ],
+        "title": "DecisionOut",
+        "type": "object"
       },
       "DeclareIn": {
         "properties": {
@@ -3584,6 +4311,70 @@
           "findings"
         ],
         "title": "DiscoveryOut",
+        "type": "object"
+      },
+      "DryRunIn": {
+        "properties": {
+          "source": {
+            "maxLength": 64000,
+            "minLength": 1,
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "title": "DryRunIn",
+        "type": "object"
+      },
+      "DryRunOut": {
+        "properties": {
+          "accepted": {
+            "title": "Accepted",
+            "type": "boolean"
+          },
+          "after": {
+            "items": {
+              "$ref": "#/components/schemas/ActionRowOut"
+            },
+            "title": "After",
+            "type": "array"
+          },
+          "before": {
+            "items": {
+              "$ref": "#/components/schemas/ActionRowOut"
+            },
+            "title": "Before",
+            "type": "array"
+          },
+          "changes": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "error": {
+            "description": "Empty when accepted. When refused, the floor's own message.",
+            "title": "Error",
+            "type": "string"
+          },
+          "floor_rule": {
+            "title": "Floor Rule",
+            "type": "string"
+          }
+        },
+        "required": [
+          "accepted",
+          "error",
+          "floor_rule",
+          "changes",
+          "before",
+          "after"
+        ],
+        "title": "DryRunOut",
         "type": "object"
       },
       "EdgeOut": {
@@ -3969,6 +4760,51 @@
         "title": "EvidenceRefOut",
         "type": "object"
       },
+      "ExecutionIn": {
+        "properties": {
+          "action_id": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Action Id",
+            "type": "string"
+          },
+          "args": {
+            "additionalProperties": true,
+            "description": "Validated against the schema the application published for this action. Values whose names look like credentials are redacted before anything is stored.",
+            "title": "Args",
+            "type": "object"
+          },
+          "intent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "manual, approval or auto. Asking for `auto` on a high-risk action does not raise - it produces a recorded BLOCK naming the floor rule, because an attempt to auto-execute a rollback is something a security review should be able to find.",
+            "title": "Intent"
+          },
+          "note": {
+            "default": "",
+            "maxLength": 400,
+            "title": "Note",
+            "type": "string"
+          },
+          "run": {
+            "default": true,
+            "description": "Execute immediately if policy allows. An approval-required decision never executes regardless of this flag.",
+            "title": "Run",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "action_id"
+        ],
+        "title": "ExecutionIn",
+        "type": "object"
+      },
       "ExecutionMode": {
         "description": "How far an action may go without a human.\n\nMANUAL is a human doing it. APPROVAL is the platform doing it after a named\nhuman approves. AUTO is the platform doing it on its own - and AUTO is\npermanently unavailable to the six high-risk classes.",
         "enum": [
@@ -3978,6 +4814,237 @@
         ],
         "title": "ExecutionMode",
         "type": "string"
+      },
+      "ExecutionOut": {
+        "properties": {
+          "action_class": {
+            "title": "Action Class",
+            "type": "string"
+          },
+          "action_id": {
+            "title": "Action Id",
+            "type": "string"
+          },
+          "app_id": {
+            "title": "App Id",
+            "type": "string"
+          },
+          "approval_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Id"
+          },
+          "args": {
+            "additionalProperties": true,
+            "description": "Already redacted: argument names that look like credentials carry *** rather than a value.",
+            "title": "Args",
+            "type": "object"
+          },
+          "attempt": {
+            "title": "Attempt",
+            "type": "integer"
+          },
+          "compensated_by_execution_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compensated By Execution Id"
+          },
+          "compensates_execution_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compensates Execution Id"
+          },
+          "decision": {
+            "title": "Decision",
+            "type": "string"
+          },
+          "decision_reason": {
+            "title": "Decision Reason",
+            "type": "string"
+          },
+          "error": {
+            "title": "Error",
+            "type": "string"
+          },
+          "error_category": {
+            "title": "Error Category",
+            "type": "string"
+          },
+          "execution_id": {
+            "title": "Execution Id",
+            "type": "string"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "floor_version": {
+            "title": "Floor Version",
+            "type": "string"
+          },
+          "idempotency_key": {
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "incident_id": {
+            "title": "Incident Id",
+            "type": "string"
+          },
+          "policy_ref": {
+            "title": "Policy Ref",
+            "type": "string"
+          },
+          "policy_version": {
+            "title": "Policy Version",
+            "type": "integer"
+          },
+          "reconcile_outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reconcile Outcome"
+          },
+          "reconciled_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reconciled At"
+          },
+          "requested_at": {
+            "format": "date-time",
+            "title": "Requested At",
+            "type": "string"
+          },
+          "requested_by": {
+            "title": "Requested By",
+            "type": "string"
+          },
+          "result_ref": {
+            "title": "Result Ref",
+            "type": "string"
+          },
+          "retry_blocked": {
+            "description": "True whenever the outcome at the target is not established. A client must not offer retry while this is set: reconcile first.",
+            "title": "Retry Blocked",
+            "type": "boolean"
+          },
+          "risk_class": {
+            "title": "Risk Class",
+            "type": "string"
+          },
+          "rules_hit": {
+            "items": {
+              "$ref": "#/components/schemas/RuleHitOut"
+            },
+            "title": "Rules Hit",
+            "type": "array"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "supersedes_execution_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes Execution Id"
+          },
+          "takeover_by": {
+            "title": "Takeover By",
+            "type": "string"
+          },
+          "takeover_note": {
+            "title": "Takeover Note",
+            "type": "string"
+          },
+          "terminal": {
+            "title": "Terminal",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "execution_id",
+          "incident_id",
+          "app_id",
+          "action_id",
+          "action_class",
+          "risk_class",
+          "state",
+          "attempt",
+          "idempotency_key",
+          "requested_by",
+          "requested_at",
+          "args",
+          "decision",
+          "decision_reason",
+          "rules_hit",
+          "policy_version",
+          "policy_ref",
+          "floor_version",
+          "retry_blocked",
+          "error",
+          "error_category",
+          "takeover_by",
+          "takeover_note",
+          "result_ref",
+          "terminal"
+        ],
+        "title": "ExecutionOut",
+        "type": "object"
       },
       "FamilyScoreOut": {
         "properties": {
@@ -4018,6 +5085,38 @@
           "weight"
         ],
         "title": "FamilyScoreOut",
+        "type": "object"
+      },
+      "GatewayOut": {
+        "properties": {
+          "approval": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ApprovalOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "decision": {
+            "$ref": "#/components/schemas/DecisionOut"
+          },
+          "duplicate": {
+            "description": "True when this exact request already existed. The external mutation was not sent a second time.",
+            "title": "Duplicate",
+            "type": "boolean"
+          },
+          "execution": {
+            "$ref": "#/components/schemas/ExecutionOut"
+          }
+        },
+        "required": [
+          "execution",
+          "decision",
+          "duplicate"
+        ],
+        "title": "GatewayOut",
         "type": "object"
       },
       "GoldenSignal": {
@@ -5430,6 +6529,119 @@
         "title": "KindCoverageOut",
         "type": "object"
       },
+      "LayerCheckOut": {
+        "properties": {
+          "check_id": {
+            "title": "Check Id",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "expected": {
+            "title": "Expected",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "observed": {
+            "title": "Observed",
+            "type": "string"
+          },
+          "result_ref": {
+            "title": "Result Ref",
+            "type": "string"
+          },
+          "source": {
+            "description": "The system that was read. Never the Incident Brain: recovery is checked against the application, not against the platform's own reasoning about it.",
+            "title": "Source",
+            "type": "string"
+          },
+          "verdict": {
+            "description": "pass, fail, unknown or not_applicable",
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "check_id",
+          "label",
+          "verdict",
+          "source",
+          "observed",
+          "expected",
+          "result_ref",
+          "detail"
+        ],
+        "title": "LayerCheckOut",
+        "type": "object"
+      },
+      "LayerOut": {
+        "properties": {
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/LayerCheckOut"
+            },
+            "title": "Checks",
+            "type": "array"
+          },
+          "failing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Failing",
+            "type": "array"
+          },
+          "layer": {
+            "title": "Layer",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "verdict": {
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "layer",
+          "verdict",
+          "summary",
+          "checks",
+          "failing"
+        ],
+        "title": "LayerOut",
+        "type": "object"
+      },
+      "LedgerOut": {
+        "properties": {
+          "approvals": {
+            "items": {
+              "$ref": "#/components/schemas/ApprovalOut"
+            },
+            "title": "Approvals",
+            "type": "array"
+          },
+          "executions": {
+            "items": {
+              "$ref": "#/components/schemas/ExecutionOut"
+            },
+            "title": "Executions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "executions",
+          "approvals"
+        ],
+        "title": "LedgerOut",
+        "type": "object"
+      },
       "LifecycleOut": {
         "properties": {
           "app_id": {
@@ -5815,6 +7027,93 @@
         "title": "MembershipGapOut",
         "type": "object"
       },
+      "NbaOut": {
+        "properties": {
+          "alternatives": {
+            "items": {
+              "$ref": "#/components/schemas/CandidateOut"
+            },
+            "title": "Alternatives",
+            "type": "array"
+          },
+          "degraded": {
+            "title": "Degraded",
+            "type": "boolean"
+          },
+          "fallback": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "generated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generated At"
+          },
+          "ineligible": {
+            "description": "Actions that cannot be performed right now, with the reason. Returned rather than hidden, and never the primary recommendation.",
+            "items": {
+              "$ref": "#/components/schemas/CandidateOut"
+            },
+            "title": "Ineligible",
+            "type": "array"
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "policy_version": {
+            "title": "Policy Version",
+            "type": "integer"
+          },
+          "previous_plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "primary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "alternatives",
+          "ineligible",
+          "degraded",
+          "policy_version"
+        ],
+        "title": "NbaOut",
+        "type": "object"
+      },
       "NodeHistoryOut": {
         "properties": {
           "derived_key": {
@@ -5962,6 +7261,18 @@
           "provenance"
         ],
         "title": "NodeOut",
+        "type": "object"
+      },
+      "NoteIn": {
+        "properties": {
+          "note": {
+            "default": "",
+            "maxLength": 400,
+            "title": "Note",
+            "type": "string"
+          }
+        },
+        "title": "NoteIn",
         "type": "object"
       },
       "OrgOut": {
@@ -6344,6 +7655,171 @@
         "title": "Permission",
         "type": "string"
       },
+      "PlanIn": {
+        "properties": {
+          "changed_assumptions": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "title": "Changed Assumptions",
+            "type": "array"
+          },
+          "note": {
+            "default": "",
+            "maxLength": 400,
+            "title": "Note",
+            "type": "string"
+          }
+        },
+        "title": "PlanIn",
+        "type": "object"
+      },
+      "PlanItemOut": {
+        "properties": {
+          "action_id": {
+            "title": "Action Id",
+            "type": "string"
+          },
+          "changed_assumption": {
+            "title": "Changed Assumption",
+            "type": "string"
+          },
+          "disposition": {
+            "description": "kept, paused or added",
+            "title": "Disposition",
+            "type": "string"
+          },
+          "evidence_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          }
+        },
+        "required": [
+          "action_id",
+          "name",
+          "disposition",
+          "score",
+          "reason",
+          "changed_assumption",
+          "evidence_refs"
+        ],
+        "title": "PlanItemOut",
+        "type": "object"
+      },
+      "PlanOut": {
+        "properties": {
+          "added": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Added",
+            "type": "array"
+          },
+          "changed_assumptions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Changed Assumptions",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "evidence_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "incident_id": {
+            "title": "Incident Id",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PlanItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "kept": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Kept",
+            "type": "array"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "paused": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Paused",
+            "type": "array"
+          },
+          "plan_id": {
+            "title": "Plan Id",
+            "type": "string"
+          },
+          "previous_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Version"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "plan_id",
+          "incident_id",
+          "version",
+          "created_at",
+          "created_by",
+          "items",
+          "kept",
+          "paused",
+          "added",
+          "changed_assumptions",
+          "evidence_refs",
+          "note"
+        ],
+        "title": "PlanOut",
+        "type": "object"
+      },
       "Plane": {
         "description": "Retention plane (Sprint 2): signal events age out, incident events are kept and sealed.",
         "enum": [
@@ -6405,6 +7881,50 @@
           "retention"
         ],
         "title": "PlatformStatusOut",
+        "type": "object"
+      },
+      "PolicyVersionOut": {
+        "properties": {
+          "approval_ttl_s": {
+            "title": "Approval Ttl S",
+            "type": "integer"
+          },
+          "author_id": {
+            "title": "Author Id",
+            "type": "string"
+          },
+          "author_label": {
+            "title": "Author Label",
+            "type": "string"
+          },
+          "checksum": {
+            "title": "Checksum",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "created_at",
+          "author_id",
+          "author_label",
+          "note",
+          "checksum",
+          "approval_ttl_s"
+        ],
+        "title": "PolicyVersionOut",
         "type": "object"
       },
       "ProbeIn": {
@@ -6986,6 +8506,37 @@
           }
         },
         "title": "Redaction",
+        "type": "object"
+      },
+      "RedlineOut": {
+        "properties": {
+          "evidence_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "new": {
+            "title": "New",
+            "type": "string"
+          },
+          "old": {
+            "title": "Old",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "old",
+          "new",
+          "reason",
+          "evidence_refs"
+        ],
+        "title": "RedlineOut",
         "type": "object"
       },
       "RefreshOut": {
@@ -7591,6 +9142,35 @@
           "handoff_interval_hours"
         ],
         "title": "RotationOut",
+        "type": "object"
+      },
+      "RuleHitOut": {
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "effect": {
+            "title": "Effect",
+            "type": "string"
+          },
+          "rule_id": {
+            "title": "Rule Id",
+            "type": "string"
+          },
+          "source": {
+            "description": "floor, app_policy or manifest",
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rule_id",
+          "source",
+          "effect",
+          "detail"
+        ],
+        "title": "RuleHitOut",
         "type": "object"
       },
       "SealIn": {
@@ -8610,6 +10190,22 @@
         "title": "StormOut",
         "type": "object"
       },
+      "TakeoverIn": {
+        "properties": {
+          "note": {
+            "description": "What the person is doing by hand. Required: a takeover with no record of what was done is worse than no state at all.",
+            "maxLength": 400,
+            "minLength": 1,
+            "title": "Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "note"
+        ],
+        "title": "TakeoverIn",
+        "type": "object"
+      },
       "TaskDoneIn": {
         "properties": {
           "note": {
@@ -9589,6 +11185,168 @@
         "title": "ValidationError",
         "type": "object"
       },
+      "ValidationIn": {
+        "properties": {
+          "note": {
+            "default": "",
+            "maxLength": 400,
+            "title": "Note",
+            "type": "string"
+          }
+        },
+        "title": "ValidationIn",
+        "type": "object"
+      },
+      "ValidationOut": {
+        "properties": {
+          "app_id": {
+            "title": "App Id",
+            "type": "string"
+          },
+          "closure_blocked": {
+            "title": "Closure Blocked",
+            "type": "boolean"
+          },
+          "closure_lock_reason": {
+            "title": "Closure Lock Reason",
+            "type": "string"
+          },
+          "cycle": {
+            "title": "Cycle",
+            "type": "integer"
+          },
+          "escalated": {
+            "title": "Escalated",
+            "type": "boolean"
+          },
+          "evidence_node_ids": {
+            "description": "Graph nodes this cycle wrote. Validation feeds the reasoning; it never reads from it.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Node Ids",
+            "type": "array"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "incident_id": {
+            "title": "Incident Id",
+            "type": "string"
+          },
+          "layers": {
+            "items": {
+              "$ref": "#/components/schemas/LayerOut"
+            },
+            "title": "Layers",
+            "type": "array"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "requested_by": {
+            "title": "Requested By",
+            "type": "string"
+          },
+          "returned_to_active": {
+            "title": "Returned To Active",
+            "type": "boolean"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "validation_id": {
+            "title": "Validation Id",
+            "type": "string"
+          },
+          "verdict": {
+            "description": "recovered, stabilising or not_recovered",
+            "title": "Verdict",
+            "type": "string"
+          },
+          "window": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WindowOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "validation_id",
+          "incident_id",
+          "app_id",
+          "cycle",
+          "started_at",
+          "requested_by",
+          "verdict",
+          "layers",
+          "closure_blocked",
+          "closure_lock_reason",
+          "escalated",
+          "returned_to_active",
+          "evidence_node_ids",
+          "note"
+        ],
+        "title": "ValidationOut",
+        "type": "object"
+      },
+      "ValidationViewOut": {
+        "properties": {
+          "closure_blocked": {
+            "title": "Closure Blocked",
+            "type": "boolean"
+          },
+          "closure_lock_reason": {
+            "title": "Closure Lock Reason",
+            "type": "string"
+          },
+          "failed_cycles": {
+            "title": "Failed Cycles",
+            "type": "integer"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationOut"
+            },
+            "title": "History",
+            "type": "array"
+          },
+          "latest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ValidationOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "history",
+          "failed_cycles",
+          "closure_blocked",
+          "closure_lock_reason"
+        ],
+        "title": "ValidationViewOut",
+        "type": "object"
+      },
       "WarRoomOut": {
         "properties": {
           "app_id": {
@@ -9730,6 +11488,79 @@
           "blast_radius"
         ],
         "title": "WarRoomOut",
+        "type": "object"
+      },
+      "WindowOut": {
+        "properties": {
+          "consecutive_passes": {
+            "title": "Consecutive Passes",
+            "type": "integer"
+          },
+          "elapsed_s": {
+            "title": "Elapsed S",
+            "type": "integer"
+          },
+          "last_regression_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Regression At"
+          },
+          "last_regression_reason": {
+            "title": "Last Regression Reason",
+            "type": "string"
+          },
+          "regressions": {
+            "description": "Any regression resets the window to zero rather than decrementing it: intermittent green is not recovery.",
+            "title": "Regressions",
+            "type": "integer"
+          },
+          "remaining_s": {
+            "title": "Remaining S",
+            "type": "integer"
+          },
+          "required_s": {
+            "title": "Required S",
+            "type": "integer"
+          },
+          "required_samples": {
+            "title": "Required Samples",
+            "type": "integer"
+          },
+          "satisfied": {
+            "title": "Satisfied",
+            "type": "boolean"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          }
+        },
+        "required": [
+          "required_s",
+          "required_samples",
+          "consecutive_passes",
+          "elapsed_s",
+          "remaining_s",
+          "satisfied",
+          "regressions",
+          "last_regression_reason"
+        ],
+        "title": "WindowOut",
         "type": "object"
       },
       "WsTicketOut": {
@@ -10038,6 +11869,95 @@
           "customer_impacting"
         ],
         "title": "ImpactOut",
+        "type": "object"
+      },
+      "signalforge__api__schemas__governance__PolicyIn": {
+        "properties": {
+          "confirm_active_incident": {
+            "default": false,
+            "description": "Required when an incident on this application is open. Editing the policy mid-incident changes the rules under a running response and invalidates approvals already granted under the current version.",
+            "title": "Confirm Active Incident",
+            "type": "boolean"
+          },
+          "note": {
+            "default": "",
+            "maxLength": 400,
+            "title": "Note",
+            "type": "string"
+          },
+          "source": {
+            "description": "The application's policy as YAML. It sits above the platform safety floor and may only make things stricter: a document that would let a high-risk action auto-execute, lower a declared risk, lengthen an approval beyond the cap or disable audit is refused with the floor rule that refused it.",
+            "maxLength": 64000,
+            "minLength": 1,
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "title": "PolicyIn",
+        "type": "object"
+      },
+      "signalforge__api__schemas__governance__PolicyOut": {
+        "properties": {
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/ActionRowOut"
+            },
+            "title": "Actions",
+            "type": "array"
+          },
+          "app_id": {
+            "title": "App Id",
+            "type": "string"
+          },
+          "floor": {
+            "additionalProperties": true,
+            "description": "The immutable platform rules, published so the editor can state in the floor's own words why a row is locked.",
+            "title": "Floor",
+            "type": "object"
+          },
+          "open_incidents": {
+            "description": "Open incidents on this application. A non-empty list means an edit needs confirm_active_incident.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Open Incidents",
+            "type": "array"
+          },
+          "rules": {
+            "additionalProperties": true,
+            "title": "Rules",
+            "type": "object"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/PolicyVersionOut"
+            },
+            "title": "Versions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "app_id",
+          "version",
+          "source",
+          "rules",
+          "actions",
+          "versions",
+          "floor",
+          "open_incidents"
+        ],
+        "title": "PolicyOut",
         "type": "object"
       },
       "signalforge__api__schemas__identity__PolicyIn": {
@@ -11765,6 +13685,242 @@
         "x-signalforge-app-scope": "path",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "manage_apps"
+      }
+    },
+    "/apps/{app_id}/policy": {
+      "get": {
+        "description": "The policy in force, what it means for every published action, and the\nimmutable floor above which it sits.\n\n`locked` on a row is the domain's answer, not the browser's: the six\nhigh-risk classes can never auto-execute, the editor renders those rows\nuneditable because of this field, and the backend refuses the edit anyway.",
+        "operationId": "get_policy_apps__app_id__policy_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "app_id",
+            "required": true,
+            "schema": {
+              "title": "App Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/signalforge__api__schemas__governance__PolicyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Get Policy",
+        "tags": [
+          "governance"
+        ],
+        "x-signalforge-auth": "session"
+      },
+      "post": {
+        "description": "Write a new policy version.\n\nA document that contradicts the platform safety floor is refused with 422\n*and* recorded as `policy.floor.rejected` in the audit chain first - because\nthe error response is seen only by the person who tried, and \"somebody tried\nto make rollbacks auto-execute\" is exactly what a security review looks for.\n\nAn open incident on this application requires `confirm_active_incident`, and\na confirmed mid-incident edit invalidates approvals granted under the\nprevious version rather than silently re-interpreting them.",
+        "operationId": "edit_policy_apps__app_id__policy_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "app_id",
+            "required": true,
+            "schema": {
+              "title": "App Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/signalforge__api__schemas__governance__PolicyIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/signalforge__api__schemas__governance__PolicyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Edit Policy",
+        "tags": [
+          "governance"
+        ],
+        "x-signalforge-app-scope": "path",
+        "x-signalforge-auth": "session",
+        "x-signalforge-permission": "edit_policies"
+      }
+    },
+    "/apps/{app_id}/policy/dry-run": {
+      "post": {
+        "description": "What a candidate document would do, evaluated by the engine that decides.\n\nSame code path as a real decision, so \"what would this change\" and \"what\ndoes this do\" cannot diverge. A candidate the floor refuses comes back with\n`accepted: false` and the rule that refused it, rather than as an error - the\neditor has to show it beside the current decisions.",
+        "operationId": "dry_run_policy_apps__app_id__policy_dry_run_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "app_id",
+            "required": true,
+            "schema": {
+              "title": "App Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DryRunIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DryRunOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Dry Run Policy",
+        "tags": [
+          "governance"
+        ],
+        "x-signalforge-app-scope": "path",
+        "x-signalforge-auth": "session",
+        "x-signalforge-permission": "edit_policies"
+      }
+    },
+    "/apps/{app_id}/policy/versions": {
+      "get": {
+        "description": "Every version, newest first, each naming its author.\n\n`read_audit` rather than `edit_policies`: the Auditor's whole job is to read\nwhat changed and who changed it, and an audit trail only the editor can see\nis not an audit trail.",
+        "operationId": "get_policy_versions_apps__app_id__policy_versions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "app_id",
+            "required": true,
+            "schema": {
+              "title": "App Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PolicyVersionOut"
+                  },
+                  "title": "Response Get Policy Versions Apps  App Id  Policy Versions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Get Policy Versions",
+        "tags": [
+          "governance"
+        ],
+        "x-signalforge-app-scope": "path",
+        "x-signalforge-auth": "session",
+        "x-signalforge-permission": "read_audit"
       }
     },
     "/apps/{app_id}/readiness": {
@@ -13743,6 +15899,67 @@
         "x-signalforge-auth": "session"
       }
     },
+    "/incidents/{incident_id}/actions": {
+      "get": {
+        "description": "The ranked actions, with the score broken into its four terms.\n\nActions that cannot be performed right now are returned in `ineligible` with\nthe reason, never as the primary recommendation: showing an impossible action\nat the top of a war-room screen is how fifteen minutes get spent discovering\nit is impossible.",
+        "operationId": "get_next_best_actions_incidents__incident_id__actions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Ask the model for a one-sentence rationale per action. The ranking is identical either way - the score is arithmetic and is computed before any model is called.",
+            "in": "query",
+            "name": "explain",
+            "required": false,
+            "schema": {
+              "default": true,
+              "description": "Ask the model for a one-sentence rationale per action. The ranking is identical either way - the score is arithmetic and is computed before any model is called.",
+              "title": "Explain",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NbaOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Get Next Best Actions",
+        "tags": [
+          "governance"
+        ],
+        "x-signalforge-auth": "session"
+      }
+    },
     "/incidents/{incident_id}/brain": {
       "get": {
         "description": "The ledger, the hypotheses and their confidence history.\n\nReturns superseded and retracted nodes as well as current ones: nothing is\ndeleted, and a client that only ever showed the current view would hide the\nhalf a post-incident review reads.",
@@ -14298,6 +16515,1107 @@
         "x-signalforge-permission": "close_incident"
       }
     },
+    "/incidents/{incident_id}/communications": {
+      "get": {
+        "description": "The board, having first checked whether anything on it has stopped being\ntrue.\n\nThe contradiction sweep runs on read as well as on the bus: a contradiction\nthat only appeared after a background job would let somebody open the screen\nand see a statement the platform already knew was wrong.",
+        "operationId": "get_communications_incidents__incident_id__communications_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "audience",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Audience"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Get Communications",
+        "tags": [
+          "governance"
+        ],
+        "x-signalforge-auth": "session"
+      },
+      "post": {
+        "description": "Write a draft, grounded on this incident's graph nodes.\n\nA draft, always. There is no parameter that issues one, and the audience's\napproval permission is checked when somebody approves it - not here, because\ndrafting is the part a paged SME should be able to do.",
+        "operationId": "draft_communication_incidents__incident_id__communications_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommunicationIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommunicationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Draft Communication",
+        "tags": [
+          "governance"
+        ],
+        "x-signalforge-auth": "session"
+      }
+    },
+    "/incidents/{incident_id}/communications/{communication_id}/approve": {
+      "post": {
+        "description": "A named person with the audience's permission says the text is right.\n\nThe permission is not on the route because the *audience* decides which one\napplies and the route has not read the communication yet. It is enforced in\nthe service, against the audience, with `approve_customer_comms` for anything\ncustomer-facing and `approve_exec_comms` for leadership.",
+        "operationId": "approve_communication_incidents__incident_id__communications__communication_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "communication_id",
+            "required": true,
+            "schema": {
+              "title": "Communication Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NoteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommunicationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Approve Communication",
+        "tags": [
+          "governance"
+        ],
+        "x-signalforge-auth": "session"
+      }
+    },
+    "/incidents/{incident_id}/communications/{communication_id}/correction": {
+      "post": {
+        "description": "A new draft carrying a redline against what was published.\n\nThe issued text is never edited. The redline is computed from the two bodies\nrather than typed, so a correction cannot claim to change one thing while\nchanging another, and it needs its own approval like any other communication.",
+        "operationId": "draft_correction_incidents__incident_id__communications__communication_id__correction_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "communication_id",
+            "required": true,
+            "schema": {
+              "title": "Communication Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CorrectionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommunicationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Draft Correction",
+        "tags": [
+          "governance"
+        ],
+        "x-signalforge-auth": "session"
+      }
+    },
+    "/incidents/{incident_id}/communications/{communication_id}/issue": {
+      "post": {
+        "description": "Publish. A person, always - there is no scheduler behind this route and no\nconfiguration that could add one.",
+        "operationId": "issue_communication_incidents__incident_id__communications__communication_id__issue_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "communication_id",
+            "required": true,
+            "schema": {
+              "title": "Communication Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NoteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommunicationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Issue Communication",
+        "tags": [
+          "governance"
+        ],
+        "x-signalforge-auth": "session"
+      }
+    },
+    "/incidents/{incident_id}/executions": {
+      "get": {
+        "description": "Every attempt to change this application's estate during this incident.\n\n`retry_blocked` travels beside `state`: a client must not offer retry on an\nuncertain outcome, because the target may have applied it after SignalForge\nstopped waiting.",
+        "operationId": "get_ledger_incidents__incident_id__executions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LedgerOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Get Ledger",
+        "tags": [
+          "governance"
+        ],
+        "x-signalforge-auth": "session"
+      },
+      "post": {
+        "description": "Ask for an action. The one entry point to every consequential call.\n\nArguments are validated against the schema the application published, the\npolicy engine decides, and the decision is recorded with its `rules_hit`\nbefore anything happens. A high-risk action returns `approval_required` and\ncreates the approval request; asking for `intent: auto` on one returns a\nrecorded BLOCK naming the floor rule.",
+        "operationId": "request_execution_incidents__incident_id__executions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecutionIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Request Execution",
+        "tags": [
+          "governance"
+        ],
+        "x-signalforge-app-scope": "incident",
+        "x-signalforge-auth": "session",
+        "x-signalforge-permission": "declare_incident"
+      }
+    },
+    "/incidents/{incident_id}/executions/{execution_id}": {
+      "get": {
+        "operationId": "get_execution_incidents__incident_id__executions__execution_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "execution_id",
+            "required": true,
+            "schema": {
+              "title": "Execution Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Get Execution",
+        "tags": [
+          "governance"
+        ],
+        "x-signalforge-auth": "session"
+      }
+    },
+    "/incidents/{incident_id}/executions/{execution_id}/approve": {
+      "post": {
+        "description": "A person holding approve_high_risk says yes, for a bounded time.\n\nThe approval is bound to this execution and to a fingerprint over the action,\nits arguments, its risk class and the policy version - so it authorises this\nrequest and nothing else, and it stops authorising anything the moment any of\nthose change.",
+        "operationId": "approve_execution_incidents__incident_id__executions__execution_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "execution_id",
+            "required": true,
+            "schema": {
+              "title": "Execution Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NoteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Approve Execution",
+        "tags": [
+          "governance"
+        ],
+        "x-signalforge-app-scope": "incident",
+        "x-signalforge-auth": "session",
+        "x-signalforge-permission": "approve_high_risk"
+      }
+    },
+    "/incidents/{incident_id}/executions/{execution_id}/cancel": {
+      "post": {
+        "operationId": "cancel_execution_incidents__incident_id__executions__execution_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "execution_id",
+            "required": true,
+            "schema": {
+              "title": "Execution Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NoteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Cancel Execution",
+        "tags": [
+          "governance"
+        ],
+        "x-signalforge-app-scope": "incident",
+        "x-signalforge-auth": "session",
+        "x-signalforge-permission": "declare_incident"
+      }
+    },
+    "/incidents/{incident_id}/executions/{execution_id}/compensate": {
+      "post": {
+        "description": "Undo what landed, through the action's declared reverse action.\n\nA compensation is a full execution in its own right and goes through the same\npolicy decision and approval gate: undoing a failover is as consequential as\ndoing one.",
+        "operationId": "compensate_execution_incidents__incident_id__executions__execution_id__compensate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "execution_id",
+            "required": true,
+            "schema": {
+              "title": "Execution Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NoteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Compensate Execution",
+        "tags": [
+          "governance"
+        ],
+        "x-signalforge-app-scope": "incident",
+        "x-signalforge-auth": "session",
+        "x-signalforge-permission": "declare_incident"
+      }
+    },
+    "/incidents/{incident_id}/executions/{execution_id}/deny": {
+      "post": {
+        "operationId": "deny_execution_incidents__incident_id__executions__execution_id__deny_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "execution_id",
+            "required": true,
+            "schema": {
+              "title": "Execution Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NoteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Deny Execution",
+        "tags": [
+          "governance"
+        ],
+        "x-signalforge-app-scope": "incident",
+        "x-signalforge-auth": "session",
+        "x-signalforge-permission": "approve_high_risk"
+      }
+    },
+    "/incidents/{incident_id}/executions/{execution_id}/reconcile": {
+      "post": {
+        "description": "Ask the target system what actually happened.\n\nThe only door out of `uncertain`. Resolves to `completed_late` (do not\nrepeat), `not_applied` (a retry is safe) or `partial` (compensate, continue\nor take over), and only `not_applied` clears `retry_blocked`.",
+        "operationId": "reconcile_execution_incidents__incident_id__executions__execution_id__reconcile_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "execution_id",
+            "required": true,
+            "schema": {
+              "title": "Execution Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Reconcile Execution",
+        "tags": [
+          "governance"
+        ],
+        "x-signalforge-app-scope": "incident",
+        "x-signalforge-auth": "session",
+        "x-signalforge-permission": "declare_incident"
+      }
+    },
+    "/incidents/{incident_id}/executions/{execution_id}/retry": {
+      "post": {
+        "description": "A fresh attempt at something that provably did not happen.\n\nRefused with 409 while the previous outcome is unknown, and the refusal is\naudited: retrying an unreconciled rollback is exactly the moment this control\nexists for.",
+        "operationId": "retry_execution_incidents__incident_id__executions__execution_id__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "execution_id",
+            "required": true,
+            "schema": {
+              "title": "Execution Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Retry Execution",
+        "tags": [
+          "governance"
+        ],
+        "x-signalforge-app-scope": "incident",
+        "x-signalforge-auth": "session",
+        "x-signalforge-permission": "declare_incident"
+      }
+    },
+    "/incidents/{incident_id}/executions/{execution_id}/revoke": {
+      "post": {
+        "description": "Withdraw an approval that has not been spent. Saying no later has to be\nas easy as saying yes was.",
+        "operationId": "revoke_approval_incidents__incident_id__executions__execution_id__revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "execution_id",
+            "required": true,
+            "schema": {
+              "title": "Execution Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NoteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Revoke Approval",
+        "tags": [
+          "governance"
+        ],
+        "x-signalforge-app-scope": "incident",
+        "x-signalforge-auth": "session",
+        "x-signalforge-permission": "approve_high_risk"
+      }
+    },
+    "/incidents/{incident_id}/executions/{execution_id}/run": {
+      "post": {
+        "description": "Send an approved execution.\n\nEverything is re-checked here and nothing is trusted from the request that\ncreated the row: the policy version in force now, the approval's expiry, the\nfingerprint, and whether the approver still holds the permission.",
+        "operationId": "run_execution_incidents__incident_id__executions__execution_id__run_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "execution_id",
+            "required": true,
+            "schema": {
+              "title": "Execution Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Run Execution",
+        "tags": [
+          "governance"
+        ],
+        "x-signalforge-app-scope": "incident",
+        "x-signalforge-auth": "session",
+        "x-signalforge-permission": "declare_incident"
+      }
+    },
+    "/incidents/{incident_id}/executions/{execution_id}/takeover": {
+      "post": {
+        "description": "A person is doing the rest by hand, and says what they are doing.\n\nThe honest terminal state for an execution the platform cannot resolve. The\nnote is required: \"a human took over\" with no record of what they did is\nworse than no state at all.",
+        "operationId": "take_over_execution_incidents__incident_id__executions__execution_id__takeover_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "execution_id",
+            "required": true,
+            "schema": {
+              "title": "Execution Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TakeoverIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Take Over Execution",
+        "tags": [
+          "governance"
+        ],
+        "x-signalforge-app-scope": "incident",
+        "x-signalforge-auth": "session",
+        "x-signalforge-permission": "declare_incident"
+      }
+    },
     "/incidents/{incident_id}/itsm-sync": {
       "post": {
         "description": "Try the ITSM again now instead of waiting for the retry sweep. Reconciles\nbefore it creates, so a link left uncertain by a timeout cannot become a\nsecond ticket.",
@@ -14579,6 +17897,130 @@
         "summary": "Escalate Page",
         "tags": [
           "war-room"
+        ],
+        "x-signalforge-app-scope": "incident",
+        "x-signalforge-auth": "session",
+        "x-signalforge-permission": "declare_incident"
+      }
+    },
+    "/incidents/{incident_id}/plan": {
+      "get": {
+        "description": "Plan versions, newest first. The diff triad reads the top two.",
+        "operationId": "get_plans_incidents__incident_id__plan_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PlanOut"
+                  },
+                  "title": "Response Get Plans Incidents  Incident Id  Plan Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Get Plans",
+        "tags": [
+          "governance"
+        ],
+        "x-signalforge-auth": "session"
+      },
+      "post": {
+        "description": "Write plan version n+1, marking every action kept, paused or added.\n\nNever a replacement. The previous version stays readable and the assumption\nthat changed travels with the new one.",
+        "operationId": "revise_plan_incidents__incident_id__plan_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NbaOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Revise Plan",
+        "tags": [
+          "governance"
         ],
         "x-signalforge-app-scope": "incident",
         "x-signalforge-auth": "session",
@@ -14951,6 +18393,114 @@
           "war-room"
         ],
         "x-signalforge-auth": "session"
+      }
+    },
+    "/incidents/{incident_id}/validation": {
+      "get": {
+        "description": "The four layers, the stability window and whether closure is locked.\n\nEvery check names the system it was read from, and none of them is the\nIncident Brain: recovery is checked against the application, never against\nthe platform's own reasoning about it.",
+        "operationId": "get_validation_incidents__incident_id__validation_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationViewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Get Validation",
+        "tags": [
+          "governance"
+        ],
+        "x-signalforge-auth": "session"
+      },
+      "post": {
+        "description": "Run one validation cycle against the application.\n\nA cycle that does not confirm recovery writes its failure into the incident\ngraph as evidence, returns the incident to `active` if it was `recovering`,\nincrements the failed-cycle count and escalates after the number of cycles\nthis application's policy allows.",
+        "operationId": "run_validation_incidents__incident_id__validation_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidationIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
+        "summary": "Run Validation",
+        "tags": [
+          "governance"
+        ],
+        "x-signalforge-app-scope": "incident",
+        "x-signalforge-auth": "session",
+        "x-signalforge-permission": "declare_incident"
       }
     },
     "/incidents/{incident_id}/war-room": {
@@ -16579,6 +20129,10 @@
     {
       "description": "What the platform believes about an incident and why: a versioned graph of facts, assumptions, evidence, impact, risks and hypotheses, each carrying provenance and each kept forever - nothing is deleted, and a revised belief supersedes rather than overwrites. Hypothesis confidence is computed here from weighted evidence and is never written by a model; the model writes the sentence beside it. Impacts publish `confirmed` (measured) and `predicted` (inferred from dependencies) as separate values and separate lists, because a predicted downstream outage read as an observed one is how a war room pages four teams for an outage that never happened. The copilot answers only from this incident's own graph and every citation must resolve to a node the retrieval returned; an answer that cites anything else is discarded rather than shown. These routes carry no permission, on the same reasoning the war room's reads carry none, and none of them can change incident state, execute an action or approve anything - there is no such path from here.",
       "name": "incident-brain"
+    },
+    {
+      "description": "The consequential-action boundary: policy, the Tool Gateway, the execution ledger, next best action, communications and layered validation. Every call that changes an integrated system passes through one door and produces an explicit decision - `allow`, `approval_required` or `block` - carrying the ordered `rules_hit` that produced it and naming, per rule, whether it came from the hardcoded platform floor or the application's own policy. The floor is code, not configuration: the six high-risk classes (rollback, restart, failover, traffic shift, config change, customer-impacting) can never auto-execute, a read-only classification can never be given to something that mutates, an approval expires within an hour, and audit is not a field, so it cannot be switched off. A policy document contradicting any of that is refused with the rule that refused it and the attempt is written to the audit chain. An approval is bound to a fingerprint over the action, its arguments, its risk class and the policy version, and is re-checked at execution for expiry, spend, revocation, fingerprint and whether the approver still holds the permission. A timeout is `uncertain`, never failed: `retry_blocked` is set and the only move out is `reconcile`, which asks the target system what actually happened. Duplicate submits return the existing execution and send nothing. Next-best-action scores are arithmetic the server computes before any model is called; a model may write the sentence beside a score and can never change one. No route here sends a communication, closes an incident or executes without the decision chain above - there is no such path.",
+      "name": "governance"
     },
     {
       "description": "The cockpit notification socket. A WebSocket is not expressible in OpenAPI; its frame protocol is in docs/11-api-spec.md.",

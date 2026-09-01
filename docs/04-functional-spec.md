@@ -1946,3 +1946,340 @@ All four share the cockpit's existing socket. There is one WebSocket store in th
 application and it stays that way; the server's cockpit consumer subscribes to
 `brain.*` alongside `incident.*` and `warroom.*`, so a hypothesis that moved
 arrives on the frame the platform was already sending.
+
+## 12. Governance and safe execution: an argument becomes a change (REQ-060, REQ-061, REQ-062, REQ-063, REQ-064, REQ-065)
+
+Sprint 6 is the consequential-action boundary. Everything before it *observes,
+reasons and proposes*; this is where SignalForge changes somebody's production
+estate, and every design decision in it follows from one sentence: **AI may
+recommend, rank, explain and draft; it may never execute, approve, close or
+send.**
+
+The path a change takes is fixed and has no shortcut:
+
+    request -> identity -> authorization -> policy -> approval (where required)
+            -> Tool Gateway -> execution ledger -> validation -> audit
+
+### 12.1 The floor is code, and per-app policy sits on top of it
+
+Two layers, and the whole design is in the relationship between them.
+
+The **platform safety floor** is in `domain/governance/policy.py`. It is a
+constant and a set of constructor checks, not a default with a validator in
+front of it. A `PolicyDocument` that would contradict it cannot be constructed,
+so there is no seed, migration, drill, agent or direct repository write that
+produces a policy object a reader would then honour. An organisation that wanted
+rollbacks to auto-execute would have to change that file and get it through
+review, which is the bar that decision deserves.
+
+| Rule | What it guarantees |
+|---|---|
+| `FLOOR-HIGH-RISK-NO-AUTO` | rollback, restart, failover, traffic shift, config change and customer-impacting never auto-execute; the best outcome they can reach is APPROVAL_REQUIRED |
+| `FLOOR-HIGH-RISK-APPROVER` | their approvers must hold `approve_high_risk` in the frozen matrix - naming an Executive is refused where it is typed |
+| `FLOOR-READ-ONLY-NO-MUTATE` | only a diagnostic can classify read-only; `RiskClass.READ_ONLY.mutating` is False |
+| `FLOOR-RISK-NEVER-LOWERED` | an override may raise an action's risk, never lower it |
+| `FLOOR-APPROVAL-TTL-CAP` | an approval expires within one hour, always |
+| `FLOOR-AUDIT-IMMUTABLE` | audit is not a configurable field; a document that so much as names one is *refused*, not ignored |
+| `FLOOR-DISABLED-ACTION` | an action the operator disabled cannot execute |
+
+**Per-application policy** is versioned YAML that can only make things stricter:
+block an action, demand approval for something the floor would have allowed,
+shorten an approval's life, narrow who may approve. Every field is
+one-directional - the constructor refuses anything that would loosen the floor
+rather than silently clamping it, because a policy that says one thing and does
+another is worse than no policy.
+
+Editing writes version n+1 and the old row stays. The first thing an operator
+writes is version **2**, because the seeded default is version 1 and an approval
+carries the version it was granted under: a first edit that reused version 1
+would change the rules while leaving outstanding approvals looking valid.
+
+A refused document is written to the audit chain as `policy.floor.rejected`
+*before* the 422 goes back. The error response is seen only by the person who
+tried; "somebody tried to make rollbacks auto-execute on the 14th" is what a
+security review comes looking for.
+
+Dry run evaluates a candidate through the same engine the gateway runs, so "what
+would this change do" and "what does this do" cannot diverge.
+
+### 12.2 A decision, not a verdict
+
+`PolicyEngine.decide` returns ALLOW, APPROVAL_REQUIRED or BLOCK, and never raises
+for a denial - a blocked action still has to be shown to an operator with the
+rule that blocked it. Every decision carries `rules_hit`, an ordered list naming
+each rule and whether it came from the `floor`, the `app_policy` or the
+application's own `manifest`, so the cockpit renders *why* and an auditor
+replays the reasoning six months later without the engine.
+
+Asking for `intent: auto` on a rollback does not raise. It produces a BLOCK
+naming `FLOOR-AUTO-EXECUTE-REFUSED`, a ledger row in `blocked`, an audit entry
+and an event - a recorded refusal rather than an exception a client could
+swallow.
+
+### 12.3 The Tool Gateway: one door
+
+Every consequential call passes through `ToolGateway`. Eleven things happen in
+order on each one, and any code path that skipped one of them would be a path by
+which production changed without a decision behind it:
+
+    1  validate the arguments against the application's own schema
+    2  authenticate the actor            (the route's credential resolver)
+    3  authorize the actor               (the route's permission guard)
+    4  evaluate policy                   -> ALLOW | APPROVAL_REQUIRED | BLOCK
+    5  record the decision with its rules_hit
+    6  validate the approval, if one is required
+    7  claim the idempotency key         (a unique index, not a read-then-write)
+    8  invoke the adapter                (through the invoker, never around it)
+    9  record the outcome                (a timeout is UNCERTAIN, never failed)
+    10 reconcile before any retry
+    11 audit every one of the above
+
+Step 3 is *repeated* at execution for the approver, which is the point of
+CTL-AUD-03: a permission removed between approving and executing withdraws the
+authority the approval carried.
+
+### 12.4 A timeout is not a failure
+
+`UNCERTAIN` is the honest answer to "we sent the request and stopped waiting",
+and the entire retry design hangs off refusing to round it to either neighbour.
+Rounding it *down* to FAILED invites a retry, and a retried rollback that landed
+the first time is two rollbacks. Rounding it *up* to SUCCEEDED declares a
+mitigation that may never have been applied, and the war room stops looking.
+
+So `UNCERTAIN` sets `retry_blocked` at construction, the state machine has no
+`uncertain -> running` edge at all, and the only move out is `reconciling` -
+going and *asking* the target system through `ActionsAdapter.get_execution`, the
+reconcile-before-retry primitive the frozen SPI reserved in Sprint 0.
+
+| Verdict | What it means | What may follow |
+|---|---|---|
+| `COMPLETED_LATE` | it did land, after we stopped waiting | nothing - the change is applied |
+| `NOT_APPLIED` | it never landed | a retry is safe, as a new attempt |
+| `PARTIAL` | some of it landed | compensate, continue, or a person takes over |
+
+Only `NOT_APPLIED` clears `retry_blocked`.
+
+### 12.5 Duplicates, and the one case that is not a duplicate
+
+The idempotency key is *derived*, not generated: the same tenant, incident,
+action, arguments and attempt number always produce the same key, so a
+double-clicked button, a retried HTTP request and a redelivered event all find
+the existing row instead of sending a second mutation. The control is the unique
+index on `(tenant_id, idempotency_key)` rather than a read-then-write, because
+two concurrent submits would otherwise both find nothing and both execute.
+
+One case is deliberately *not* a duplicate: an attempt whose row shows nothing
+reached the target - refused by policy, or cancelled before it ran - is stepped
+over rather than matched. A commander whose auto-execute attempt was refused by
+the floor and who then asks for the same rollback properly is making a new
+request, and answering "you already did that" would be false in the most
+dangerous possible direction.
+
+A deliberate retry after `NOT_APPLIED` increments the attempt number and gets a
+new key, which is correct: it is provably a new attempt at something that
+provably did not happen.
+
+### 12.6 Approvals are records of decisions, not capability tokens
+
+An approval is bound to a `decision_fingerprint` - a hash over the action, its
+arguments, the risk class the engine reached and the policy version. An approval
+for "roll back payments to v11" is not an approval for "roll back to v9", not an
+approval after the policy re-classified it, and not an approval for a different
+action in the same incident.
+
+Five things are re-checked at execution time, and the fifth is the one people
+forget:
+
+| Check | The failure it prevents |
+|---|---|
+| not expired | an approval left open on a laptop over a weekend |
+| not already spent | one approval, two executions |
+| not revoked | somebody changed their mind and said so |
+| fingerprint matches | the arguments changed after approval |
+| the approver still holds the permission | a role removed between approving and executing |
+
+`Approval.granted` also refuses an approval by the person who requested it,
+whatever permissions they hold. Requesting and approving are two acts by two
+people, and an incident where one person can do both has no control at all.
+
+### 12.7 Next best action: the score is arithmetic
+
+    score = urgency x impact x information_gain - risk
+
+Multiplication for the first three because they are conjunctive - an action that
+would tell you a great deal about an incident nobody is being hurt by is not the
+next thing to do, and neither is a decisive fix for a problem you have not
+identified. Subtraction for risk because risk is a toll, not a discount: a
+dangerous action is worth doing when the payoff is large, and the formula should
+say so rather than scaling the payoff away.
+
+Every term is a stored fact: urgency from the severity a person set and whether
+the blast radius is customer-facing; impact from the action class's mitigation
+power scaled by the confidence of the hypothesis it addresses; information gain
+from the class, raised when the action discriminates between live hypotheses;
+risk from the policy engine's class, halved for a reversible action.
+
+The score is computed and stored **before** any model is asked anything. The
+model writes one sentence of rationale *from* the numbers; it cannot change the
+ordering, add or remove a candidate, or make an ineligible action eligible. With
+no model reachable the recommendation is unchanged and the deterministic sentence
+is what the war room reads.
+
+Three eligibility gates run before ranking, and a candidate that fails one is
+returned with its reason rather than hidden: policy said BLOCK; nobody holds a
+role that could approve it; a checkable precondition is unmet. An impossible
+action can never be the primary recommendation - showing one at the top of a
+war-room screen at 03:00 is how fifteen minutes get spent discovering it is
+impossible.
+
+### 12.8 Plans are revised, never replaced
+
+When evidence moves, the platform writes plan version n+1 and marks every action
+KEPT, PAUSED or ADDED against version n, with the assumption that changed and the
+evidence that caused it. A paused action stays on the screen with its reason.
+"We stopped doing that at 03:14 because the pool metric came back clean" is the
+sentence a post-incident review is made of, and a plan that silently rewrote
+itself would have deleted it.
+
+### 12.9 Communications: nothing sends itself
+
+    DRAFT --approve--> APPROVED --issue--> ISSUED
+      |                                      |
+      |                                      v
+      +--supersede--> (new draft)      CONTRADICTED --correct--> (correction DRAFT)
+
+There is no `send()` on the entity, no auto-issue transition, no scheduler and no
+configuration that could add one. A communication reaches an audience because a
+named person holding that audience's approval permission moved it to ISSUED.
+
+The audience decides the permission - `approve_customer_comms` for anything
+customer-facing, `approve_exec_comms` for leadership - and it is checked in the
+service where the audience is known rather than on the route, which has not read
+it yet. Drafting carries no permission at all: the SME holds nothing in the
+frozen matrix and is the person most likely to know what the customer-facing
+symptom actually is.
+
+Every draft cites incident-graph node ids and one citing nothing is refused. A
+customer-facing body never quotes untrusted content: a bridge message somebody
+typed is evidence for responders and is not something to publish on a status
+page.
+
+`CONTRADICTED` is the one automatic state change here, and it is a *warning*, not
+an edit. When a node an issued statement was grounded on is superseded or
+retracted, the statement is flagged and the published text is left exactly as it
+was. A correction is a new communication carrying a computed redline - old claim
+beside new, with the reason - and it needs its own approval, because a correction
+to a customer statement is a customer statement. Silently rewriting what an
+organisation told its customers is not a correction.
+
+### 12.10 Layered validation, and the closure gate
+
+Recovery is a claim about the world, so it is checked against the world. Every
+reading comes from the application through its own adapters and rollups, and
+`LayerCheck` **refuses to be constructed** with a source that names the Incident
+Brain - because asking the reasoning engine whether the system is healthy is
+asking the platform to mark its own homework. The arrow points one way:
+validation writes its failures into the graph as evidence, and never reads from
+it.
+
+| Layer | The question | Read from |
+|---|---|---|
+| technical | is it running and configured? | the health adapter, the execution ledger |
+| service | is it serving? | metric rollups: error rate, availability, latency |
+| customer | are people getting what they came for? | journey probes, customer-facing signals |
+| business | did the money start moving again? | business-family counters |
+
+A layer is as good as its worst check. There is no averaging and no quorum:
+"three of our four customer journeys work" is a failing customer layer. An
+unmeasurable layer is `UNKNOWN`, which does **not** pass - a gate that treated
+silence as consent would close every incident on an application whose probes
+were down.
+
+**Customer gates closure.** Technical green and service green while customers
+still cannot pay is not "nearly recovered": it is the most expensive failure in
+incident response and the whole reason four layers exist. Business is advisory,
+because many applications publish no business counters and a gate nobody can
+satisfy is a gate people route around.
+
+Recovery also needs *sustained* validation. The stability window requires a
+configured duration and a minimum number of consecutive samples, and any
+regression resets it to zero rather than decrementing it - a service that flaps
+green-red-green has not been stable for two of three samples, it has been
+unstable throughout.
+
+An incident nobody validated can still be closed: closing is a human act and a
+commander who never asked for validation is making a judgement the platform has
+no standing to refuse. What the platform refuses is closing in the face of its
+own failing customer check.
+
+When a cycle does not confirm recovery, five things happen: the cycle is stored
+with its failing checks and their `result_ref`s; the failure becomes an OBSERVED
+evidence node on the graph; the incident returns to `active` if it was
+`recovering` - the one machine transition the lifecycle permits, and the safe
+direction; the failed-cycle count increases; and after the number of cycles the
+application's policy allows, it escalates.
+
+### 12.11 The screens
+
+**S11 - Next Best Action.** The recommendation with its four terms rendered as
+bars beside the score, the policy decision and its `rules_hit` as chips, the
+approver roles and the TTL, the expected validation time, the rollback strategy,
+alternatives, a lower-risk fallback, and the ineligible actions with their
+reasons. There is **no auto-execute control on this card for any action, at any
+risk class** - not a disabled one, not one behind a confirmation. The absence is
+the design.
+
+**The approval sheet.** What, which rule, who may approve, and a live countdown
+from the server-issued expiry. The typed confirmation asks for the *action id*
+rather than "YES": typing `rollback-checkout` is a moment in which a person reads
+what they are approving.
+
+**S12 - Execution Ledger.** One row per attempt, each state carrying the sentence
+that says what it means. `UNCERTAIN` is bordered in danger and **has no Retry
+control at all** - Reconcile is in its place, with a line explaining that the
+target may have applied it after we stopped waiting.
+
+**Response Plan.** The kept / paused / added triad, with paused rows struck
+through and kept on the screen beside the assumption that changed.
+
+**S15 - Communications.** Per-audience cards with source chips, the approver, the
+issue timestamp, a danger-bordered contradiction warning that says the published
+text has not been changed, and the correction redline as old-over-new.
+
+**S16 - Recovery Validation.** Four tiles, each naming the system every check was
+read from, the stability ring with its reset count, and - when a gating layer
+fails - the closure lock with its reason in a sentence.
+
+**S21 - the policy editor.** The action table with the high-risk rows padlocked
+and their floor sentence beneath them, the floor's rules listed in its own words,
+the YAML document, and Dry run as a first-class control beside Save. The screen
+says out loud that the lock is enforced in the domain rather than by the browser.
+
+All of these share the cockpit's existing socket. There is one WebSocket store in
+this application and it stays that way; the server's cockpit consumer subscribes
+to `execution.*`, `policy.*`, `comms.*`, `validation.*`, `nba.*` and `plan.*`
+alongside the families Sprints 4 and 5 added, so an execution that has just
+landed `uncertain` reaches the screen on the frame the platform was already
+sending.
+
+### 12.12 Where every governance failure lands
+
+| Failure | Where it lands | Recoverable by |
+|---|---|---|
+| policy contradicts the floor | 422 + `policy.floor.rejected` in the audit chain; nothing stored | fixing the document |
+| policy edited mid-incident | 409 until confirmed; confirmed edits audited and outstanding approvals invalidated | re-approving under the new version |
+| action not in the manifest | 404 - only actions the application published can run | importing the manifest |
+| arguments off-schema | 422 before any decision is recorded | correcting the call |
+| high-risk with no eligible approver | BLOCK, with the reason | configuring an approver who holds the permission |
+| approval expired / spent / re-fingerprinted | 422 + `execution.approval.rejected`; nothing sent | requesting approval again |
+| approver's permission revoked | 422 + `execution.approval.rejected` | a different approver |
+| adapter timeout | `uncertain`, `retry_blocked`, `execution.uncertain` | reconciliation |
+| retry before reconciliation | 409 + `execution.retry.blocked` | reconciling first |
+| duplicate submit | the existing execution, `duplicate: true`, nothing sent | reading the outcome |
+| adapter gone during reconciliation | back to `uncertain`; the platform does not guess | human takeover with a note |
+| partial change | `partial`; compensate, continue or take over | the reverse action, or a person |
+| validation cannot read a layer | `UNKNOWN`, which does not pass | fixing the connector |
+| customer layer failing | closure refused, `incident.closure.blocked` | fixing the thing, then revalidating |
+| N failed cycles | `validation.escalated` | a different approach or more people |
+| grounded node superseded after issue | `CONTRADICTED`; published text untouched | an approved correction with a redline |
+| model unreachable | deterministic rationale, deterministic draft, unchanged ranking | nothing - it keeps working |

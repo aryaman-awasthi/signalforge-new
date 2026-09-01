@@ -6,6 +6,77 @@ graph" section at the bottom is the authored pre-build decision record
 (signalforge-memory-graph.md, provided and imported 2026-09-01) - every N-line there
 is treated as already decided.
 
+## DR-106 (2026-09-01, S6-T02) A blocked attempt does not hold the idempotency key
+The duplicate check now steps over ledger rows whose state shows nothing reached the target
+(`blocked`, `cancelled`) and claims the next attempt number instead of returning them as
+duplicates. The Sprint 6 acceptance test found this: a commander asks for a rollback with
+`intent: auto`, the floor refuses it and writes a `blocked` row, and the commander then asks for
+the same rollback properly - and the derived key matched the refusal, so the gateway answered
+"this already exists" about a rollback that had never been sent. Answering that is false in the
+most dangerous possible direction: it tells an operator a production change happened when it did
+not, and it makes the floor's refusal indistinguishable from a completed action. The fix is on
+the domain enum (`LedgerState.nothing_was_sent`) rather than in the service, so any future caller
+inherits it, and `_claim_key` walks a bounded number of attempts (12, comfortably above the
+policy retry ceiling of five) before failing closed by treating the last row as a duplicate.
+Everything else about the key is unchanged: it is still derived rather than generated, still
+unique per tenant at the database, and a *sent* attempt in any state - including `uncertain` -
+still stops a resubmit, which is the case the control exists for.
+
+## DR-107 (2026-09-01, S6-T01) The seeded policy is version 1, so the first edit is version 2
+`PolicyService.edit` always writes `current.version + 1`, where `current` is the stored policy or
+the platform default. The first thing an operator writes is therefore version 2, and a test found
+why that matters: an approval carries the policy version it was granted under, and
+`Approval.assert_valid_now` refuses it when the version has moved. With the first stored edit
+reusing version 1, a high-risk rollback approved under the seeded default stayed valid under a
+policy that had just changed the rules - the exact silent re-interpretation the mid-incident
+confirmation exists to prevent, arriving through a different door. Numbering the default as
+version 1 also makes the version list honest: "nobody has edited this" and "somebody wrote these
+rules" are different facts and now have different version numbers. The default is still
+*returned* rather than stored, because an application nobody has configured should not accumulate
+a row that says nothing, and `default_policy` is a pure function so reading it twice gives the
+same answer.
+
+## DR-108 (2026-09-01, S6-T05) Validation reads the application; the domain refuses to let it read the brain
+`LayerCheck.__post_init__` raises if `source` names the Incident Brain, the graph, the copilot or
+the governor. This is a rule that could have lived in a docstring and a code review, and it does
+not, because the failure it prevents is subtle enough to be introduced by somebody being helpful:
+the brain already holds a well-organised, queryable view of everything known about the incident,
+and reading recovery out of it would be one line shorter than reading it from four adapters. It
+would also be worthless. The brain's beliefs were formed from the same telemetry, so a hypothesis
+at 90% confidence that the pool is fixed is not evidence that the pool is fixed - it is the
+platform marking its own homework. The arrow between the two therefore points one way and only
+one way: a failed validation cycle *writes* an `OBSERVED` evidence node into the graph, moving
+the hypotheses; nothing in `ValidationService` reads one. The constructor check is what keeps
+that true after this sprint.
+
+## DR-109 (2026-09-01, S6-T05) The closure gate has no override, and no gate on an unvalidated incident
+Two decisions that look contradictory and are not. `assert_closable` refuses a close while a
+gating layer (technical, service, customer) is failing, and there is no `force` parameter on the
+route, no permission that bypasses it and no configuration that disables it - the way past a
+failing gate is to fix the thing or re-validate. But an incident that was *never* validated does
+not block at all: `assert_closable(None)` returns. Closing is a human act, and a commander who
+never asked for validation is making a judgement the platform has no standing to refuse; refusing
+would make validation mandatory by the back door, and a mandatory gate that people cannot satisfy
+is a gate they route around by not running the cycle. What the platform refuses is closing *in
+the face of its own failing measurement*: the check exists, it says people are still affected,
+and it is on the screen. `business` deliberately does not gate, for the same reason - many
+applications publish no business counters, and a gate nobody can satisfy is one somebody
+eventually deletes.
+
+## DR-110 (2026-09-01, S6-T06) The cockpit has no auto-execute affordance and no Retry beside an uncertain outcome
+Two absences in the web layer, both asserted by tests that check the construct does *not* appear.
+Neither is the control - the backend refuses `intent: auto` on the floor and answers 409 to a
+retry while `retry_blocked` is set, whatever any client sends - and both matter anyway. An
+affordance teaches: a disabled "Auto execute" toggle on a rollback card tells an operator that
+auto-executing rollbacks is a thing this platform does and that somebody could turn on, which is
+false. A Retry button beside an uncertain execution that answers 409 teaches that retrying is
+normally fine and this one is temporarily unavailable, which is also false: it is an offer to
+apply a rollback twice. So the toggle does not exist at any risk class, and the uncertain row
+renders Reconcile in Retry's place with the sentence that explains why. The same reasoning puts
+`locked` on the wire from the server rather than letting the browser decide which policy rows are
+the floor's, and puts the closure lock's *reason* in the API response rather than composing one
+in the component.
+
 ## DR-101 (2026-09-01, S5) A reasoning pass is incident command work, not a state-free write
 `POST /incidents/{id}/brain/refresh` now carries `Permission.DECLARE_INCIDENT` via
 `deps.require_incident`. It shipped carrying no permission, exempted from the API-surface census

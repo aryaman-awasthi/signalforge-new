@@ -139,6 +139,32 @@ TAGS: list[dict[str, str]] = [
         "permission, on the same reasoning the war room's reads carry none, and "
         "none of them can change incident state, execute an action or approve "
         "anything - there is no such path from here."},
+    {"name": "governance", "description":
+        "The consequential-action boundary: policy, the Tool Gateway, the "
+        "execution ledger, next best action, communications and layered "
+        "validation. Every call that changes an integrated system passes "
+        "through one door and produces an explicit decision - `allow`, "
+        "`approval_required` or `block` - carrying the ordered `rules_hit` that "
+        "produced it and naming, per rule, whether it came from the hardcoded "
+        "platform floor or the application's own policy. The floor is code, not "
+        "configuration: the six high-risk classes (rollback, restart, failover, "
+        "traffic shift, config change, customer-impacting) can never "
+        "auto-execute, a read-only classification can never be given to "
+        "something that mutates, an approval expires within an hour, and audit "
+        "is not a field, so it cannot be switched off. A policy document "
+        "contradicting any of that is refused with the rule that refused it and "
+        "the attempt is written to the audit chain. An approval is bound to a "
+        "fingerprint over the action, its arguments, its risk class and the "
+        "policy version, and is re-checked at execution for expiry, spend, "
+        "revocation, fingerprint and whether the approver still holds the "
+        "permission. A timeout is `uncertain`, never failed: `retry_blocked` is "
+        "set and the only move out is `reconcile`, which asks the target system "
+        "what actually happened. Duplicate submits return the existing "
+        "execution and send nothing. Next-best-action scores are arithmetic the "
+        "server computes before any model is called; a model may write the "
+        "sentence beside a score and can never change one. No route here sends "
+        "a communication, closes an incident or executes without the decision "
+        "chain above - there is no such path."},
     {"name": "notifications", "description":
         "The cockpit notification socket. A WebSocket is not expressible in "
         "OpenAPI; its frame protocol is in docs/11-api-spec.md."},

@@ -196,6 +196,41 @@ RESPONDER_READS_UNDER_APPS = {
 }
 
 
+# The execution policy also lives under /apps and is deliberately *not*
+# manage_apps (S6-T01). The frozen roles matrix names `edit_policies` separately
+# from `manage_apps` precisely because they are different jobs: pointing the
+# platform at an application's URLs and holding its credentials is one, and
+# deciding what the platform will let anybody do to that application is another.
+# Both currently sit with the org owner, so nothing widens today - and pinning
+# them here means a future org that splits the two roles gets the split it asked
+# for rather than silently re-merging it.
+#
+# The reads split three ways for reasons the matrix already carries:
+#   - GET .../policy carries no permission. Reading the rules is not changing
+#     them, and a responder who cannot see why an action needs approval will ask
+#     in chat instead of reading the screen.
+#   - GET .../policy/versions carries `read_audit`, not `edit_policies`. An audit
+#     trail only the editor can see is not an audit trail, and the Auditor holds
+#     read_audit and nothing else.
+#   - The two writes carry `edit_policies`.
+#
+# Asserted from the other side in tests/governance/test_policy_editor.py, where
+# an incident commander is refused an edit (DR-107).
+POLICY_ROUTES_UNDER_APPS = {
+    ("GET", "/apps/{app_id}/policy"),
+    ("GET", "/apps/{app_id}/policy/versions"),
+    ("POST", "/apps/{app_id}/policy"),
+    ("POST", "/apps/{app_id}/policy/dry-run"),
+}
+
+POLICY_ROUTE_PERMISSIONS = {
+    ("GET", "/apps/{app_id}/policy"): None,
+    ("GET", "/apps/{app_id}/policy/versions"): Permission.READ_AUDIT,
+    ("POST", "/apps/{app_id}/policy"): Permission.EDIT_POLICIES,
+    ("POST", "/apps/{app_id}/policy/dry-run"): Permission.EDIT_POLICIES,
+}
+
+
 @pytest.mark.req("REQ-012", "REQ-036")
 async def test_every_onboarding_route_is_manage_apps(api):
     """The wizard holds credentials, edits policy and points the platform at
@@ -206,23 +241,44 @@ async def test_every_onboarding_route_is_manage_apps(api):
     unguarded = []
     covered = 0
     seen_reads = set()
+    seen_policy = set()
     for route in _walk_api_routes(api_app.routes):
         path = getattr(route, "path", "")
         if not path.startswith("/apps"):
             continue
         methods = getattr(route, "methods", set()) or set()
-        if {(method, path) for method in methods} & RESPONDER_READS_UNDER_APPS:
-            seen_reads |= {(method, path) for method in methods}
+        keys = {(method, path) for method in methods}
+        if keys & RESPONDER_READS_UNDER_APPS:
+            seen_reads |= keys
+            continue
+        if keys & POLICY_ROUTES_UNDER_APPS:
+            seen_policy |= keys & POLICY_ROUTES_UNDER_APPS
+            names = _dependency_names(route.dependant)
+            for key in keys & POLICY_ROUTES_UNDER_APPS:
+                expected = POLICY_ROUTE_PERMISSIONS[key]
+                if expected is None:
+                    if names:
+                        unguarded.append(
+                            f"{key} carries {names} and is documented as a read"
+                        )
+                elif expected.value not in names:
+                    unguarded.append(
+                        f"{key} should carry {expected.value}, carries {names}"
+                    )
             continue
         covered += 1
         names = _dependency_names(route.dependant)
         if Permission.MANAGE_APPS.value not in names:
             unguarded.append(f"{route.methods} {path}")
     assert covered >= 12, "the walk must cover the wizard's routes"
-    assert not unguarded, f"onboarding routes not behind manage_apps: {unguarded}"
+    assert not unguarded, f"routes under /apps guarded wrongly: {unguarded}"
     assert seen_reads == RESPONDER_READS_UNDER_APPS, (
         "a responder read named here no longer exists; the exemption must not "
         f"outlive its route: {RESPONDER_READS_UNDER_APPS - seen_reads}"
+    )
+    assert seen_policy == POLICY_ROUTES_UNDER_APPS, (
+        "a policy route named here no longer exists; the exemption must not "
+        f"outlive its route: {POLICY_ROUTES_UNDER_APPS - seen_policy}"
     )
 
 

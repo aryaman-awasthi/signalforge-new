@@ -164,25 +164,53 @@ async def test_the_unpermissioned_write_exemption_is_justified_route_by_route(ap
       everyone else. Tested in both directions below.
     - `STATE_FREE_WRITES` - it writes no state at all, incident or brain.
       Tested below for tenant scoping and for leaving both untouched.
+    - `INERT_DRAFT_WRITES` (S6-T04) - it writes an artifact that cannot reach
+      anybody without a second, permissioned act by a second person. Tested in
+      tests/security/test_governance_boundary.py and
+      tests/governance/test_communications.py.
+    - `AUDIENCE_SCOPED_WRITES` (S6-T04) - it *does* enforce a permission, chosen
+      by the communication's audience, which the route has not read yet. Tested
+      from both sides in the same two files.
+
+    The two Sprint 6 categories live in the governance boundary file rather than
+    here, so each justification sits beside the obligation it takes on - but they
+    are joined here, because this is the one test that can see the whole
+    exemption at once.
 
     Without this join, an unpermissioned write could be added to the exemption
     and quietly become a route every member of every tenant may perform on
     anybody.
     """
     from signalforge.tests.security.test_api_surface import SESSION_ONLY_WRITES
+    from signalforge.tests.security.test_governance_boundary import (
+        AUDIENCE_SCOPED_WRITES,
+        INERT_DRAFT_WRITES,
+    )
 
+    categories = (
+        SELF_SCOPED_WRITES,
+        STATE_FREE_WRITES,
+        INERT_DRAFT_WRITES,
+        AUDIENCE_SCOPED_WRITES,
+    )
     exempted = {
         (method.upper(), path)
         for method, path in SESSION_ONLY_WRITES
         if "incident" in path or "war-room" in path
     }
-    assert exempted == SELF_SCOPED_WRITES | STATE_FREE_WRITES, (
+    justified: set[tuple[str, str]] = set()
+    for category in categories:
+        justified |= category
+    assert exempted == justified, (
         "an incident write was exempted from needing a permission without being "
-        "listed - and justified - here as either self-scoped or state-free"
+        "listed - and justified - as self-scoped, state-free, an inert draft, or "
+        "audience-scoped"
     )
-    assert not SELF_SCOPED_WRITES & STATE_FREE_WRITES, (
-        "a route must be justified one way or the other, not both"
-    )
+    for index, category in enumerate(categories):
+        for other in categories[index + 1:]:
+            assert not category & other, (
+                "a route must be justified exactly one way, not two"
+            )
 
 
 @pytest.mark.req("REQ-012", "REQ-013", "REQ-055")

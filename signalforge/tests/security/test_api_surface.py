@@ -98,6 +98,37 @@ SESSION_ONLY_WRITES = {
     # incident command authority - and is asserted in both directions in
     # tests/security/test_brain_boundary.py.
     ("post", "/incidents/{incident_id}/brain/ask"),
+    # The four communications writes (S6-T04) join for the **fourth and fifth**
+    # distinct reasons on this list, and both are worth stating because neither
+    # is "we forgot".
+    #
+    # Drafting (`/communications` and `.../correction`) is *inert*. A draft
+    # cannot reach an audience: `CommunicationState.TRANSITIONS` admits ISSUED
+    # only from APPROVED, and only `issue()` performs that move. Writing one
+    # therefore produces an artifact that requires a second, permissioned act by
+    # a second person to have any effect at all - which is a stronger control
+    # than a permission on the draft would be, and it is why the SME can draft.
+    # The frozen matrix gives the SME nothing, and the SME is the person most
+    # likely to know what the customer-facing symptom actually is. The obligation
+    # this exemption carries is asserted in tests/governance/test_communications
+    # .py: a draft is refused if it cites nothing, its author cannot approve an
+    # externally visible one, and a customer body never quotes untrusted text.
+    #
+    # Approving and issuing carry a permission - it is simply not a *static* one,
+    # so the route cannot name it and the census cannot read it. Which permission
+    # applies is decided by the communication's `audience`, which the route has
+    # not read yet: `approve_customer_comms` for customer and support,
+    # `approve_exec_comms` for leadership, none for responders. It is enforced in
+    # `CommunicationService._assert_may_approve`, where the audience is known,
+    # and asserted from both sides - an Executive is refused a customer statement
+    # (tests/security/test_governance_boundary.py) and a Comms Lead is allowed
+    # one (tests/governance/test_communications.py). A route-level guard here
+    # would have to pick one audience's permission and would be wrong for the
+    # other three.
+    ("post", "/incidents/{incident_id}/communications"),
+    ("post", "/incidents/{incident_id}/communications/{communication_id}/approve"),
+    ("post", "/incidents/{incident_id}/communications/{communication_id}/issue"),
+    ("post", "/incidents/{incident_id}/communications/{communication_id}/correction"),
 }
 
 WRITE_METHODS = {"post", "put", "patch", "delete"}

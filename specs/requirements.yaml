@@ -457,7 +457,7 @@ requirements:
     area: governance-execution
     sprint: S6
     priority: must
-    status: planned
+    status: built
     acceptance: >
       Per-app policy YAML sits above the floor: high-risk classes can never
       auto-execute, read_only can never mutate, approval TTL capped, audit immutable;
@@ -468,7 +468,7 @@ requirements:
     area: governance-execution
     sprint: S6
     priority: must
-    status: planned
+    status: built
     acceptance: >
       Every action passes validate/authn/authz/policy producing allow, approve or
       block with rules_hit; approvals carry identity and expiry; every step is an event
@@ -479,7 +479,7 @@ requirements:
     area: governance-execution
     sprint: S6
     priority: must
-    status: planned
+    status: built
     acceptance: >
       Timeout lands UNCERTAIN with retry blocked; reconcile-before-retry resolves
       COMPLETED_LATE/NOT_APPLIED/PARTIAL then mark/retry/compensate/cancel; duplicates
@@ -490,7 +490,7 @@ requirements:
     area: governance-execution
     sprint: S6
     priority: must
-    status: planned
+    status: built
     acceptance: >
       Deterministic urgency x impact x information gain minus risk with permission and
       dependency filters, alternatives, fallback and rollback; plan revisions show
@@ -501,7 +501,7 @@ requirements:
     area: governance-execution
     sprint: S6
     priority: must
-    status: planned
+    status: built
     acceptance: >
       Audience drafts grounded on graph nodes move draft/approved/issued; contradiction
       auto-flags when grounded nodes are superseded; corrections carry redlines;
@@ -512,7 +512,7 @@ requirements:
     area: governance-execution
     sprint: S6
     priority: must
-    status: planned
+    status: built
     acceptance: >
       Technical/service/customer/business layers read the app independently of the
       graph; stability window resets on regression; customer layer blocks closure;
