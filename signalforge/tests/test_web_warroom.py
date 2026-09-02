@@ -411,5 +411,10 @@ def test_the_screens_keep_polling_when_the_socket_is_not_available():
     # And the reader is told which mode they are in.
     badge = read("features", "warroom", "components", "LiveBadge.tsx")
     assert "Polling every" in badge and "Live" in badge
-    for component in ("WarRoomShell.tsx", "MobilePaging.tsx"):
-        assert "LiveBadge" in read("features", "warroom", "components", component)
+    # The war room renders it from its header component (S8-T05 moved the status
+    # strip out of the shell), so either file satisfies the war room's half.
+    war_room = read("features", "warroom", "components", "WarRoomShell.tsx") + read(
+        "features", "warroom", "components", "IncidentHeader.tsx"
+    )
+    assert "LiveBadge" in war_room
+    assert "LiveBadge" in read("features", "warroom", "components", "MobilePaging.tsx")

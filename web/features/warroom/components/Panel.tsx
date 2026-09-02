@@ -14,34 +14,67 @@ import { ReactNode } from "react";
  * yet. It renders the panel with its real title and, inside it, one sentence
  * saying what will fill it and when - rather than an empty box, which reads as
  * "broken", or a fake chart, which reads as "working".
+ *
+ * S8-T05 gave it the prototype's chrome: square, no outer border, the ground one
+ * step darker than the page, an 11px/0.1em/800 uppercase title over a 2px rule,
+ * and an `accent` variant that puts a 4px role rule along the top. That rule
+ * means "this panel is about that state" and is never decoration - it is how a
+ * commander finds the one panel that needs them from across a room.
  */
+
+export type PanelAccent = "accent" | "ok" | "warn" | "info" | "conflict";
+
+const ACCENT: Record<PanelAccent, string> = {
+  accent: "border-t-4 border-t-accent",
+  ok: "border-t-4 border-t-ok",
+  warn: "border-t-4 border-t-warn",
+  info: "border-t-4 border-t-info",
+  conflict: "border-t-4 border-t-conflict",
+};
+
 export function Panel({
   title,
   subtitle,
   actions,
   pending,
+  accent,
+  elevated = false,
+  className = "",
+  bodyClassName = "",
   children,
 }: {
   title: string;
   subtitle?: string;
   actions?: ReactNode;
   pending?: string;
+  accent?: PanelAccent;
+  elevated?: boolean;
+  className?: string;
+  bodyClassName?: string;
   children?: ReactNode;
 }) {
   return (
     <section
       aria-label={title}
-      className="flex flex-col rounded-card border border-line bg-surface-raised"
+      className={`flex min-w-0 flex-col bg-surface-raised ${
+        accent ? ACCENT[accent] : ""
+      } ${elevated ? "shadow-sm" : ""} ${className}`}
     >
-      <header className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2">
-        <h2 className="text-sm font-semibold">{title}</h2>
-        {subtitle && <span className="text-xs text-ink-muted">{subtitle}</span>}
+      <header className="flex flex-wrap items-baseline gap-2 border-b-2 border-line px-4 py-3">
+        <h2 className="font-display text-micro font-extrabold uppercase tracking-panel">
+          {title}
+        </h2>
+        {subtitle && (
+          <span className="text-nano uppercase tracking-label text-neutral-600">
+            {subtitle}
+          </span>
+        )}
         <span className="flex-1" />
         {actions}
       </header>
-      <div className="flex-1 px-3 py-2.5">
+      <div className={`flex-1 px-4 py-3 ${bodyClassName}`}>
         {pending ? (
-          <p className="text-xs text-ink-muted">{pending}</p>
+          <p className="text-small text-ink-muted">{pending}</p>
         ) : (
           children
         )}

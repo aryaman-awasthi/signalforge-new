@@ -113,7 +113,11 @@ export function BrainPanel({
           next event to wake the brain.
         </p>
       ) : (
-        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+        // One hypothesis per row, ranked, as the prototype has it. Three cards
+        // side by side made rank a matter of reading three headings; stacked,
+        // the confidence bars line up under each other and the leading
+        // hypothesis is obvious from the length of a bar before a word is read.
+        <div className="flex flex-col gap-2.5">
           {brain.hypotheses.map((hypothesis, index) => (
             <HypothesisCard
               key={hypothesis.node.id}

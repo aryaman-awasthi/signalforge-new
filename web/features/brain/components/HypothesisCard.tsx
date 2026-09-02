@@ -41,22 +41,37 @@ export function HypothesisCard({
   return (
     <article
       aria-label={`Hypothesis ${rank}: ${hypothesis.node.label}`}
-      className="rounded-card border border-line bg-surface p-3"
+      className={`bg-surface px-3 py-2.5 ${rank === 1 ? "" : "border-t-2 border-line"}`}
     >
-      <header className="flex items-start gap-3">
-        <span className="mt-0.5 rounded-full border border-line px-1.5 py-0.5 font-mono text-[10px] text-ink-muted">
-          #{rank}
+      {/* The prototype's row: ordinal, what it says, where it ranks, how sure -
+          and then a bar whose length says the same thing again, because rank has
+          to be legible from across a room before any number is read. */}
+      <header className="grid grid-cols-[24px_1fr_auto_auto] items-start gap-2.5">
+        <span className="pt-0.5 font-mono text-micro text-neutral-500">
+          {String(rank).padStart(2, "0")}
         </span>
-        <p className="flex-1 text-xs font-medium leading-snug">
+        <p className="min-w-0 font-display text-h5 font-extrabold leading-tight">
           {hypothesis.node.label}
         </p>
+        {rank === 1 && (
+          <span className="mt-0.5 bg-brand-100 px-1.5 py-0.5 text-nano font-bold uppercase tracking-label text-brand-800">
+            leading
+          </span>
+        )}
         <span
-          className="font-mono text-lg font-semibold tabular-nums"
+          className="whitespace-nowrap text-right font-display text-h4 font-extrabold leading-none tabular-nums"
           title="Computed by SignalForge from weighted evidence, not written by a model"
         >
           {percent}%
         </span>
       </header>
+
+      <div className="mt-1.5 h-2 w-full bg-neutral-200">
+        <div
+          className={`h-2 ${rank === 1 ? "bg-accent" : "bg-neutral-500"}`}
+          style={{ width: `${percent}%` }}
+        />
+      </div>
 
       <div className="mt-2 flex flex-wrap items-center gap-3">
         <Sparkline
