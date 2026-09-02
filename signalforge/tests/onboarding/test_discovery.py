@@ -118,7 +118,7 @@ def test_local_monitoring_is_matched_by_vendor_not_by_adapter_id(api, observe):
             vendor="prometheus",
             label="Prometheus",
             url=ObserveHarness.PROMETHEUS_URL,
-            health_path="/api/v1/query",
+            health_path="/-/healthy",
         ),
     )
 
@@ -184,7 +184,7 @@ def test_discovery_without_a_base_url_probes_only_the_local_services(api, observ
             vendor="prometheus",
             label="Prometheus",
             url=ObserveHarness.PROMETHEUS_URL,
-            health_path="/api/v1/query",
+            health_path="/-/healthy",
         ),
     )
 

@@ -32,6 +32,17 @@ MAX_POINTS_PER_QUERY = 11_000
 over-wide range fails with a message that says what to change, rather than with
 a 400 from the server."""
 
+ALL_SERIES = '{__name__=~".+"}'
+"""The platform's empty selector, in PromQL.
+
+`parse_selector` fixes the contract for every metrics adapter: an empty selector
+is every series, because "give me everything" is a real onboarding question. The
+two scrape adapters get that for free - they read a whole exposition and filter
+it locally. Prometheus is a query API with no empty expression: it answers
+`no expression found in input` with a 400. So the translation is owed here,
+which is where every other Prometheus shape is owed, and a matcher on
+`__name__` is how PromQL says "every series"."""
+
 
 class PrometheusAdapter(GenericAdapter, MetricsAdapter):
     async def ping(self) -> bool:
@@ -40,7 +51,7 @@ class PrometheusAdapter(GenericAdapter, MetricsAdapter):
 
     async def query_instant(self, query: str, at: datetime) -> list[MetricSeries]:
         payload = await self.transport().get_json(
-            QUERY_PATH, params={"query": query, "time": _unix(at)}
+            QUERY_PATH, params={"query": _expression(query), "time": _unix(at)}
         )
         return self.truncate(self._series(payload, query))
 
@@ -60,7 +71,7 @@ class PrometheusAdapter(GenericAdapter, MetricsAdapter):
         payload = await self.transport().get_json(
             QUERY_RANGE_PATH,
             params={
-                "query": query,
+                "query": _expression(query),
                 "start": _unix(start),
                 "end": _unix(end),
                 "step": step_s,
@@ -101,6 +112,16 @@ class PrometheusAdapter(GenericAdapter, MetricsAdapter):
                 )
             )
         return series
+
+
+def _expression(query: str) -> str:
+    """The selector as PromQL, with the platform's empty selector translated.
+
+    Only the empty case is rewritten. Anything the caller actually wrote is
+    passed through untouched, because an adapter that edits a responder's query
+    is an adapter that answers a question nobody asked.
+    """
+    return (query or "").strip() or ALL_SERIES
 
 
 def _unix(moment: datetime) -> float:

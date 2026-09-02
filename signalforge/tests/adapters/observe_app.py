@@ -396,8 +396,28 @@ def build_prometheus_app(
     def envelope(result_type: str, result: list[dict]) -> dict:
         return {"status": "success", "data": {"resultType": result_type, "result": result}}
 
+    def refused_empty_expression():
+        """What the real server answers when `query` carries no expression.
+
+        A fake that accepts anything is not a fake of Prometheus, and this one
+        used to: it answered a scrape for an empty `query`, which is the one
+        thing the real API will not do. That is what let an adapter that could
+        never scrape pass its own suite.
+        """
+        return JSONResponse(
+            {
+                "status": "error",
+                "errorType": "bad_data",
+                "error": 'invalid parameter "query": unknown position: parse error: '
+                "no expression found in input",
+            },
+            status_code=400,
+        )
+
     async def query(request):
         state.last_params = dict(request.query_params)
+        if not (request.query_params.get("query") or "").strip():
+            return refused_empty_expression()
         if state.error:
             return JSONResponse(
                 {"status": "error", "errorType": "bad_data", "error": state.error},
@@ -410,6 +430,8 @@ def build_prometheus_app(
 
     async def query_range(request):
         state.last_params = dict(request.query_params)
+        if not (request.query_params.get("query") or "").strip():
+            return refused_empty_expression()
         if state.error:
             return JSONResponse(
                 {"status": "error", "errorType": "bad_data", "error": state.error},
@@ -417,8 +439,18 @@ def build_prometheus_app(
             )
         return JSONResponse(envelope("matrix", state.series))
 
+    async def healthy(request):
+        """`/-/healthy` - the cheap unauthenticated probe discovery uses.
+
+        The real server serves it, `LOCAL_SERVICES` names it, and nothing about
+        it involves a query. It is here so a discovery test can probe what
+        production probes instead of borrowing a query endpoint.
+        """
+        return PlainTextResponse("Prometheus Server is Healthy.")
+
     app = Starlette(
         routes=[
+            Route("/-/healthy", healthy),
             Route("/api/v1/query", query),
             Route("/api/v1/query_range", query_range),
         ]

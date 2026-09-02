@@ -176,6 +176,42 @@ async def test_prometheus_instant_query_reads_the_last_sample(prom):
 
 
 @pytest.mark.anyio
+@pytest.mark.req("REQ-031", "REQ-040")
+async def test_the_empty_selector_scrapes_every_series(prom):
+    """The platform's "give me everything" reaches Prometheus as an expression.
+
+    `parse_selector` fixes the contract: an empty selector is every series, and
+    both scrape adapters honour it. Prometheus has no empty expression - it
+    answers 400 `no expression found in input` - so the adapter owes the
+    translation. Without it the onboarding connection test fails on the metrics
+    capability and, worse, every five-second poll fails the same way, so no
+    rollup is ever written and no anomaly can ever be raised.
+    """
+    series = await prom.invoke("query_instant", "", AT)
+    assert prom.state.last_params["query"].strip(), "an empty PromQL expression is a 400"
+    assert {one.name for one in series} == {"http_requests_total"}
+
+
+@pytest.mark.anyio
+@pytest.mark.req("REQ-031")
+async def test_the_empty_selector_scrapes_every_series_over_a_range(prom):
+    series = await prom.invoke(
+        "query_range", "", AT - timedelta(minutes=1), AT, 15.0
+    )
+    assert prom.state.last_params["query"].strip()
+    assert {one.name for one in series} == {"http_requests_total"}
+
+
+@pytest.mark.anyio
+@pytest.mark.req("REQ-031")
+async def test_a_named_selector_is_passed_through_untouched(prom):
+    """The translation is for the empty case only; a real expression is the
+    caller's and the adapter does not rewrite it."""
+    await prom.invoke("query_instant", 'http_requests_total{region="eu-west-1"}', AT)
+    assert prom.state.last_params["query"] == 'http_requests_total{region="eu-west-1"}'
+
+
+@pytest.mark.anyio
 @pytest.mark.req("REQ-031")
 async def test_a_nan_sample_is_kept_rather_than_dropped(prom):
     series = await prom.invoke(
