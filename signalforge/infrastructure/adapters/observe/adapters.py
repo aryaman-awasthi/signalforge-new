@@ -20,7 +20,6 @@ failure:
 from __future__ import annotations
 
 import hashlib
-import time
 from datetime import datetime
 from typing import Any, Optional
 
@@ -62,6 +61,7 @@ from signalforge.contracts.spi import (
 )
 from signalforge.domain.integrations.promtext import parse_exposition, select
 from signalforge.infrastructure.adapters.base import GenericAdapter
+from signalforge.infrastructure.adapters.probes import run_synthetic_probe
 
 DRILL_SCOPE_PREFIX = "drill:"
 
@@ -273,42 +273,13 @@ class ObserveHealthAdapter(ObserveAdapter, HealthAdapter):
         than only the observe surface. A non-2xx is a *result*, not an error:
         `expected_status` is what decides, and a probe that raised on 500 could
         never assert that a page correctly returns 500.
+
+        The measurement itself lives in `adapters/probes.py` because it is not a
+        translation of anything the observe contract publishes - it is
+        SignalForge making a request and timing it, and every health adapter has
+        to measure it the same way.
         """
-        transport = self.transport()
-        started = time.perf_counter()
-        try:
-            status, _ = await transport.send(
-                probe.method.upper(), probe.target, timeout_s=probe.timeout_s
-            )
-        except AdapterTimeoutError as exc:
-            return ProbeResult(
-                probe_id=probe.probe_id,
-                target=probe.target,
-                ok=False,
-                latency_ms=(time.perf_counter() - started) * 1000.0,
-                detail=str(exc)[:200],
-                executed_at=self.now(),
-            )
-        except AdapterUnavailableError as exc:
-            return ProbeResult(
-                probe_id=probe.probe_id,
-                target=probe.target,
-                ok=False,
-                latency_ms=(time.perf_counter() - started) * 1000.0,
-                detail=str(exc)[:200],
-                executed_at=self.now(),
-            )
-        latency_ms = (time.perf_counter() - started) * 1000.0
-        ok = status == probe.expected_status
-        return ProbeResult(
-            probe_id=probe.probe_id,
-            target=probe.target,
-            ok=ok,
-            latency_ms=latency_ms,
-            status_code=status,
-            detail=None if ok else f"expected {probe.expected_status}, got {status}",
-            executed_at=self.now(),
-        )
+        return await run_synthetic_probe(self.transport(), probe, self.now)
 
 
 class ObserveActionsAdapter(ObserveAdapter, ActionsAdapter):

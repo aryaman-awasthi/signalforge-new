@@ -28,6 +28,7 @@ from signalforge.infrastructure.adapters.builtin import BUILTIN_RUNTIMES
 SHIPPED = {
     "http-observe-metrics", "http-observe-logs", "http-observe-traces",
     "http-observe-health", "http-observe-actions", "http-observe-chaos",
+    "spring-actuator-metrics", "spring-actuator-health",
     "prometheus", "grafana-alert-webhook", "deploy-webhook", "topo-import",
     "itsm-lite", "teams-sim", "teams-sim-dm", "notify-in-app",
     "notify-browser-push", "page-sim", "kb-index",

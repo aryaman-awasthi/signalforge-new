@@ -1,0 +1,43 @@
+id: spring-actuator-metrics
+name: Spring Actuator metrics (Prometheus text)
+version: 1.0.0
+kind: metrics
+mode: pull
+vendor: spring
+description: >-
+  Reads GET /actuator/prometheus in Prometheus text exposition format from any
+  Spring Boot application that exposes Micrometer's Prometheus registry, and
+  selects series with a name{label="value"} selector. The application is asked
+  for nothing: Actuator already serves this endpoint. Only query_instant is
+  declared - the endpoint is a scrape carrying the current sample and no
+  history, so a range query has no honest answer here; bind the prometheus
+  adapter against the server that stores these scrapes for that.
+availability: built_in
+simulated: false
+capabilities: [query_instant]
+credential_scopes: [read_only]
+auth:
+  method: none
+config_schema:
+  type: object
+  required: [base_url]
+  additionalProperties: false
+  properties:
+    base_url:
+      type: string
+      minLength: 8
+      description: >-
+        Root URL the actuator endpoints are served under, e.g.
+        http://localhost:8080 - or http://localhost:8081 when management runs on
+        its own port.
+    verify_tls:
+      type: boolean
+      default: true
+      description: Verify the target's TLS certificate. Turn off only for a lab.
+limits:
+  timeout_s: 10
+  max_calls_per_minute: 120
+  max_result_bytes: 2097152
+  max_rows: 20000
+redaction:
+  policy_id: actuator-metrics-none

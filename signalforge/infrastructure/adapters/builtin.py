@@ -17,6 +17,10 @@ from typing import Callable, Mapping
 
 from signalforge.contracts.spi import Adapter
 from signalforge.domain.adapters.ports import AdapterContext
+from signalforge.infrastructure.adapters.actuator.adapters import (
+    ActuatorHealthAdapter,
+    ActuatorMetricsAdapter,
+)
 from signalforge.infrastructure.adapters.itsm_lite.adapter import ItsmLiteAdapter
 from signalforge.infrastructure.adapters.kb_index.adapter import KbIndexAdapter
 from signalforge.infrastructure.adapters.notify.adapters import (
@@ -51,6 +55,8 @@ BUILTIN_RUNTIMES: Mapping[str, type] = {
     "http-observe-health": ObserveHealthAdapter,
     "http-observe-actions": ObserveActionsAdapter,
     "http-observe-chaos": ObserveChaosAdapter,
+    "spring-actuator-metrics": ActuatorMetricsAdapter,
+    "spring-actuator-health": ActuatorHealthAdapter,
     "prometheus": PrometheusAdapter,
     "grafana-alert-webhook": GrafanaAlertWebhookAdapter,
     "deploy-webhook": DeployWebhookAdapter,

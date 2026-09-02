@@ -76,6 +76,8 @@ under `errors` - the other adapters still load.
 | `http-observe-health` | health | pull | `/observe/health` plus synthetic probes SignalForge runs itself. |
 | `http-observe-actions` | actions | invoke | imports the app's action manifest; a timed-out execution is UNCERTAIN, not failed. |
 | `http-observe-chaos` | chaos | invoke | imports the chaos manifest; refuses a scope that is not `drill:<id>`. |
+| `spring-actuator-metrics` | metrics | pull | Micrometer's Prometheus registry from `/actuator/prometheus`. Instant only, for the same reason as above. |
+| `spring-actuator-health` | health | pull | `/actuator/health` mapped onto the canonical report, plus the same synthetic probes. Unauthenticated by default, as Actuator is. |
 | `prometheus` | metrics | pull | the range-query adapter (`/api/v1/query_range`). |
 | `grafana-alert-webhook` | alerts | push | normalises Grafana unified-alerting batches. |
 | `deploy-webhook` | changes | push | normalises deployment webhooks; refuses to guess a status. |

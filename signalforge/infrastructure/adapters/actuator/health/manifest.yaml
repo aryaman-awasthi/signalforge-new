@@ -1,0 +1,53 @@
+id: spring-actuator-health
+name: Spring Actuator health
+version: 1.0.0
+kind: health
+mode: pull
+vendor: spring
+description: >-
+  Reads GET /actuator/health from any Spring Boot application and maps Spring's
+  status strings onto the canonical report: UP is up, DOWN is down,
+  OUT_OF_SERVICE is degraded, and anything else is unknown rather than a guess.
+  One component per entry under "components", which Actuator includes when
+  show-details is enabled; a document without them is still a valid report with
+  no components. The aggregate status is the application's own verdict and is
+  never recomputed here. Also runs synthetic probes from SignalForge against a
+  URL the application exposes: a non-2xx is a probe result, not an error, and
+  expected_status decides.
+availability: built_in
+simulated: false
+capabilities: [get_health, run_probe]
+credential_scopes: [read_only]
+auth:
+  method: none
+config_schema:
+  type: object
+  required: [base_url]
+  additionalProperties: false
+  properties:
+    base_url:
+      type: string
+      minLength: 8
+      description: >-
+        Root URL the actuator endpoints are served under, e.g.
+        http://localhost:8080 - or http://localhost:8081 when management runs on
+        its own port.
+    verify_tls:
+      type: boolean
+      default: true
+      description: Verify the target's TLS certificate. Turn off only for a lab.
+limits:
+  timeout_s: 15
+  max_calls_per_minute: 240
+  max_result_bytes: 1048576
+  max_rows: 1000
+redaction:
+  policy_id: actuator-health-details
+  patterns:
+    # A health indicator's details are whatever the application chose to put
+    # there, and it chose without knowing the text would be stored, shown and
+    # put in front of a model. Datasource and mail indicators are the usual way
+    # a connection string or a credential arrives.
+    - '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'
+    - '(?i)\b(?:password|passwd|secret|token|api[_-]?key)[''"]?\s*[:=]\s*[''"]?[^\s,''"}\]]+'
+    - '://[^/\s:@]+:[^/\s@]+@'
