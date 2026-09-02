@@ -228,3 +228,42 @@ async def test_an_auditor_may_read_a_replay_and_change_nothing(governed):
         headers=governed.api.auth_header(token),
     )
     assert refused.status_code == 403, refused.text
+
+
+@pytest.mark.req("REQ-072")
+async def test_a_writer_waits_for_the_lock_rather_than_breaking_the_chain(tmp_path):
+    """SQLite serialises writers, and the loser must wait rather than give up.
+
+    This is a correctness property of the audit log rather than a performance
+    one. An entry abandoned after its hash was computed leaves the *next* entry
+    pointing at a row that never landed, so the chain stops verifying from that
+    point on and every replay drawn from it says so - correctly, and for ever.
+    The platform met this for real: the detection loop, the probe runner, the
+    escalation sweep and a request all wanted the write lock inside one second,
+    the default five-second timeout was exceeded, and five records went missing
+    from a live chain.
+
+    Asserted on the connection rather than by racing two writers, because a test
+    that reproduces a lock race is a test that fails on a slow machine for a
+    reason that has nothing to do with the rule it is defending.
+    """
+    from sqlalchemy import text
+
+    from signalforge.infrastructure.persistence.db import (
+        SQLITE_BUSY_TIMEOUT_MS,
+        make_engine,
+    )
+
+    engine = make_engine(f"sqlite+aiosqlite:///{tmp_path / 'chain.db'}")
+    try:
+        async with engine.connect() as connection:
+            timeout = (await connection.execute(text("PRAGMA busy_timeout"))).scalar()
+            journal = (await connection.execute(text("PRAGMA journal_mode"))).scalar()
+    finally:
+        await engine.dispose()
+
+    assert timeout == SQLITE_BUSY_TIMEOUT_MS, (
+        "a writer that gives up under contention can break the audit chain"
+    )
+    assert SQLITE_BUSY_TIMEOUT_MS >= 10_000, "five seconds was not enough in practice"
+    assert str(journal).lower() == "wal"
