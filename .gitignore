@@ -48,3 +48,6 @@ web/playwright-report/
 .playwright-mcp/
 # The API's own log directory when it is started from the repository root.
 /logs/
+
+# Editor state, never part of the product.
+.vscode/

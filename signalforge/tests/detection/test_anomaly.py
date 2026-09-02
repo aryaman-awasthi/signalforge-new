@@ -237,7 +237,7 @@ async def test_reading_the_detection_view_never_advances_a_streak(api, observe):
     assert breach["streak"] == 1, "five reads, one evaluation"
 
 
-@pytest.mark.req("REQ-039")
+@pytest.mark.req("REQ-040")
 async def test_a_signal_that_has_regions_stops_reporting_an_unlabelled_one(
     api, observe
 ):

@@ -68,16 +68,18 @@ import { Button } from "@/lib/ui/patterns";
  * that difference is the whole reason a commander looks at it.
  */
 
-type Deep =
-  | null
-  | "brain"
-  | "action"
-  | "ledger"
-  | "radius"
-  | "guidance"
-  | "comms"
-  | "verdict"
-  | "copilot";
+const DEEP_VIEWS = [
+  "brain",
+  "action",
+  "ledger",
+  "radius",
+  "guidance",
+  "comms",
+  "verdict",
+  "copilot",
+] as const;
+
+type Deep = null | (typeof DEEP_VIEWS)[number];
 
 export function WarRoomShell({
   incidentId,
@@ -104,7 +106,28 @@ export function WarRoomShell({
   const [incident, setIncident] = useState<IncidentDetail | null>(null);
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [deep, setDeep] = useState<Deep>(null);
+  const [deep, setDeepState] = useState<Deep>(null);
+
+  /* The expanded view is in the URL, not only in this component's head.
+     `?view=ledger` means an incident commander can send somebody a link to the
+     thing they are talking about instead of "open the war room and click the
+     ledger", and a screenshot in a runbook has an address. Written with
+     history.replaceState rather than a router push so it never adds a history
+     entry: closing a panel with the back button would be a surprise. */
+  useEffect(() => {
+    const view = new URLSearchParams(window.location.search).get("view");
+    if (view && DEEP_VIEWS.includes(view as Exclude<Deep, null>)) {
+      setDeepState(view as Deep);
+    }
+  }, [incidentId]);
+
+  const setDeep = (next: Deep) => {
+    setDeepState(next);
+    const url = new URL(window.location.href);
+    if (next) url.searchParams.set("view", next);
+    else url.searchParams.delete("view");
+    window.history.replaceState(null, "", url.toString());
+  };
 
   useEffect(() => {
     void fetchMe()

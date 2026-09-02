@@ -144,6 +144,13 @@ export type Candidate = {
   rollback_action_id: string | null;
   rollback_summary: string;
   reversible: boolean;
+  /** The application's own JSON schema for this action's arguments. Empty means
+   *  the action takes none. The cockpit asks for the required ones rather than
+   *  guessing: an argument invented by a screen is an argument nobody chose. */
+  params_schema: {
+    properties?: Record<string, { type?: string; enum?: string[]; description?: string }>;
+    required?: string[];
+  };
   rationale: string;
   /** True when the sentence is the platform's, not a model's. */
   rationale_degraded: boolean;

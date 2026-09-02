@@ -364,6 +364,7 @@ class NextBestActionService:
             ),
             reversible=action.reversible,
             idempotent=action.idempotent,
+            params_schema=action.params_schema,
         )
 
     async def _explain(

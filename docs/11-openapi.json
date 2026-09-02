@@ -2122,6 +2122,12 @@
             "title": "Name",
             "type": "string"
           },
+          "params_schema": {
+            "additionalProperties": true,
+            "description": "The application's own JSON schema for this action's arguments. Published so a caller can ask a person for what the action needs; the Tool Gateway validates the answer against it either way.",
+            "title": "Params Schema",
+            "type": "object"
+          },
           "policy": {
             "$ref": "#/components/schemas/DecisionOut"
           },

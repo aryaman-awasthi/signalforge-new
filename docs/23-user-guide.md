@@ -162,9 +162,12 @@ what caused it, what justified it, what changed, and references you can open.
 `?until_seq=` is the scrubber: it returns the incident as it stood at that point,
 through the same code path, so a partial view cannot disagree with the whole.
 
-The cockpit's incident timeline has its own seq scrubber over the event plane.
-The audit replay and the PIR are served by the API in this release and do not
-yet have a dedicated screen - see the limitations below.
+The screen is `/incidents/{id}/replay`, linked from the war-room header once an
+incident is closed and at any time for anybody holding `read_audit`. The
+integrity banner is the first thing on it, because if the chain does not verify
+then every line below it is suspect and you should be told that before you read
+them. The scrubber is the `?until_seq=` parameter rather than a filter the page
+applies, so what you are looking at is a prefix of the record itself.
 
 If the stored record has been edited or a row removed, the replay says so, names
 the first record that no longer verifies, and tells you it is not evidence.
@@ -223,17 +226,59 @@ model in the first place.
 
 ---
 
+## The twenty-three screens
+
+Captured from the running product rather than drawn, and regenerated whenever the
+screens change (`playbook/design/capture-product.cjs`). If one of these does not
+match what you see, the picture is wrong and the product is right.
+
+| Screen | What it is | Picture |
+|---|---|---|
+| S1 | Landing and sign-up | `screens/S01-landing.png` |
+| S2 | Organisation setup: invites, roles, on-call, escalation | `screens/S02-org-setup.png` |
+| S3 | Onboarding wizard | `screens/S03-wizard-connect.png`, `screens/S03-wizard-map.png` |
+| S4 | Applications and their readiness | `screens/S04-applications.png` |
+| S5 | An application: golden signals, journeys, changes | `screens/S05-application-detail.png` |
+| S9 | The war-room cockpit | `screens/S09-war-room.png` |
+| S10 | The incident brain, expanded | `screens/S10-incident-brain.png` |
+| S11 | Next best action, its plan and its approval | `screens/S11-next-best-action.png` |
+| S12 | The execution ledger | `screens/S12-execution-ledger.png` |
+| S13 | Blast radius and topology | `screens/S13-blast-radius.png` |
+| S14 | Warning and guidance | `screens/S14-warning-and-guidance.png` |
+| S15 | Communications | `screens/S15-communications.png` |
+| S16 | The layered recovery verdict | `screens/S16-recovery-verdict.png` |
+| S17 | The same room, per role | `screens/S17-*.png` (six) |
+| S18 | The IC copilot | `screens/S18-copilot.png` |
+| S19 | Drill console | *no screen, by design - see below* |
+| S20 | Closed: audit replay and the review | `screens/S20-replay-and-pir.png` |
+| S21 | Platform settings | `screens/S21-settings.png` |
+| S22 | Mobile paging, at 390 wide | `screens/S22-mobile-paging.png` |
+| S23 | Integration health | `screens/S23-integration-health.png` |
+
+**S19 has no screen and that is deliberate.** The drill engine is structurally
+unreachable from the API: no published route names a drill, chaos or injection,
+and the API package does not import the engine at all - both asserted by tests.
+The console is `scripts/demo.sh` and `scripts/drill_run.py`. A drill route would
+trade a guarantee for a page.
+
+S6 (the watch banner) and S7 (the proposal sheet) are states of S5 rather than
+screens of their own, and S8 (the room forming) is the state S9 is in before
+anybody has joined.
+
 ## Known limitations
 
 Honest list, carried from `docs/22-release-package.md`:
 
-1. **Five named role screens are not built** (IC, SME, Comms, Executive,
-   Auditor). Permissions are enforced end to end and every role can do its job
-   through the screens that exist; the tailored per-role layouts are not there.
-2. **Audit replay and the PIR have no dedicated screen.** Both are complete over
-   the API and covered by tests; the cockpit shows the event-plane timeline with
-   its own scrubber, but the replay entries and the review render as JSON rather
-   than as a page.
+1. **The golden tiles carry no sparkline.** The detection route serves a reading
+   per region with its baseline and threshold, not a history, so the only line
+   the tile could draw would be one point per region - which renders as a trend
+   and is not one. The tile shows the reading against its threshold instead.
+   `/apps/{id}/rollups` is where a history would come from.
+2. **The demonstration world heals itself.** Every chaos scenario carries a
+   maximum duration the *application* enforces, so a walkthrough that runs longer
+   than ten minutes finds a healthy application. Re-arm with
+   `python scripts/drill_run.py drills/demo-setup.yaml --refault`; it does not
+   touch the incident record.
 3. **Single node, SQLite.** Postgres-ready, not Postgres-tested.
 4. **`next` and `postcss` carry high advisories** whose remediation is a major
    Next upgrade, deferred deliberately. See `docs/19`.

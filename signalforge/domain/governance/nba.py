@@ -184,6 +184,16 @@ class ActionCandidate:
     rollback_summary: str = ""
     reversible: bool = False
     idempotent: bool = False
+    params_schema: Mapping[str, Any] = field(default_factory=dict)
+    """The application's own JSON schema for this action's arguments, carried
+    straight from its manifest.
+
+    It is on the candidate because the cockpit cannot otherwise know what an
+    action needs. Without it the Run button posts `args: {}` at an action that
+    declares a required `region` and gets a 422 nobody can act on - which is what
+    it did until S8-T10 walked the demo. The platform does not invent a value:
+    it asks, and the Tool Gateway validates the answer against this same schema
+    before anything is authorised."""
     rationale: str = ""
     rationale_degraded: bool = True
     """True until a model wrote it. The cockpit renders the badge from this, so
@@ -254,6 +264,7 @@ class ActionCandidate:
             "rollback_action_id": self.rollback_action_id,
             "rollback_summary": self.rollback_summary,
             "reversible": self.reversible,
+            "params_schema": dict(self.params_schema or {}),
             "rationale": self.rationale or self.explain(),
             "rationale_degraded": self.rationale_degraded,
         }

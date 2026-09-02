@@ -481,6 +481,12 @@ class CandidateOut(BaseModel):
     rollback_action_id: Optional[str] = None
     rollback_summary: str
     reversible: bool
+    params_schema: dict[str, Any] = Field(
+        default_factory=dict,
+        description="The application's own JSON schema for this action's "
+        "arguments. Published so a caller can ask a person for what the action "
+        "needs; the Tool Gateway validates the answer against it either way.",
+    )
     rationale: str
     rationale_degraded: bool = Field(
         description="True when the sentence is the platform's deterministic "
