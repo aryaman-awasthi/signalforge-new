@@ -17,7 +17,11 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # has to resolve them the same way the platform will.
 if [ -f "$ROOT/.env" ]; then set -a; . "$ROOT/.env"; set +a; fi
 
-for marker in "signalforge/api/main.py" "specs/requirements.yaml" "CLAUDE.md"; do
+# Markers a *release* actually contains. CLAUDE.md used to be one of them, and
+# it is deliberately not in the package - so the shipped reset.sh refused to run
+# inside the shipped product, which is the one place it has to work. Found by
+# unzipping the archive and running it (S8-T10).
+for marker in "signalforge/api/main.py" "specs/requirements.yaml" "run.sh"; do
   [ -e "$ROOT/$marker" ] || {
     echo "[reset] refusing: $ROOT does not look like a SignalForge checkout ($marker missing)" >&2
     exit 1
