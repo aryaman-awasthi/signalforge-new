@@ -1,45 +1,180 @@
-/* SignalForge design tokens (design-system/, the single theming surface).
-   Authored in the spirit of the Claude Design skeleton (warm neutrals, terracotta
-   accent); extraction from the skeleton's styles.css is pending - that file was
-   not present in the workspace at S0-T05. Only tokens live here, never content.
-   Color triplets are space-separated RGB so Tailwind can apply alpha. */
+/* SignalForge design tokens - the single theming surface.
+ *
+ * Extracted from the Claude Design export's own token source,
+ * `_ds/modernist-.../styles.css`, plus the six colours the prototype hard-codes
+ * because the design system has no role for them. Nothing here is invented; the
+ * derivation for every value is in `web/design-system/README.md`, which names
+ * the prototype role each token came from.
+ *
+ * Colours are space-separated RGB so Tailwind can apply an alpha channel.
+ * The `--sf-*` names are pinned by tests and do not change; new roles are added
+ * beside them rather than replacing them.
+ *
+ * There is no dark scheme. The export ships one `:root` and the prototype is
+ * light throughout, so a dark block here would be a second design nobody drew.
+ */
 
 :root {
-  /* surfaces and ink */
-  --sf-surface: 250 249 245;
-  --sf-surface-raised: 255 255 255;
-  --sf-ink: 20 20 19;
-  --sf-ink-muted: 94 94 87;
-  --sf-line: 222 220 209;
+  /* -- ground and ink ----------------------------------------------------
+     Note the direction: the *raised* surface is darker than the page, not
+     lighter. Cards in this design sit in the ground rather than on top of it,
+     which is why they need almost no shadow. */
+  --sf-surface: 243 242 242;              /* --color-bg      #f3f2f2 */
+  --sf-surface-raised: 234 233 233;       /* --color-surface #eae9e9 */
+  --sf-ink: 32 30 29;                     /* --color-text    #201e1d */
+  --sf-ink-muted: 122 120 119;            /* --color-text at 55% over the ground */
+  --sf-ink-soft: 109 107 106;             /* --color-text at 60%, table headers */
+  --sf-line: 155 152 151;                 /* --color-divider, flattened */
+  --sf-line-strong: 122 119 118;          /* the 2px section rule reads darker */
 
-  /* brand accent */
-  --sf-accent: 204 120 92;
-  --sf-accent-strong: 176 92 66;
+  /* -- brand ------------------------------------------------------------- */
+  --sf-accent: 236 48 19;                 /* --color-accent  #ec3013 */
+  --sf-accent-strong: 174 24 0;           /* --color-accent-700 */
 
-  /* status */
-  --sf-ok: 74 141 89;
-  --sf-warn: 191 139 48;
-  --sf-danger: 178 66 58;
+  /* -- status ------------------------------------------------------------
+     `--sf-danger` is the accent. There is exactly one red in this design and
+     severity does not get a traffic light of its own. */
+  --sf-ok: 30 122 68;                     /* #1E7A44 */
+  --sf-warn: 168 115 10;                  /* #A8730A */
+  --sf-danger: 236 48 19;
+  --sf-info: 30 95 168;                   /* #1E5FA8 */
+  --sf-conflict: 192 86 22;               /* #C05616 */
+  --sf-closed: 110 106 102;               /* #6E6A66 */
 
-  /* shape and type */
-  --sf-radius-card: 0.75rem;
-  --sf-font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --sf-font-mono: ui-monospace, "Cascadia Code", "Segoe UI Mono", monospace;
+  /* Tint grounds, and the deeper inks that stay legible on them. Caution and
+     conflict need a separate ink; good and info pass on their own tint. */
+  --sf-ok-bg: 231 240 233;                /* #E7F0E9 */
+  --sf-warn-bg: 245 234 211;              /* #F5EAD3 */
+  --sf-warn-ink: 122 84 6;                /* #7a5406 */
+  --sf-info-bg: 227 234 244;              /* #E3EAF4 */
+  --sf-conflict-bg: 247 229 216;          /* #F7E5D8 */
+  --sf-conflict-ink: 138 60 12;           /* #8a3c0c */
+  --sf-closed-bg: 235 234 233;            /* #EBEAE9 */
+  --sf-closed-ink: 82 79 76;              /* #524F4C */
+
+  /* -- ramps -------------------------------------------------------------
+     One shared OKLCH lightness scale, so the same step of any role matches the
+     others in visual value. Spent as: 100 hover ground, 200 the empty track of
+     every bar, 400 somebody who has not joined, 500 inert numerals, 600
+     micro-label ink and neutral badge borders, 700 neutral badge ink, 800
+     avatar and asserted-badge grounds, 900 the dialog scrim. */
+  --sf-neutral-100: 248 244 244;
+  --sf-neutral-200: 234 231 231;
+  --sf-neutral-300: 215 211 211;
+  --sf-neutral-400: 186 182 182;
+  --sf-neutral-500: 155 151 151;
+  --sf-neutral-600: 125 121 121;
+  --sf-neutral-700: 96 93 93;
+  --sf-neutral-800: 68 65 65;
+  --sf-neutral-900: 45 43 43;
+
+  --sf-accent-100: 255 242 239;
+  --sf-accent-200: 255 224 217;
+  --sf-accent-300: 255 196 184;
+  --sf-accent-400: 255 151 131;
+  --sf-accent-500: 255 86 60;
+  --sf-accent-600: 221 43 15;
+  --sf-accent-700: 174 24 0;
+  --sf-accent-800: 124 20 5;
+  --sf-accent-900: 77 23 14;
+
+  /* -- severity ----------------------------------------------------------
+     P0 is the only filled one. A severity that is not the worst does not get to
+     shout, and the design says so by giving it an outline instead of a ground. */
+  --sf-sev-p0: 236 48 19;
+  --sf-sev-p1: 174 24 0;
+  --sf-sev-p2: 192 86 22;
+  --sf-sev-p3: 125 121 121;
+
+  /* -- evidence ----------------------------------------------------------
+     Solid = it happened. Outline = it was said. Dashed = it was supposed.
+     These are the inks; the border style carries the rest of the meaning. */
+  --sf-evidence-observed: 68 65 65;       /* neutral-800, filled */
+  --sf-evidence-authoritative: 124 20 5;  /* accent-800, filled */
+  --sf-evidence-stated: 125 121 121;      /* neutral-600, dashed */
+  --sf-evidence-declared: 30 95 168;      /* info, outlined */
+
+  /* -- shape -------------------------------------------------------------
+     Every radius in the export is 0px, all three steps. Nothing in this design
+     is rounded, and `--sf-radius-card` is kept only because the token name is
+     used across the app. */
+  --sf-radius-card: 0px;
+  --sf-radius-sm: 0px;
+  --sf-radius-lg: 0px;
+
+  /* -- type --------------------------------------------------------------
+     `--sf-font-display` is the same family at weight 800; it exists so a
+     component can ask for the heading treatment without restating the weight.
+     The stack falls back to the system UI face, which is what the export does. */
+  --sf-font-sans: var(--font-archivo), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --sf-font-display: var(--font-archivo), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --sf-font-mono: ui-monospace, SFMono-Regular, Menlo, "Cascadia Code", monospace;
+
+  --sf-text-hero: 44px;      /* the one number a panel is about */
+  --sf-text-h1: 42px;
+  --sf-text-h2: 32px;
+  --sf-text-h3: 25px;
+  --sf-text-h4: 20px;
+  --sf-text-h5: 16px;
+  --sf-text-h6: 13px;        /* uppercase, 0.08em - the eyebrow */
+  --sf-text-body: 15px;
+  --sf-text-dense: 13px;
+  --sf-text-small: 12px;
+  --sf-text-micro: 11px;
+  --sf-text-tiny: 10px;
+  --sf-text-nano: 9px;
+
+  --sf-leading-body: 1.55;
+  --sf-leading-display: 1.12;
+  --sf-tracking-display: -0.015em;
+  --sf-tracking-label: 0.08em;
+  --sf-tracking-panel: 0.1em;
+
+  /* -- space -------------------------------------------------------------
+     4, 8, 12, 16, 24, 32. There is no 5 and no 7 in this design. */
+  --sf-space-1: 4px;
+  --sf-space-2: 8px;
+  --sf-space-3: 12px;
+  --sf-space-4: 16px;
+  --sf-space-6: 24px;
+  --sf-space-8: 32px;
+
+  /* -- elevation ---------------------------------------------------------
+     Ink-tinted and soft. Used sparingly: hierarchy in this design is carried by
+     border weight, not by shadow. */
+  --sf-shadow-sm: 0 1px 2px rgb(45 43 43 / 14%);
+  --sf-shadow-md: 0 3px 10px rgb(45 43 43 / 16%);
+  --sf-shadow-lg: 0 12px 32px rgb(45 43 43 / 22%);
+
+  /* -- the one pattern ---------------------------------------------------
+     Not a colour: a 45-degree stripe that marks something two sources disagree
+     about. It is used for CONTRADICTED, for a prevented duplicate, and for a
+     topology node under dispute - never for anything merely bad. */
+  --sf-pattern-conflict: repeating-linear-gradient(
+    45deg,
+    rgb(var(--sf-conflict-bg)) 0 4px,
+    rgb(255 255 255) 4px 8px
+  );
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --sf-surface: 38 38 36;
-    --sf-surface-raised: 48 48 46;
-    --sf-ink: 245 244 238;
-    --sf-ink-muted: 168 167 158;
-    --sf-line: 68 68 64;
+/* The keyframe the whole design animates with, and the only one.
+ * A pulsing dot means data is moving; a pulsing pill means somebody owes an
+ * answer. Nothing else in this product is allowed to move. */
+@keyframes sf-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
 
-    --sf-accent: 217 133 106;
-    --sf-accent-strong: 230 155 128;
-
-    --sf-ok: 108 169 122;
-    --sf-warn: 209 162 73;
-    --sf-danger: 205 98 89;
+@media (prefers-reduced-motion: reduce) {
+  /* A live badge that blinks is information; for a reader who has asked for
+     stillness it is just a blink, so it holds at full opacity and the word
+     beside it carries the meaning. */
+  * {
+    animation: none !important;
   }
 }

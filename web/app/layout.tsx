@@ -1,7 +1,26 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import localFont from "next/font/local";
+
+import { AppShell } from "@/features/shell/components/AppShell";
 
 import "./globals.css";
+
+/**
+ * Archivo, self-hosted.
+ *
+ * The design system loads it from Google Fonts; this build must not, because the
+ * machine this is demonstrated on may have no outbound network at build time and
+ * a failed font fetch fails `next build` outright. One variable file carries the
+ * whole 100-900 axis, which is what Google serves for all three weights anyway.
+ */
+const archivo = localFont({
+  src: "../public/fonts/archivo-variable-latin.woff2",
+  weight: "100 900",
+  style: "normal",
+  display: "swap",
+  variable: "--font-archivo",
+  fallback: ["system-ui", "-apple-system", "Segoe UI", "sans-serif"],
+});
 
 export const metadata: Metadata = {
   title: "SignalForge",
@@ -10,36 +29,9 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className={archivo.variable}>
       <body>
-        <header className="border-b border-line bg-surface-raised">
-          <div className="mx-auto flex h-14 max-w-5xl items-center gap-8 px-6">
-            <Link href="/" className="font-semibold tracking-tight">
-              Signal<span className="text-accent">Forge</span>
-            </Link>
-            <nav className="flex gap-4 text-sm text-ink-muted">
-              <Link href="/health" className="hover:text-ink">
-                Health
-              </Link>
-              <Link href="/apps" className="hover:text-ink">
-                Applications
-              </Link>
-              <Link href="/integration-health" className="hover:text-ink">
-                Integrations
-              </Link>
-              <Link href="/setup" className="hover:text-ink">
-                Setup
-              </Link>
-              <Link href="/settings" className="hover:text-ink">
-                Settings
-              </Link>
-              <Link href="/login" className="hover:text-ink">
-                Sign in
-              </Link>
-            </nav>
-          </div>
-        </header>
-        <main className="mx-auto max-w-6xl px-6 py-10">{children}</main>
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );

@@ -5,5 +5,54 @@
 @tailwind utilities;
 
 body {
-  @apply bg-surface text-ink font-sans antialiased;
+  @apply bg-surface font-sans text-body text-ink antialiased;
+}
+
+/* The type ramp from the design system's own stylesheet. Headings are the
+   display face at weight 800 with tight leading and slightly negative tracking;
+   h6 is not a heading at all in this design but the uppercase eyebrow, which is
+   why it is the one that gains letter-spacing instead of losing it. */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  @apply font-display font-extrabold tracking-display;
+  line-height: var(--sf-leading-display);
+}
+
+h1 {
+  @apply text-h1;
+}
+h2 {
+  @apply text-h2;
+}
+h3 {
+  @apply text-h3;
+}
+h4 {
+  @apply text-h4;
+}
+h5 {
+  @apply text-h5;
+}
+h6 {
+  @apply text-h6 uppercase tracking-label;
+}
+
+/* Focus is visible or it does not exist. The design sets `outline: none` on
+   :focus and puts the ring on :focus-visible, so this pair has to stay together
+   - dropping the second line silently removes keyboard navigation from the
+   whole product. */
+:focus {
+  outline: none;
+}
+:focus-visible {
+  outline: 2px solid rgb(var(--sf-accent));
+  outline-offset: 2px;
+}
+
+::selection {
+  background: rgb(var(--sf-accent) / 0.3);
 }
