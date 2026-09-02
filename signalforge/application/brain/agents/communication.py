@@ -42,6 +42,7 @@ from signalforge.domain.llm.entities import (
     ModelClass,
 )
 from signalforge.domain.llm.ports import LlmProvider
+from signalforge.domain.warroom.brief import TEMPLATE_PROVENANCE
 from signalforge.domain.warroom.entities import BriefSource, JoinBrief
 
 logger = logging.getLogger("signalforge.brain")
@@ -65,17 +66,28 @@ BRIEF_SCHEMA: dict[str, Any] = {
     "additionalProperties": False,
     "required": ["headline", *SECTIONS],
     "properties": {
-        "headline": {"type": "string", "maxLength": 300},
+        "headline": {"type": "string"},
         **{
-            section: {
-                "type": "array",
-                "maxItems": MAX_LINES,
-                "items": {"type": "string", "maxLength": MAX_LINE_CHARS},
-            }
+            section: {"type": "array", "items": {"type": "string"}}
             for section in SECTIONS
         },
     },
 }
+"""The *shape* of a brief, and only the shape.
+
+`MAX_LINES` and `MAX_LINE_CHARS` are deliberately not in here. They are
+presentational bounds, and the provider treats a schema failure as no answer at
+all - correctly, because a half-parsed object arriving with the model's
+authority is worse than the deterministic fallback. But a nine-line section is
+not a half-parsed object: it is a good brief that is one line too long, and
+throwing it away puts a DEGRADED badge on a screen that had nothing wrong with
+it. Structured-output modes do not enforce `maxItems` or `maxLength` either, so
+in practice this failed most of the time rather than rarely.
+
+The bounds are stated to the model in the prompt, where it can act on them, and
+enforced in `_validate`, which clamps rather than rejects. Shape is a
+correctness question and belongs to the schema; length is a layout question and
+belongs to the reader."""
 
 
 class JoinBriefWriter:
@@ -152,7 +164,11 @@ def _prompt(
         "are shown beside your text.\n"
         "- Keep every caveat. If the evidence is thin, the brief says so.\n"
         "- Say what is confirmed and what is only predicted, in those words.\n"
-        "- Short lines. No preamble, no sign-off.\n"
+        "- No preamble, no sign-off.\n"
+        "- Do not say who or what wrote this brief. The platform states that "
+        "itself, beneath your text, and it is the one thing you cannot know.\n"
+        f"- At most {MAX_LINES} lines per section, each under "
+        f"{MAX_LINE_CHARS} characters. It is read on a phone.\n"
         f"{audience}\n"
         "THE DETERMINISTIC BRIEF (ground truth, assembled from stored facts):\n"
         f"{template.as_text()}\n\n"
@@ -228,8 +244,12 @@ def _validate(data: Mapping[str, Any], template: JoinBrief) -> Optional[JoinBrie
 
     caveats = list(sections["caveats"])
     for caveat in template.caveats:
-        if caveat not in caveats:
+        # Every evidence caveat is kept whether the model wanted it or not. The
+        # template's provenance line is the one exception: it says a template
+        # wrote this, and a template did not.
+        if caveat != TEMPLATE_PROVENANCE and caveat not in caveats:
             caveats.append(caveat)
+    caveats = [line for line in caveats if line != TEMPLATE_PROVENANCE]
     caveats.append("Written by a model from the incident's stored facts.")
     sections["caveats"] = tuple(caveats[: MAX_LINES + 4])
 

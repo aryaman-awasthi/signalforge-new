@@ -28,7 +28,12 @@ PY="$ROOT/.venv/Scripts/python.exe"
 
 API="${SIGNALFORGE_API:-http://127.0.0.1:8000}"
 APP="${SIGNALFORGE_APP_BASE_URL:-http://127.0.0.1:8080}"
-DRILL="${1:-$ROOT/drills/s4-acceptance.yaml}"
+# demo-setup is the demonstration world: every connector an incident touches,
+# all six golden signals, four journeys, a topology and one person per role, so
+# no panel of the cockpit reads empty. s4-acceptance is still here and is still
+# the acceptance scenario - the smallest world in which the corroboration rule
+# can be proved - and is played by passing it as the argument.
+DRILL="${1:-$ROOT/drills/demo-setup.yaml}"
 
 if [ ! -f "$DRILL" ]; then
   echo "[demo] no such drill: $DRILL" >&2

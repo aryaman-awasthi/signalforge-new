@@ -49,6 +49,7 @@ from signalforge.domain.llm.entities import (
     Message,
     ModelClass,
 )
+from signalforge.domain.warroom.brief import TEMPLATE_PROVENANCE
 from signalforge.domain.warroom.entities import BriefSource, JoinBrief
 from signalforge.tests.ai_eval.conftest import (
     HOSTILE_LINES,
@@ -520,7 +521,12 @@ async def test_17_a_model_written_join_brief_cannot_drop_the_caveats(incident_gr
 
     assert written.source is BriefSource.MODEL
     for caveat in template.caveats:
+        if caveat == TEMPLATE_PROVENANCE:
+            continue
         assert caveat in written.caveats, "a template caveat must survive the rewrite"
+    # Provenance is the one line that must *not* survive: it says a template
+    # wrote this, and a template did not.
+    assert TEMPLATE_PROVENANCE not in written.caveats
     assert any("Written by a model" in caveat for caveat in written.caveats)
 
     # And a section the template filled cannot be emptied.

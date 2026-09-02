@@ -191,6 +191,15 @@ class DetectionService:
 
         async with self._detection_uow_factory() as detection:
             previous_snapshot = await detection.snapshots.get(tenant_id, app_id)
+            # The stored states are the last verdict, not a union of every
+            # verdict there has ever been. `put_many` only upserts, so a
+            # (signal, region) the detector has stopped producing - a region that
+            # was renamed, a signal that was remapped, the unlabelled bootstrap
+            # row a signal carries until it is first scraped - used to stay in
+            # the table for ever and go on being read by the screens as an
+            # UNKNOWN region with no data. Replacing the set is exact: the
+            # previous states were already read, above, before this transaction.
+            await detection.states.delete_for(tenant_id, app_id)
             await detection.states.put_many(states)
             await detection.snapshots.put(_snapshot_of(verdict))
             await detection.commit()

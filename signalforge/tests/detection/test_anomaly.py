@@ -235,3 +235,58 @@ async def test_reading_the_detection_view_never_advances_a_streak(api, observe):
     )
     assert breach["status"] == "breaching"
     assert breach["streak"] == 1, "five reads, one evaluation"
+
+
+@pytest.mark.req("REQ-039")
+async def test_a_signal_that_has_regions_stops_reporting_an_unlabelled_one(
+    api, observe
+):
+    """The bootstrap "no region" row does not outlive the bootstrap.
+
+    Between the moment a signal is mapped and the moment it is first scraped,
+    the detector has a mapped signal and no observation of it, and it says so:
+    one unlabelled row reading UNKNOWN. That is right, and it is also every
+    freshly onboarded application for the first few seconds.
+
+    What was wrong is that the row was then carried forward for ever, because
+    each evaluation unions the previous evaluation's states. A region that
+    reports nothing outranks a region reporting well - correctly, since a
+    silent region is the more important fact - so a perfectly healthy signal
+    went on rendering as "no data" on the golden tile long after both of its
+    real regions had been measured.
+    """
+    token, tenant_id = owner(api)
+    onboard(api, token)
+
+    # The bootstrap window: mapped, never scraped. One unlabelled row, UNKNOWN.
+    _report, verdict = await tick(api, tenant_id, evaluate=True)
+    bootstrap = [
+        state
+        for state in verdict.states
+        if state.signal_key == "payments-success" and state.region == ""
+    ]
+    assert bootstrap, "a mapped signal with no data should report one unknown row"
+
+    await steady(api, observe, tenant_id, WARMUP_TICKS, evaluate=True)
+    _report, verdict = await tick(api, tenant_id, evaluate=True)
+
+    regions = {
+        state.region for state in verdict.states if state.signal_key == "payments-success"
+    }
+    assert regions == {REGION_A, REGION_B}, (
+        "once a signal is measured per region it must not also carry the "
+        f"unlabelled bootstrap row; got {sorted(regions)}"
+    )
+
+    # And it is gone from what the screens actually read, not only from this
+    # verdict: the stored states are the last verdict, not a union of all of them.
+    read = detection(api, token)
+    stored = {
+        signal["region"]
+        for signal in read["signals"]
+        if signal["signal_key"] == "payments-success"
+    }
+    assert stored == {REGION_A, REGION_B}, sorted(stored)
+    assert [
+        region for region in read["health"]["regions"] if region["region"] == ""
+    ] == [], "the health breakdown still carries a region with no name"

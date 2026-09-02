@@ -111,7 +111,7 @@ async def test_a_brief_on_uncorroborated_evidence_calls_the_cause_a_hypothesis(a
     caveats = " ".join(written["caveats"])
     assert "not corroborated" in caveats
     assert "hypothesis" in caveats
-    assert "No topology is mapped" in caveats
+    assert "names no individual services" in caveats
 
 
 @pytest.mark.req("REQ-045")

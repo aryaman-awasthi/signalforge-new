@@ -252,6 +252,15 @@ def _needed(
     return tuple(lines)
 
 
+TEMPLATE_PROVENANCE = "Written from stored facts by a template, not by a model."
+"""The last caveat of every deterministic brief: who wrote this.
+
+It is provenance rather than a caveat about the evidence, and the difference
+matters where the two are treated differently - a model rewrite must keep every
+evidence caveat, and must not keep this one, because it would then be a sentence
+saying no model wrote a brief a model wrote."""
+
+
 def _caveats(incident: Incident, radius: BlastRadius) -> tuple[str, ...]:
     lines: list[str] = []
     proposal = incident.proposal
@@ -274,10 +283,11 @@ def _caveats(incident: Incident, radius: BlastRadius) -> tuple[str, ...]:
         )
     if not radius.services:
         lines.append(
-            "No topology is mapped for this application, so nothing here says what "
-            "is downstream of the fault."
+            "The blast radius names no individual services, so nothing here says "
+            "what is downstream of the fault. Check Affected Services for the map "
+            "itself."
         )
-    lines.append("Written from stored facts by a template, not by a model.")
+    lines.append(TEMPLATE_PROVENANCE)
     return tuple(lines)
 
 

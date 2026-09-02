@@ -297,6 +297,9 @@ def _keys(
     The union of what has data, what the detector already believed, and - for a
     signal with neither - one unlabelled key, so a mapped signal that has never
     reported still appears and still reads UNKNOWN rather than being absent.
+
+    The unlabelled key is a bootstrap state, not a permanent one: a signal that
+    has acquired real regions loses it.
     """
     mapped = {signal.key: signal for signal in profile.signals}
     pairs: set[tuple[str, str]] = {
@@ -309,6 +312,17 @@ def _keys(
         for state in previous
         if state.signal_key in mapped
     }
+    # The unlabelled row is what a signal looks like between being mapped and
+    # being scraped for the first time, and it is carried forward like any other
+    # state. Once the same signal has real regions it must go: a region that
+    # reports nothing outranks a region reporting well - rightly, because a
+    # silent region is the more important fact - so keeping the bootstrap row
+    # made every freshly onboarded application read "no data" on a healthy
+    # golden tile for the rest of its life. This drops only the unlabelled row
+    # of a signal that now has labelled ones; a signal genuinely reporting
+    # without a region keeps it, and so does one that has never reported.
+    labelled = {key for key, region in pairs if region != NO_REGION}
+    pairs -= {(key, NO_REGION) for key in labelled}
     covered = {key for key, _ in pairs}
     pairs |= {(key, NO_REGION) for key in mapped if key not in covered}
     return [(mapped[key], region) for key, region in sorted(pairs)]

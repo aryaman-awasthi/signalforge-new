@@ -442,6 +442,13 @@ class GatewayLlmProvider(LlmProvider):
             extra={
                 "purpose": notice.purpose,
                 "reason": notice.reason.value,
+                # The reason alone says a call failed; the detail says which
+                # field of which schema, or which status the gateway returned,
+                # which is the difference between an operator fixing it and an
+                # operator guessing. It is required to carry neither the
+                # credential nor prompt content - see DegradedNotice.
+                "detail": notice.detail,
+                "model": notice.model,
                 "model_class": notice.model_class.value,
                 "endpoint": describe_endpoint(self._settings.base_url),
             },

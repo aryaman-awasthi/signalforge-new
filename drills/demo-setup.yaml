@@ -1,0 +1,547 @@
+# Sprint 8 demo setup: a cockpit with nothing empty in it.
+#
+# WHY THIS FILE EXISTS
+#
+# `s4-acceptance.yaml` is an *acceptance* scenario. It maps one signal, one
+# journey, no topology, no bridge and no ITSM, because that is the smallest
+# world in which the corroboration rule can be proved. Played as a demo it makes
+# a complete product look unfinished: five of the six golden tiles read "not
+# mapped", the Affected Services panel has no map to draw, the bridge has no
+# channel and the Incident Overview has no ticket. None of that is the product;
+# all of it is the data.
+#
+# This file is the demo world. Every panel a judge will look at reads from an
+# API, and this drill is the smallest setup that makes each of those reads
+# return something true. It adds no product code and no shortcut: everything
+# below goes through the same public contracts an operator drives in the wizard,
+# and the drill still stops one step before a person presses Declare.
+#
+# WHAT "SMALLEST" MEANT HERE
+#
+# The list was built backwards from the screens. For each panel on S5 and S9:
+# which route does it call, and what does that route need before it answers with
+# something rather than nothing?
+#
+#   S5  six golden tiles ....... GET /apps/{id}/detection - one mapped signal per
+#                                family, each on a series the application really
+#                                publishes
+#       worst region ........... a region label that exists on those series
+#       journeys ............... journeys + a probe per journey per region
+#       recent changes ......... a signed ChangeEvent on /api/v1/ingest/changes
+#       change-window chip ..... the same event, projected off the bus
+#       health score ........... rollups, which need traffic to roll up
+#   S9  Incident Overview ...... an ITSM binding (ticket) + the change window
+#       Live Bridge Transcript . a collaboration binding (teams-sim)
+#       Team Chat .............. a notifications binding (teams-sim-dm)
+#       Affected Services ...... a topology version to draw, and a second one to
+#                                diff against
+#       Paging ................. a person holding each role the radius names
+#       Next Best Action ....... actions imported from the application's manifest
+#       AI Incident Brain ...... evidence, which is the signals above
+#       Recovery Validation .... SLOs to validate against
+#
+# Everything in the list below is on that path. Nothing is here because it
+# looked good.
+#
+# Read by `bash scripts/demo.sh` (its default) and by scripts/drill_run.py.
+# Deleting it leaves a working product (CLAUDE.md rule 7).
+
+drill_id: demo-setup
+name: A demonstration world with no empty panels
+sprint: 8
+scope: drill:demo-setup
+
+application:
+  app_id: payments
+  tier: tier_1
+  # Filled in at run time. A drill never hardcodes where an application lives.
+  base_url: null
+
+# `targets_the_application` says whether this connector talks to the watched
+# application over HTTP and therefore needs its base URL. The people-facing
+# channels do not: they deliver to humans, and pointing them at the application
+# would be a category error the manifest refuses outright.
+#
+# `config` is merged over the base URL, so an adapter with its own settings can
+# carry them here without the runner knowing what they mean.
+connectors:
+  # --- the six observe adapters, over the frozen contract -------------------
+  - adapter_id: http-observe-metrics
+    credential_scope: read_only
+    credential: ps-ro-4f1c8a2b6d9e
+    targets_the_application: true
+  - adapter_id: http-observe-logs
+    credential_scope: read_only
+    credential: ps-ro-4f1c8a2b6d9e
+    targets_the_application: true
+  - adapter_id: http-observe-traces
+    credential_scope: read_only
+    credential: ps-ro-4f1c8a2b6d9e
+    targets_the_application: true
+  - adapter_id: http-observe-health
+    credential_scope: read_only
+    credential: ps-ro-4f1c8a2b6d9e
+    targets_the_application: true
+  # Remediation, which is what makes an action executable at all. The policy
+  # floor still refuses to auto-execute a high-risk class; a bound connector is
+  # permission to act after a person approves, not permission to act.
+  - adapter_id: http-observe-actions
+    credential_scope: remediation
+    credential: ps-rem-7a3d5e0c1b84
+    targets_the_application: true
+  # Exactly one scope is offered for chaos, and it is `drill`. Binding this
+  # read_only or remediation is refused by the contract.
+  - adapter_id: http-observe-chaos
+    credential_scope: drill
+    credential: ps-drill-2c9f6b1a7e35
+    targets_the_application: true
+
+  # --- the map -------------------------------------------------------------
+  - adapter_id: topo-import
+    credential_scope: read_only
+    credential: ps-ro-4f1c8a2b6d9e
+    targets_the_application: true
+
+  # --- what changed --------------------------------------------------------
+  # Push, so it carries no outbound credential: the pipeline authenticates to
+  # us. `ingest_stream` says which stream this adapter normalises; the runner
+  # issues that stream's key first and binds the connector with the secret the
+  # platform generated, so the secret is never written in this file and the
+  # pipeline and the normaliser are demonstrably holding the same one.
+  - adapter_id: deploy-webhook
+    credential_scope: read_only
+    credential: null
+    targets_the_application: false
+    ingest_stream: changes
+    config:
+      default_service: payments
+
+  # --- what a monitoring system is shouting about --------------------------
+  # Alerts are how a service gets named. The golden signals are measured on the
+  # application as a whole, so nothing in them says "the core switch"; an alert
+  # carries a node label, and that is what turns a measured fault into a
+  # confirmed point on the map with dependents hanging off it.
+  - adapter_id: grafana-alert-webhook
+    credential_scope: read_only
+    credential: null
+    targets_the_application: false
+    ingest_stream: alerts
+    config:
+      default_service: payments
+
+  # --- where people talk ---------------------------------------------------
+  # The bridge plays a written conversation into the channel, materialised as
+  # rows at future sent_at, so it unfolds at whatever speed the clock is running.
+  # Every line is badged SIMULATED on screen, because it is: nobody said these
+  # words. They are here so the transcript, the commitment extractor and the
+  # contradiction detector all have something real to work on, and they name only
+  # what this drill actually did - the pool shrink in region-a, the loss on the
+  # shared link, the deployment that is still in flight.
+  - adapter_id: teams-sim
+    credential_scope: remediation
+    credential: null
+    targets_the_application: false
+    config:
+      default_channel: incident-bridge
+      post_as: SignalForge
+      script:
+        - after_s: 0
+          author_id: sme-db@demo.test
+          author_display: Sam Database SME
+          text: >-
+            Pool in region-a is pinned at its ceiling. That is a symptom of
+            queueing, not the cause of it.
+        - after_s: 25
+          author_id: sme-net@demo.test
+          author_display: Nils Network SME
+          text: >-
+            Both regions are failing, and their gateways are independent. The
+            only thing they share is the core switch.
+        - after_s: 55
+          author_id: lead@demo.test
+          author_display: Lena Tech Lead
+          text: >-
+            v14 went out shortly before onset and has not reported completion.
+            Worth ruling in or out before we touch anything.
+        - after_s: 85
+          author_id: ic@demo.test
+          author_display: Ira Commander
+          text: >-
+            Treat the two regions as one fault until the topology says
+            otherwise. Read-only diagnostics first, nothing that mutates.
+        - after_s: 120
+          author_id: sme-net@demo.test
+          author_display: Nils Network SME
+          text: >-
+            I will confirm the core switch loss ratio in the next 10 minutes.
+        - after_s: 160
+          author_id: comms@demo.test
+          author_display: Cora Comms
+          text: >-
+            Holding statement drafted, not sent. It goes nowhere until somebody
+            approves it.
+  - adapter_id: teams-sim-dm
+    credential_scope: remediation
+    credential: null
+    targets_the_application: false
+    config:
+      post_as: SignalForge
+
+  # --- the system of record ------------------------------------------------
+  - adapter_id: itsm-lite
+    credential_scope: remediation
+    credential: null
+    targets_the_application: false
+    config:
+      reference_prefix: INC
+
+  # --- how people are reached ---------------------------------------------
+  - adapter_id: page-sim
+    credential_scope: remediation
+    credential: null
+    targets_the_application: false
+  - adapter_id: notify-in-app
+    credential_scope: remediation
+    credential: null
+    targets_the_application: false
+
+  # --- what we have learned before ----------------------------------------
+  - adapter_id: kb-index
+    credential_scope: read_only
+    credential: null
+    targets_the_application: false
+    config:
+      use_embeddings: true
+      semantic_weight: 0.5
+
+# All six golden signal families, each on a *different* series the application
+# really publishes. Verified against a live GET /observe/metrics before this
+# file was written; a family mapped onto a series that does not exist is worse
+# than a family left unmapped, because the tile reads zero rather than honest.
+mapping:
+  region_label: region
+  regions: [region-a, region-b]
+  signals:
+    - key: payments-availability
+      signal: availability
+      selector: payment_success_ratio
+      direction: lower_is_worse
+      unit: ratio
+      description: Share of the last 200 payments that succeeded or are legitimately pending.
+    - key: payments-latency
+      signal: latency
+      selector: payment_latency_p95_ms
+      direction: higher_is_worse
+      unit: ms
+      description: Nearest-rank p95 over the last 200 payment latencies.
+    - key: payments-traffic
+      signal: traffic
+      selector: payment_requests_total
+      direction: lower_is_worse
+      unit: requests
+      description: Customer payment requests. A collapse in traffic is an outage nobody reported.
+    # Errors is the same counter asked a different question, and that is not an
+    # accident: the application publishes one request counter carrying an outcome
+    # label, which is how a request counter should be published. Traffic asks how
+    # many; errors asks how many of those did not work.
+    #
+    # `fabric_link_loss_ratio` was the obvious candidate and is deliberately not
+    # used. It is labelled by *link*, and this application's region label is
+    # `region`, so every one of its series lands in a region with no name: the
+    # detector honestly reports a region called "" scoring 0, that empty region
+    # becomes the worst region, and the whole health score follows it to zero. A
+    # golden signal has to be measurable in the dimension the rest of the
+    # application is measured in. The fabric gauges are still read - the metrics
+    # connector pulls them, and the brain cites them as evidence - they are just
+    # not one of the six.
+    #
+    # `status="failed"` and not `status=~"failed|unknown|throttled"`. The wider
+    # selector reads better and measures worse: a signal's value is the mean over
+    # the series it matches, so pulling in two outcomes that stay flat at zero
+    # divides the real error rate by three and lifts the baseline's spread until
+    # nothing can breach it. Selector width is a measurement decision, not a
+    # completeness one. Payments the rail never confirms are not lost either -
+    # they are the business signal below, which is where money in an unknown
+    # state belongs.
+    - key: payments-errors
+      signal: errors
+      selector: payment_requests_total{status="failed"}
+      direction: higher_is_worse
+      unit: requests
+      description: Payment requests the application recorded as failed, by region and journey.
+    - key: ledger-pool
+      signal: saturation
+      selector: db_pool_in_use
+      direction: higher_is_worse
+      unit: connections
+      description: Payments currently holding a ledger connection.
+    - key: payments-unknown
+      signal: business
+      selector: payments_unknown
+      direction: higher_is_worse
+      unit: payments
+      business_counter: true
+      description: Payments whose outcome the rail never confirmed. This is money in an unknown state.
+  journeys:
+    - journey_id: upi
+      name: UPI payment
+      tier: 1
+    - journey_id: card
+      name: Card payment
+      tier: 1
+    - journey_id: wallet
+      name: Wallet top-up
+      tier: 2
+    - journey_id: refund
+      name: Refund
+      tier: 2
+  # One probe per journey per region. Declared explicitly rather than with
+  # per_region, because the region is a query parameter of the application's
+  # public path rather than something a probe template can substitute.
+  probes:
+    - probe_id: upi-region-a
+      path: /api/payments/probe/upi?region=region-a
+      journey_id: upi
+      expected_status: 200
+      per_region: false
+    - probe_id: upi-region-b
+      path: /api/payments/probe/upi?region=region-b
+      journey_id: upi
+      expected_status: 200
+      per_region: false
+    - probe_id: card-region-a
+      path: /api/payments/probe/card?region=region-a
+      journey_id: card
+      expected_status: 200
+      per_region: false
+    - probe_id: card-region-b
+      path: /api/payments/probe/card?region=region-b
+      journey_id: card
+      expected_status: 200
+      per_region: false
+    - probe_id: wallet-region-a
+      path: /api/payments/probe/wallet?region=region-a
+      journey_id: wallet
+      expected_status: 200
+      per_region: false
+    - probe_id: wallet-region-b
+      path: /api/payments/probe/wallet?region=region-b
+      journey_id: wallet
+      expected_status: 200
+      per_region: false
+    - probe_id: refund-region-a
+      path: /api/payments/probe/refund?region=region-a
+      journey_id: refund
+      expected_status: 200
+      per_region: false
+    - probe_id: refund-region-b
+      path: /api/payments/probe/refund?region=region-b
+      journey_id: refund
+      expected_status: 200
+      per_region: false
+
+# The application publishes seven actions in its own manifest. They are imported
+# rather than declared here: what a platform may do to an application is the
+# application's statement, not the platform's assumption.
+#
+# `rollback-config` already arrives high-risk from the manifest, so the override
+# below changes nothing and is here to be *asserted* - a demo whose safety story
+# rests on an operator remembering to raise a risk level is not a safety story.
+# An override may raise and can never lower; the floor refuses the other
+# direction whoever asks.
+actions:
+  import: true
+  expect_high_risk: [rollback-config, failover-route, restore-route, throttle-traffic, restart-gateway]
+  overrides:
+    - action_id: rollback-config
+      risk_override: high
+
+# Pulled from the application's own /observe/topology through the bound
+# topo-import adapter, which is the translator, so an upload and a scheduled
+# pull produce the same snapshot from the same content.
+#
+# Captured twice, and the second capture is *expected to be identical*. The
+# application derives its edges from its live routing table, so its map changes
+# when a route changes - and no fault changes a route. What changes a route is
+# the `failover-route` action, which is high risk, cannot auto-execute, and is
+# therefore something a person does during the incident rather than something a
+# drill can arrange beforehand. So the second version arrives when somebody
+# fails a region over, which is where a blast-radius delta belongs.
+#
+# The re-read is kept because it demonstrates content-versioning rather than a
+# delta: an identical map re-imported is one version, one event and no profile
+# change. Uploading a hand-edited document here would produce a prettier screen
+# and a false one.
+topology:
+  path: /observe/topology
+  credential: ps-ro-4f1c8a2b6d9e
+  recapture_after_fault: true
+
+slos:
+  - slo_id: payments-availability
+    name: Payments availability
+    objective_pct: 99.0
+    window_days: 30
+    journey_id: upi
+    indicator: payments-availability
+  - slo_id: payments-latency
+    name: Payments p95 latency
+    objective_pct: 99.0
+    window_days: 30
+    journey_id: upi
+    indicator: payments-latency
+
+# One person per role, because "who is in the room" and the paging board are
+# both answers to "which roles does this blast radius name", and a role nobody
+# holds is a gap the war room reports rather than a person it pages. The org
+# owner is the signup and is not listed here.
+people:
+  - email: ic@demo.test
+    name: Ira Commander
+    roles: [incident_commander]
+  - email: lead@demo.test
+    name: Lena Tech Lead
+    roles: [tech_lead]
+  - email: sme-db@demo.test
+    name: Sam Database SME
+    roles: [sme]
+  - email: sme-net@demo.test
+    name: Nils Network SME
+    roles: [sme]
+  - email: comms@demo.test
+    name: Cora Comms
+    roles: [comms_lead]
+  - email: exec@demo.test
+    name: Evan Executive
+    roles: [executive]
+  - email: auditor@demo.test
+    name: Ada Auditor
+    roles: [auditor]
+
+# The rotation is the primary on-call; the escalation policy is what happens
+# when nobody answers it. Both are set in the same terms /setup uses.
+oncall:
+  rotation:
+    name: payments primary
+    members: [sme-db@demo.test, sme-net@demo.test]
+    handoff_interval_hours: 168
+  escalation:
+    name: payments unanswered page
+    steps:
+      - target: rotation
+        timeout_s: 120
+      - target: lead@demo.test
+        timeout_s: 180
+      - target: ic@demo.test
+        timeout_s: 300
+
+# Traffic across every journey and both regions, so the journey table has four
+# rows with real numbers rather than one. The harness's own generator keeps
+# running underneath; this is the load the drill is sure of.
+#
+# `flush_ticks` is spent before the platform is onboarded at all: the application
+# computes its success ratio and p95 over its own last N payments, so a run that
+# follows a previous run has to push that window clean before anything measures
+# it. Otherwise the baseline learns "broken is normal" and every later breach
+# reads healthy - which is a correct detector fed a poisoned baseline.
+traffic:
+  journeys: [upi, card, wallet, refund]
+  flush_ticks: 25
+  warmup_ticks: 12
+  payments_per_region_per_tick: 3
+  fault_ticks: 3
+  # Twelve at once per journey per region, which is what makes a pool of two a
+  # queue. The number is chosen against the application's declared pool size,
+  # not for volume.
+  fault_payments_per_region_per_tick: 12
+
+# Two faults, injected in order, because one is the cause an SME will argue
+# about and the other is the one that actually reaches the customer.
+#
+# Both revert on their own: every scenario the application publishes carries a
+# max_duration_s that the application enforces itself - ten minutes for the pool,
+# fifteen for the fabric - and it reverts an injection when that runs out. That
+# is the harness bounding its own blast radius, which is right, and it means a
+# walkthrough longer than ten minutes finds a healthy application. Re-arm with
+# `python scripts/drill_run.py drills/demo-setup.yaml --refault`; the incident
+# record is untouched by it.
+#
+#   db-pool-shrink on region-a  - saturation first, latency second, errors third,
+#                                 which is what a saturation incident really
+#                                 looks like and what makes hypothesis ranking a
+#                                 real question rather than a reveal.
+#   fabric-link-loss on CORE    - the one link both regions cross. Loss here is a
+#                                 genuinely two-region customer-facing event, so
+#                                 corroboration is earned by two independent
+#                                 families rather than asserted.
+chaos:
+  - scenario_id: db-pool-shrink
+    params:
+      region: region-a
+      pool_size: 2
+    heal_params:
+      region: region-a
+      pool_size: 16
+    idempotency_key: demo-setup-pool-shrink
+  - scenario_id: fabric-link-loss
+    params:
+      link: CORE
+      loss_ratio: 1.0
+    heal_params:
+      link: CORE
+      loss_ratio: 0.0
+    idempotency_key: demo-setup-core-loss
+
+# A deployment announced as started and never announced as completed - the chip
+# beside the health score, and the first question anybody asks in a war room.
+# Announced over the frozen ingest path with a real HMAC by the drill runner,
+# which is what a pipeline's deploy hook does.
+change_window:
+  change_id: deploy-v14
+  change_type: deployment
+  service: payments
+  version: v14
+  actor: pipeline
+  announce_completion: false
+
+# Fired after the injections, over the same frozen ingest path with a real HMAC,
+# because that is how a monitoring system tells this platform that something has
+# a name. Both are true of the application at that moment: the core switch really
+# is dropping everything crossing it, and region-a's ledger pool really has been
+# shrunk. `simulated: true` because no Grafana sent these - the drill did - and
+# every panel that renders them badges them accordingly.
+#
+# The node labels are what make the blast radius a map rather than a list: an
+# alert that names `core-switch` confirms that node, and everything that depends
+# on it becomes PREDICTED, without exception and without anything inferring a
+# confirmation it did not measure.
+alerts:
+  source_system: monitoring
+  simulated: true
+  items:
+    - alert_id: core-switch-loss
+      name: Core switch dropping payment traffic
+      severity: critical
+      labels:
+        node_id: core-switch
+        region: region-a
+      annotations:
+        summary: Loss ratio on the shared core link is at its ceiling.
+    - alert_id: ledger-pool-region-a
+      name: Ledger connection pool exhausted
+      severity: critical
+      after_s: 20
+      labels:
+        node_id: ledger-db
+        region: region-a
+      annotations:
+        summary: Payments are queueing for a ledger connection in region-a.
+
+# What the platform is expected to conclude. Asserted by the runner, not
+# described: a demo drill that cannot fail is a demo, not a drill.
+expected:
+  stance_after_sustained_breach: proposed
+  corroborated: true
+  severity: P0
+  requires_human: true
+  declared: false
