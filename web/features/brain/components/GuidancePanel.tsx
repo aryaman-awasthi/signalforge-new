@@ -35,7 +35,7 @@ export function GuidancePanel({ guidance }: { guidance: Guidance | null }) {
 
   return (
     <div className="space-y-2">
-      <p className="rounded border border-line px-2 py-1 text-[11px] text-ink-muted">
+      <p className="border border-line px-2 py-1 text-[11px] text-ink-muted">
         {guidance.caveat}
       </p>
 
@@ -128,7 +128,7 @@ function Section({
             <li key={node.id}>
               <span>{node.label}</span>
               {extra?.source && (
-                <span className="ml-1 rounded border border-line px-1 text-[10px] text-ink-muted">
+                <span className="ml-1 border border-line px-1 text-[10px] text-ink-muted">
                   {extra.source}
                 </span>
               )}

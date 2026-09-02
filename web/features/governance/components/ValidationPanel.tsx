@@ -148,7 +148,7 @@ export function ValidationPanel({
                       >
                         <span
                           aria-hidden
-                          className={`h-1.5 w-1.5 rounded-full ${
+                          className={`h-1.5 w-1.5 ${
                             check.verdict === "pass"
                               ? "bg-ok"
                               : check.verdict === "fail"
@@ -210,10 +210,10 @@ function Ring({
       <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-muted">
         Stability
       </span>
-      <span className="h-1.5 w-32 rounded-full bg-line">
+      <span className="h-1.5 w-32 bg-line">
         <span
           style={{ width: `${Math.round(fraction * 100)}%` }}
-          className={`block h-1.5 rounded-full ${stability.satisfied ? "bg-ok" : "bg-warn"}`}
+          className={`block h-1.5 ${stability.satisfied ? "bg-ok" : "bg-warn"}`}
         />
       </span>
       <span className="text-[11px] text-ink-muted">

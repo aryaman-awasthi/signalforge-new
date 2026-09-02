@@ -55,7 +55,7 @@ export function SimulatedConnectorCard({
         <span className="font-medium">{adapter.name}</span>
         <span className="font-mono text-xs text-ink-muted">{adapter.id}</span>
         <SimulatedBadge simulated />
-        <span className="rounded-full border border-line px-2 py-0.5 text-[11px] uppercase text-ink-muted">
+        <span className="border border-line px-2 py-0.5 text-[11px] uppercase text-ink-muted">
           built-in
         </span>
         {binding && <StatusPill status={binding.status} />}

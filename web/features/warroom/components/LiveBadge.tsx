@@ -27,16 +27,16 @@ export function LiveBadge({
       }
       className={
         connected
-          ? "inline-flex items-center gap-1.5 rounded-full border border-ok/40 bg-ok/10 px-2.5 py-1 text-xs text-ok"
-          : "inline-flex items-center gap-1.5 rounded-full border border-line px-2.5 py-1 text-xs text-ink-muted"
+          ? "inline-flex items-center gap-1.5 border border-ok/40 bg-ok/10 px-2.5 py-1 text-xs text-ok"
+          : "inline-flex items-center gap-1.5 border border-line px-2.5 py-1 text-xs text-ink-muted"
       }
     >
       <span
         aria-hidden
         className={
           connected
-            ? "h-1.5 w-1.5 rounded-full bg-ok"
-            : "h-1.5 w-1.5 rounded-full bg-ink-muted"
+            ? "h-1.5 w-1.5 bg-ok"
+            : "h-1.5 w-1.5 bg-ink-muted"
         }
       />
       {connected ? "Live" : `Polling every ${pollSeconds}s`}

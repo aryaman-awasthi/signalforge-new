@@ -135,7 +135,7 @@ export function ProposalSheet({
         </h2>
         {proposal ? (
           <>
-            <span className="rounded-full border border-accent/50 bg-surface-raised px-2 py-0.5 font-mono text-sm font-semibold">
+            <span className="border border-accent/50 bg-surface-raised px-2 py-0.5 font-mono text-sm font-semibold">
               {proposal.severity}
             </span>
             <span className="text-xs text-ink-muted">by rule {proposal.rule}</span>

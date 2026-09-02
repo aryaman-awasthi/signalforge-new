@@ -59,7 +59,7 @@ export function AppDetail({ appId }: { appId: string }) {
       <header className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-semibold">{appId}</h1>
         <span
-          className={`rounded-full border px-2.5 py-1 text-xs font-medium ${
+          className={`border px-2.5 py-1 text-xs font-medium ${
             STATE_TONE[lifecycle.state] ?? STATE_TONE.steady
           }`}
         >
@@ -113,7 +113,7 @@ export function AppDetail({ appId }: { appId: string }) {
               {incident.declared_by_display || incident.declared_by}
             </span>
             {incident.overrode_detection && (
-              <span className="rounded-full border border-line px-2 py-0.5 text-[11px] text-ink-muted">
+              <span className="border border-line px-2 py-0.5 text-[11px] text-ink-muted">
                 severity chosen, not proposed
               </span>
             )}
@@ -129,18 +129,21 @@ export function AppDetail({ appId }: { appId: string }) {
         onDeclared={reload}
       />
 
-      <GoldenTiles detection={detection} />
-
-      <div className="grid gap-5 lg:grid-cols-2">
+      {/* The prototype's S5 split: what this application is doing on the left,
+          and what the platform makes of it in a narrow rail on the right. The
+          rail is the summary a reader glances at; the main column is what they
+          read when the glance was worrying. */}
+      <div className="grid items-start gap-6 lg:grid-cols-[1fr_320px]">
+        <div className="flex min-w-0 flex-col gap-6">
+          <GoldenTiles detection={detection} />
+          <JourneyList detection={detection} />
+          <RecentChanges view={lifecycle.change_window} />
+        </div>
         <HealthPanel
           appId={appId}
           detection={detection}
           detectionError={detectionError}
         />
-        <div className="space-y-5">
-          <JourneyList detection={detection} />
-          <RecentChanges view={lifecycle.change_window} />
-        </div>
       </div>
     </div>
   );

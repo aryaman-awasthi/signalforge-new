@@ -131,7 +131,7 @@ export function AdapterRegistryPanel() {
                   </td>
                   <td className="px-3 py-2">
                     <span
-                      className={`rounded-full border px-2 py-0.5 text-[11px] uppercase ${statusTone(
+                      className={`border px-2 py-0.5 text-[11px] uppercase ${statusTone(
                         adapter,
                       )}`}
                     >
@@ -155,7 +155,7 @@ export function AdapterRegistryPanel() {
             <li key={kind.kind} className="flex flex-wrap items-center gap-3 px-3 py-2">
               <span className="w-32 shrink-0 font-medium">{kind.kind}</span>
               <span
-                className={`rounded-full border px-2 py-0.5 text-[11px] uppercase ${
+                className={`border px-2 py-0.5 text-[11px] uppercase ${
                   kind.complete
                     ? "border-ok/40 bg-ok/10 text-ok"
                     : "border-warn/40 bg-warn/10 text-warn"

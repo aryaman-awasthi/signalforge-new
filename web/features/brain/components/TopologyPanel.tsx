@@ -55,7 +55,7 @@ export function TopologyPanel({ incidentId }: { incidentId: string }) {
           id="topology-version"
           value={version ?? topology.version}
           onChange={(event) => setVersion(event.target.value)}
-          className="rounded border border-line bg-surface-raised px-1.5 py-0.5"
+          className="border border-line bg-surface-raised px-1.5 py-0.5"
         >
           {topology.versions.map((candidate) => (
             <option key={candidate} value={candidate}>
@@ -71,7 +71,7 @@ export function TopologyPanel({ incidentId }: { incidentId: string }) {
       <Legend topology={topology} />
 
       {topology.delta && !isEmptyDelta(topology.delta) && (
-        <p className="rounded border border-line px-2 py-1 text-[11px] text-ink-muted">
+        <p className="border border-line px-2 py-1 text-[11px] text-ink-muted">
           <span className="font-medium">Changed since {topology.delta.from_version}: </span>
           {topology.delta.summary}
           {topology.delta.added_nodes.length > 0 && (
@@ -120,7 +120,7 @@ function Legend({ topology }: { topology: BrainTopology }) {
       <li className="flex items-center gap-1.5">
         <span
           aria-hidden
-          className="h-2 w-2 rounded-full bg-danger"
+          className="h-2 w-2 bg-danger"
         />
         <span>
           <strong className="font-medium">CONFIRMED</strong> — measured (
@@ -130,7 +130,7 @@ function Legend({ topology }: { topology: BrainTopology }) {
       <li className="flex items-center gap-1.5">
         <span
           aria-hidden
-          className="h-2 w-2 rounded-full border border-dashed border-warn"
+          className="h-2 w-2 border border-dashed border-warn"
         />
         <span>
           <strong className="font-medium">PREDICTED</strong> — depends on a
@@ -138,7 +138,7 @@ function Legend({ topology }: { topology: BrainTopology }) {
         </span>
       </li>
       <li className="flex items-center gap-1.5">
-        <span aria-hidden className="h-2 w-2 rounded-full bg-line" />
+        <span aria-hidden className="h-2 w-2 bg-line" />
         <span>unaffected by the evidence held</span>
       </li>
     </ul>
@@ -159,7 +159,7 @@ function ImpactList({
   return (
     <section
       aria-label={title}
-      className={`rounded border px-2 py-1.5 ${
+      className={`border px-2 py-1.5 ${
         tone === "danger" ? "border-danger/40" : "border-warn/40"
       }`}
     >
@@ -257,7 +257,7 @@ function Graph({ topology }: { topology: BrainTopology }) {
   return (
     // The graph scrolls inside its own box; a war-room page that scrolled
     // sideways because of one wide estate would be unusable on every other one.
-    <div className="overflow-x-auto rounded border border-line bg-surface p-2">
+    <div className="overflow-x-auto border border-line bg-surface p-2">
       <svg
         width={layout.width}
         height={layout.height}

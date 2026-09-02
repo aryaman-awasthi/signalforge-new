@@ -1,0 +1,124 @@
+# A second application, onboarded into an organisation that already has one.
+#
+# WHY THIS FILE EXISTS
+#
+# The claim this whole product rests on is that it is app-agnostic: nothing in
+# the platform knows what the reference harness is, and a second application
+# with different signals, different journeys and a different risk posture
+# onboards through the same public contracts and fills the same screens from its
+# own data.
+#
+# That claim is easy to assert and easy to get wrong, so it is played rather
+# than stated. This drill registers `orders` against the same harness base URL
+# with a *deliberately different* mapping - four signals rather than six, two
+# journeys rather than four, one region rather than two, no chaos and no
+# topology - and every screen fills or honestly says what is missing.
+#
+# The differences are the point. If S4, S5 and the wizard only look right for an
+# application shaped like the first one, this is where that shows.
+#
+#   python scripts/drill_run.py drills/second-app.yaml \
+#       --org "<the org that already exists>" --email <its owner> --no-fault
+#
+# It injects nothing: a second application exists to prove onboarding, not to
+# break anything. Deleting this file leaves a working product (CLAUDE.md rule 7).
+
+drill_id: second-app
+name: A second, differently mapped application
+sprint: 8
+scope: drill:second-app
+
+application:
+  app_id: orders
+  tier: tier_2
+  base_url: null
+
+# Four connectors, not fifteen. An application that publishes metrics and health
+# and nothing else is a real case, and the screens have to be honest about it
+# rather than empty.
+connectors:
+  - adapter_id: http-observe-metrics
+    credential_scope: read_only
+    credential: ps-ro-4f1c8a2b6d9e
+    targets_the_application: true
+  - adapter_id: http-observe-health
+    credential_scope: read_only
+    credential: ps-ro-4f1c8a2b6d9e
+    targets_the_application: true
+  - adapter_id: notify-in-app
+    credential_scope: remediation
+    credential: null
+    targets_the_application: false
+  - adapter_id: itsm-lite
+    credential_scope: remediation
+    credential: null
+    targets_the_application: false
+    config:
+      reference_prefix: ORD
+
+# A different four families on different series, one region, two journeys. Two
+# families are deliberately left unmapped, because most applications have gaps
+# and a screen that cannot show a gap honestly is a screen that will lie later.
+mapping:
+  region_label: region
+  regions: [region-b]
+  signals:
+    - key: orders-settlement
+      signal: business
+      selector: settlements_completed_total
+      direction: lower_is_worse
+      unit: settlements
+      business_counter: true
+      description: Settlements completed. This is the counter the money is measured by.
+    - key: orders-backlog
+      signal: saturation
+      selector: settlement_backlog
+      direction: higher_is_worse
+      unit: settlements
+      description: Settlements created and not yet completed.
+    - key: orders-latency
+      signal: latency
+      selector: payment_latency_p95_ms{journey="refund"}
+      direction: higher_is_worse
+      unit: ms
+      description: Nearest-rank p95 on the refund path.
+    - key: orders-availability
+      signal: availability
+      selector: payment_success_ratio{journey="refund"}
+      direction: lower_is_worse
+      unit: ratio
+      description: Share of refunds that succeeded or are legitimately pending.
+  journeys:
+    - journey_id: refund
+      name: Refund
+      tier: 2
+    - journey_id: wallet
+      name: Wallet top-up
+      tier: 2
+  probes:
+    - probe_id: refund-region-b
+      path: /api/payments/probe/refund?region=region-b
+      journey_id: refund
+      expected_status: 200
+      per_region: false
+    - probe_id: wallet-region-b
+      path: /api/payments/probe/wallet?region=region-b
+      journey_id: wallet
+      expected_status: 200
+      per_region: false
+
+slos:
+  - slo_id: orders-settlement
+    name: Settlement completion
+    objective_pct: 99.5
+    window_days: 30
+    journey_id: refund
+    indicator: orders-settlement
+
+traffic:
+  journeys: [refund, wallet]
+  flush_ticks: 0
+  warmup_ticks: 6
+  payments_per_region_per_tick: 2
+  fault_ticks: 0
+  fault_payments_per_region_per_tick: 0

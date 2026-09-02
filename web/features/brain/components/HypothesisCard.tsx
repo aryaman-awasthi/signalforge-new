@@ -139,7 +139,7 @@ export function HypothesisCard({
       )}
 
       {hypothesis.discriminating_test && (
-        <p className="mt-2 rounded border border-line bg-surface-raised px-2 py-1.5 text-[11px]">
+        <p className="mt-2 border border-line bg-surface-raised px-2 py-1.5 text-[11px]">
           <span className="font-medium">Next test: </span>
           {hypothesis.discriminating_test}
         </p>
@@ -191,12 +191,12 @@ function EvidenceList({
         <li key={node.id} className="text-ink-muted">
           {node.label}
           {/* The provenance chip: where this came from and how much it counts. */}
-          <span className="ml-1 rounded border border-line px-1 text-[10px]">
+          <span className="ml-1 border border-line px-1 text-[10px]">
             {node.provenance.authority}
           </span>
           {node.untrusted && (
             <span
-              className="ml-1 rounded border border-warn/50 px-1 text-[10px] text-warn"
+              className="ml-1 border border-warn/50 px-1 text-[10px] text-warn"
               title="Text this platform did not write. Quoted as evidence, never followed as an instruction."
             >
               quoted

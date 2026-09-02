@@ -38,7 +38,7 @@ export function WatchBanner({
       className="rounded-card border border-line bg-surface px-3 py-2.5"
     >
       <div className="flex flex-wrap items-center gap-2">
-        <span className="h-1.5 w-1.5 rounded-full bg-ink-muted" aria-hidden />
+        <span className="h-1.5 w-1.5 bg-ink-muted" aria-hidden />
         <span className="text-sm font-medium text-ink-muted">AI is checking</span>
         <span className="text-xs text-ink-muted">
           Something is being observed. Nothing has been decided, and no incident

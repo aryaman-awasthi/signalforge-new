@@ -29,7 +29,7 @@ export function ChangeWindowChip({ view }: { view: ChangeWindowView | null }) {
   if (!view || !view.open) return null;
   return (
     <span
-      className="rounded-full border border-warn/50 bg-warn/10 px-2.5 py-1 text-xs font-medium text-warn"
+      className="border border-warn/50 bg-warn/10 px-2.5 py-1 text-xs font-medium text-warn"
       title="A deployment was announced as started and never announced as completed"
     >
       Change window open
@@ -49,7 +49,7 @@ function ChangeRow({ change }: { change: ChangeWindow }) {
           </span>
         )}
         {change.simulated && (
-          <span className="ml-2 rounded-full border border-line px-2 py-0.5 text-[10px] uppercase text-ink-muted">
+          <span className="ml-2 border border-line px-2 py-0.5 text-[10px] uppercase text-ink-muted">
             simulated
           </span>
         )}
@@ -58,19 +58,19 @@ function ChangeRow({ change }: { change: ChangeWindow }) {
       {change.open ? (
         change.stale ? (
           <span
-            className="rounded-full border border-line px-2 py-0.5 text-xs text-ink-muted"
+            className="border border-line px-2 py-0.5 text-xs text-ink-muted"
             title="Open past the platform's ceiling. Not closed on a guess - nobody knows whether the deploy landed."
           >
             started {age(change.age_s)}, never announced completion
           </span>
         ) : (
-          <span className="rounded-full border border-warn/50 bg-warn/10 px-2 py-0.5 text-xs text-warn">
+          <span className="border border-warn/50 bg-warn/10 px-2 py-0.5 text-xs text-warn">
             in flight · started {age(change.age_s)}
           </span>
         )
       ) : (
         <span
-          className={`rounded-full border px-2 py-0.5 text-xs ${
+          className={`border px-2 py-0.5 text-xs ${
             change.status === "rolled_back" || change.status === "failed"
               ? "border-danger/40 bg-danger/10 text-danger"
               : "border-ok/40 bg-ok/10 text-ok"

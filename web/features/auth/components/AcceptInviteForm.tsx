@@ -13,7 +13,7 @@ export function AcceptInviteForm({ token }: { token: string }) {
 
   return (
     <form
-      className="mx-auto max-w-sm space-y-4 rounded-card border border-line bg-surface-raised p-6"
+      className="mx-auto flex w-full max-w-sm flex-col gap-4 bg-surface-raised p-6"
       onSubmit={(event) => {
         event.preventDefault();
         void run(() => acceptInvite({ token, password, display_name: displayName }));

@@ -38,12 +38,12 @@ export function EventRow({
       </span>
       <span className="min-w-0 flex-1 truncate font-medium">{event.topic}</span>
       {event.plane === "incident" && (
-        <span className="shrink-0 rounded border border-line px-1.5 py-0.5 text-[10px] uppercase text-ink-muted">
+        <span className="shrink-0 border border-line px-1.5 py-0.5 text-[10px] uppercase text-ink-muted">
           kept
         </span>
       )}
       {event.source.simulated && (
-        <span className="shrink-0 rounded border border-warn/40 bg-warn/10 px-1.5 py-0.5 text-[10px] uppercase text-warn">
+        <span className="shrink-0 border border-warn/40 bg-warn/10 px-1.5 py-0.5 text-[10px] uppercase text-warn">
           simulated
         </span>
       )}

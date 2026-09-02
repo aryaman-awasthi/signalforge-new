@@ -296,7 +296,7 @@ const BUTTON: Record<string, string> = {
 };
 
 /**
- * Square, Archivo, 14px. The design has no rounded corners and no icon-only
+ * Square, Archivo, 14px. The design has no corners and no icon-only
  * primary action; a destructive-looking button that is not destructive is worse
  * than a plain one.
  */

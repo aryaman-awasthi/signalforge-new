@@ -135,7 +135,7 @@ export function IntegrationHealthScreen({ appId }: { appId?: string }) {
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-semibold">Integration health</h1>
         {failing > 0 && (
-          <span className="rounded-full border border-danger/40 bg-danger/10 px-2 py-0.5 text-xs text-danger">
+          <span className="border border-danger/40 bg-danger/10 px-2 py-0.5 text-xs text-danger">
             {failing} needing attention
           </span>
         )}

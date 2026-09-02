@@ -85,7 +85,7 @@ export function PushConnectorCard({
         <span className="font-mono text-xs text-ink-muted">
           {adapter ? adapter.id : path}
         </span>
-        <span className="rounded-full border border-line px-2 py-0.5 text-[11px] uppercase text-ink-muted">
+        <span className="border border-line px-2 py-0.5 text-[11px] uppercase text-ink-muted">
           {stream}
         </span>
         <span className="text-xs text-ink-muted">inbound (the app posts)</span>
@@ -187,7 +187,7 @@ export function PushConnectorCard({
                     {key.token_prefix}… (masked - the token was shown once)
                   </span>
                   {key.rotated_from && (
-                    <span className="rounded-full border border-warn/40 bg-warn/10 px-2 py-0.5 text-[10px] text-warn">
+                    <span className="border border-warn/40 bg-warn/10 px-2 py-0.5 text-[10px] text-warn">
                       successor
                     </span>
                   )}

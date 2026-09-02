@@ -88,14 +88,14 @@ export function IngestKeysPanel({ appId }: { appId?: string }) {
           <li key={key.id} className="space-y-2 px-3 py-3 text-sm">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-medium">{key.name}</span>
-              <span className="rounded-full border border-line px-2 py-0.5 text-[11px] uppercase text-ink-muted">
+              <span className="border border-line px-2 py-0.5 text-[11px] uppercase text-ink-muted">
                 {key.stream}
               </span>
               <span className="font-mono text-xs text-ink-muted">
                 {key.app_id} · {key.token_prefix}…
               </span>
               {key.rotated_from && (
-                <span className="rounded-full border border-warn/40 bg-warn/10 px-2 py-0.5 text-[11px] text-warn">
+                <span className="border border-warn/40 bg-warn/10 px-2 py-0.5 text-[11px] text-warn">
                   successor
                 </span>
               )}

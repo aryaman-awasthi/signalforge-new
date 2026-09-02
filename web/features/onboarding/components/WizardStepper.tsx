@@ -44,7 +44,7 @@ export function WizardStepper({
               }`}
             >
               <span
-                className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] ${
+                className={`flex h-5 w-5 items-center justify-center text-[11px] ${
                   complete
                     ? "bg-ok/20 text-ok"
                     : blocking.has(step.key)

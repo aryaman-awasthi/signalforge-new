@@ -63,45 +63,90 @@ export function AppsOverview() {
         />
       )}
 
-      <ul className="divide-y divide-line rounded-card border border-line bg-surface-raised">
+      {/* The prototype's card grid, with the dashed "add" card as a peer of the
+          applications rather than a button somewhere else - an estate with one
+          application in it should look like an estate with room for more. */}
+      <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {state.apps.map((app) => (
-          <li key={app.app_id} className="flex flex-wrap items-center gap-4 px-3 py-3">
-            <div className="min-w-56 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="font-medium">{app.name}</span>
-                <span className="font-mono text-xs text-ink-muted">{app.app_id}</span>
-                <span className="rounded-full border border-line px-2 py-0.5 text-[11px] uppercase text-ink-muted">
-                  {app.tier.replace("_", " ")}
-                </span>
-                <span className="rounded-full border border-line px-2 py-0.5 text-[11px] uppercase text-ink-muted">
-                  {app.environment}
-                </span>
+          <li key={app.app_id} className="flex flex-col gap-3 bg-surface-raised p-4">
+            <div className="flex items-start justify-between gap-2">
+              <h2 className="text-h4">{app.name}</h2>
+              <span
+                className={`shrink-0 px-2 py-1 text-tiny font-semibold uppercase tracking-label ${
+                  app.ready
+                    ? "border border-ok bg-ok-bg text-ok"
+                    : "border border-warn bg-warn-bg text-warn-ink"
+                }`}
+              >
+                {app.ready ? "ready" : "onboarding"}
+              </span>
+            </div>
+
+            <div className="flex items-baseline gap-2">
+              <span className="font-display text-hero font-extrabold leading-none tabular-nums">
+                {app.readiness_score}
+              </span>
+              <span className="text-small text-ink-muted">readiness</span>
+            </div>
+            <ReadinessBar score={app.readiness_score} ready={app.ready} threshold={80} />
+
+            <dl className="flex flex-col gap-1 border-t border-line pt-2 text-small">
+              <div className="flex justify-between gap-2">
+                <dt className="text-ink-muted">Identifier</dt>
+                <dd className="font-mono">{app.app_id}</dd>
               </div>
-              <p className="text-xs text-ink-muted">
-                {app.base_url ?? "no base URL - auto-discovery cannot run"}
-                {app.owner_team ? ` · ${app.owner_team}` : ""} · updated{" "}
-                {relativeTime(app.updated_at)}
-              </p>
+              <div className="flex justify-between gap-2">
+                <dt className="text-ink-muted">Tier</dt>
+                <dd className="font-mono">
+                  {app.tier.replace("_", " ")} · {app.environment}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-2">
+                <dt className="text-ink-muted">Updated</dt>
+                <dd className="font-mono">{relativeTime(app.updated_at)}</dd>
+              </div>
+            </dl>
+
+            <p className="truncate text-micro text-ink-muted">
+              {app.base_url ?? "no base URL - auto-discovery cannot run"}
+              {app.owner_team ? ` · ${app.owner_team}` : ""}
+            </p>
+
+            <div className="mt-auto flex flex-wrap gap-2 pt-1">
+              <Link
+                href={`/apps/${encodeURIComponent(app.app_id)}`}
+                className="bg-accent px-3 py-1.5 text-small font-semibold text-surface hover:bg-brand-600"
+              >
+                Open
+              </Link>
+              <Link
+                href={`/apps/${encodeURIComponent(app.app_id)}/onboard/1`}
+                className="border border-line px-3 py-1.5 text-small hover:bg-ink/[0.07]"
+              >
+                {app.ready ? "Review onboarding" : "Continue onboarding"}
+              </Link>
             </div>
-            <div className="w-48">
-              <ReadinessBar score={app.readiness_score} ready={app.ready} threshold={80} />
-            </div>
-            <Link
-              href={`/apps/${encodeURIComponent(app.app_id)}/onboard/1`}
-              className="rounded-card border border-line px-2.5 py-1 text-xs hover:border-accent hover:text-accent-strong"
-            >
-              {app.ready ? "Review onboarding" : "Continue onboarding"}
-            </Link>
           </li>
         ))}
-        {state.apps.length === 0 && (
-          <li className="px-3 py-6 text-sm text-ink-muted">
-            No applications yet. Anything that serves the public observe contract -
-            or posts to the ingest API - can be onboarded here; SignalForge needs
-            no code of its own for it.
-          </li>
-        )}
+
+        <li>
+          <button
+            type="button"
+            onClick={() => setAdding((current) => !current)}
+            className="flex h-full min-h-[220px] w-full items-center justify-center border border-dashed border-line p-4 text-dense font-semibold text-accent hover:bg-brand-100"
+          >
+            + Onboard an application
+          </button>
+        </li>
       </ul>
+
+      {state.apps.length === 0 && (
+        <p className="text-dense text-ink-muted">
+          No applications yet. Anything that serves the public observe contract -
+          or posts to the ingest API - can be onboarded here; SignalForge needs no
+          code of its own for it.
+        </p>
+      )}
     </div>
   );
 }

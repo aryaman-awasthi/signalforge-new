@@ -73,7 +73,7 @@ export function BridgePanel({
                 {message.author_display || message.author}
               </span>
               {message.simulated && (
-                <span className="rounded-full border border-line px-1.5 py-0.5 text-[10px] uppercase text-ink-muted">
+                <span className="border border-line px-1.5 py-0.5 text-[10px] uppercase text-ink-muted">
                   simulated
                 </span>
               )}

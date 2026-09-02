@@ -105,12 +105,12 @@ export function TaskBoard({
                     {task.title}
                   </span>
                   {task.source === "bridge" && (
-                    <span className="rounded-full border border-line px-2 py-0.5 text-[10px] uppercase text-ink-muted">
+                    <span className="border border-line px-2 py-0.5 text-[10px] uppercase text-ink-muted">
                       from the bridge
                     </span>
                   )}
                   {task.overdue && (
-                    <span className="rounded-full border border-danger/40 bg-danger/10 px-2 py-0.5 text-[10px] text-danger">
+                    <span className="border border-danger/40 bg-danger/10 px-2 py-0.5 text-[10px] text-danger">
                       overdue
                     </span>
                   )}

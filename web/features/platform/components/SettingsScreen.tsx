@@ -57,7 +57,7 @@ export function SettingsScreen() {
           >
             {candidate}
             {candidate === "Dead letters" && dead > 0 && (
-              <span className="ml-2 rounded-full bg-danger/15 px-1.5 py-0.5 text-[11px] text-danger">
+              <span className="ml-2 bg-danger/15 px-1.5 py-0.5 text-[11px] text-danger">
                 {dead}
               </span>
             )}

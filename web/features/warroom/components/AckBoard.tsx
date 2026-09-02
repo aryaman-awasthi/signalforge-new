@@ -121,12 +121,12 @@ export function AckBoard({
                     {page.recipient_display || page.recipient}
                   </span>
                   {page.role && (
-                    <span className="rounded-full border border-line px-2 py-0.5 text-[11px] text-ink-muted">
+                    <span className="border border-line px-2 py-0.5 text-[11px] text-ink-muted">
                       {page.role}
                     </span>
                   )}
                   {page.hop > 0 && (
-                    <span className="rounded-full border border-line px-2 py-0.5 text-[11px] text-ink-muted">
+                    <span className="border border-line px-2 py-0.5 text-[11px] text-ink-muted">
                       escalation hop {page.hop}
                     </span>
                   )}
@@ -145,7 +145,7 @@ export function AckBoard({
                       <li
                         key={delivery.notification_id}
                         title={delivery.detail}
-                        className="rounded-full border border-line px-2 py-0.5 text-[10px] text-ink-muted"
+                        className="border border-line px-2 py-0.5 text-[10px] text-ink-muted"
                       >
                         {delivery.channel} · {delivery.status}
                         {delivery.simulated ? " · SIMULATED" : ""}
@@ -156,7 +156,7 @@ export function AckBoard({
               </div>
 
               <span
-                className={`rounded-full border px-2 py-0.5 text-xs ${
+                className={`border px-2 py-0.5 text-xs ${
                   STATE_TONE[page.state] ?? STATE_TONE.pending
                 }`}
               >

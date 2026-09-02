@@ -108,7 +108,7 @@ export function TestStep({
                     <span className="font-medium">{test.adapter_name}</span>
                     <span className="text-ink-muted">{test.direction}</span>
                     {test.simulated && (
-                      <span className="rounded-full border border-warn/40 bg-warn/10 px-2 py-0.5 text-[10px] uppercase text-warn">
+                      <span className="border border-warn/40 bg-warn/10 px-2 py-0.5 text-[10px] uppercase text-warn">
                         simulated
                       </span>
                     )}
@@ -163,7 +163,7 @@ export function TestStep({
               </span>
               <span className="min-w-0 flex-1 text-ink-muted">{check.detail}</span>
               {outstanding.has(check.key) && !check.passed && (
-                <span className="rounded-full border border-line px-2 py-0.5 text-[10px] uppercase text-ink-muted">
+                <span className="border border-line px-2 py-0.5 text-[10px] uppercase text-ink-muted">
                   outstanding
                 </span>
               )}

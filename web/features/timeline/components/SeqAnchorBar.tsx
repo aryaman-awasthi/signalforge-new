@@ -45,11 +45,11 @@ export function SeqAnchorBar({
           onChange={(change) => setDraft(change.target.value)}
           inputMode="numeric"
           placeholder="seq"
-          className="w-20 rounded border border-line bg-surface px-2 py-1 font-mono"
+          className="w-20 border border-line bg-surface px-2 py-1 font-mono"
         />
         <button
           type="submit"
-          className="rounded border border-line px-2 py-1 hover:border-accent hover:text-accent-strong"
+          className="border border-line px-2 py-1 hover:border-accent hover:text-accent-strong"
         >
           Anchor
         </button>
@@ -57,7 +57,7 @@ export function SeqAnchorBar({
       {anchorSeq !== null && (
         <button
           onClick={() => onAnchor(null)}
-          className="rounded border border-accent/50 bg-accent/10 px-2 py-1 text-accent-strong"
+          className="border border-accent/50 bg-accent/10 px-2 py-1 text-accent-strong"
         >
           Anchored at #{anchorSeq} · clear
         </button>

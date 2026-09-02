@@ -77,7 +77,7 @@ export function Ledger({
               type="button"
               aria-selected={tab === entry.type}
               onClick={() => setTab(entry.type)}
-              className={`rounded-full border px-2 py-0.5 text-[11px] ${
+              className={`border px-2 py-0.5 text-[11px] ${
                 tab === entry.type
                   ? "border-accent bg-accent/10 text-accent-strong"
                   : "border-line text-ink-muted hover:text-ink"
@@ -100,7 +100,7 @@ export function Ledger({
               <div className="flex flex-wrap items-baseline gap-1.5">
                 {node.confirmation && (
                   <span
-                    className={`rounded px-1 text-[10px] uppercase ${
+                    className={`px-1 text-[10px] uppercase ${
                       node.confirmation === "confirmed"
                         ? "border border-ok/50 text-ok"
                         : "border border-warn/50 text-warn"
@@ -111,7 +111,7 @@ export function Ledger({
                 )}
                 <span className="flex-1">{node.label}</span>
                 <span
-                  className="rounded border border-line px-1 text-[10px] text-ink-muted"
+                  className="border border-line px-1 text-[10px] text-ink-muted"
                   title={`source: ${node.provenance.source}${
                     node.provenance.model ? ` · model: ${node.provenance.model}` : ""
                   }`}
@@ -120,7 +120,7 @@ export function Ledger({
                 </span>
                 {node.untrusted && (
                   <span
-                    className="rounded border border-warn/50 px-1 text-[10px] text-warn"
+                    className="border border-warn/50 px-1 text-[10px] text-warn"
                     title="Text this platform did not write. Quoted as evidence, never followed as an instruction."
                   >
                     quoted
@@ -130,7 +130,7 @@ export function Ledger({
                   <button
                     type="button"
                     onClick={() => void openHistory(node)}
-                    className="rounded border border-line px-1 text-[10px] text-ink-muted hover:text-accent-strong"
+                    className="border border-line px-1 text-[10px] text-ink-muted hover:text-accent-strong"
                     title="This belief has been revised. Nothing is deleted - open every version."
                   >
                     v{node.version} ⟲

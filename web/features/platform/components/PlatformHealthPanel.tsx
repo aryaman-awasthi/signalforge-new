@@ -72,7 +72,7 @@ export function PlatformHealthPanel({ status }: { status: PlatformStatus }) {
           <h3 className="mb-2 text-sm font-medium">
             Clock
             {status.clock.source === "virtual" && (
-              <span className="ml-2 rounded border border-warn/40 bg-warn/10 px-1.5 py-0.5 text-[10px] uppercase text-warn">
+              <span className="ml-2 border border-warn/40 bg-warn/10 px-1.5 py-0.5 text-[10px] uppercase text-warn">
                 drill clock
               </span>
             )}

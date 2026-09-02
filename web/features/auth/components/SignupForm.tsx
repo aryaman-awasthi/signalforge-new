@@ -16,7 +16,7 @@ export function SignupForm() {
 
   return (
     <form
-      className="mx-auto max-w-sm space-y-4 rounded-card border border-line bg-surface-raised p-6"
+      className="flex flex-col gap-4 bg-surface-raised p-6"
       onSubmit={(event) => {
         event.preventDefault();
         void run(() =>
@@ -24,7 +24,7 @@ export function SignupForm() {
         );
       }}
     >
-      <h1 className="text-xl font-semibold">Create your organisation</h1>
+      <h2 className="text-tiny uppercase tracking-panel text-accent">Create your organisation</h2>
       <Field label="Organisation name" value={orgName} onChange={setOrgName}
         placeholder="Acme Corp" autoComplete="organization" />
       <Field label="Your name" value={displayName} onChange={setDisplayName}

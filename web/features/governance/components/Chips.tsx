@@ -34,7 +34,7 @@ export function Chip({
   return (
     <span
       title={title}
-      className={`rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${TONE[tone]}`}
+      className={`border px-1.5 py-0.5 text-[10px] font-medium ${TONE[tone]}`}
     >
       {children}
     </span>
@@ -127,10 +127,10 @@ export function ScoreBar({
       <span className="w-28 shrink-0 text-[10px] uppercase tracking-wide text-ink-muted">
         {label}
       </span>
-      <span className="h-1.5 flex-1 rounded-full bg-line">
+      <span className="h-1.5 flex-1 bg-line">
         <span
           style={{ width }}
-          className={`block h-1.5 rounded-full ${negative ? "bg-danger" : "bg-accent"}`}
+          className={`block h-1.5 ${negative ? "bg-danger" : "bg-accent"}`}
         />
       </span>
       <span className="w-10 shrink-0 text-right font-mono text-[10px]">

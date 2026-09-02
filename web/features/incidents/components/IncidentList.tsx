@@ -99,7 +99,7 @@ export function IncidentList() {
               </span>
               <span className="text-xs text-ink-muted">{incident.app_id}</span>
               <span
-                className={`rounded-full border px-2 py-0.5 text-xs ${
+                className={`border px-2 py-0.5 text-xs ${
                   incident.state === "active"
                     ? "border-danger/40 bg-danger/10 text-danger"
                     : incident.state === "recovering"

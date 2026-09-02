@@ -110,16 +110,16 @@ export function ActionsPanel({
               <span className="font-mono text-xs text-ink-muted">
                 {action.action_id}
               </span>
-              <span className="rounded-full border border-line px-2 py-0.5 text-[11px] uppercase text-ink-muted">
+              <span className="border border-line px-2 py-0.5 text-[11px] uppercase text-ink-muted">
                 {action.action_class}
               </span>
               {action.high_risk && (
-                <span className="rounded-full border border-danger/40 bg-danger/10 px-2 py-0.5 text-[11px] uppercase text-danger">
+                <span className="border border-danger/40 bg-danger/10 px-2 py-0.5 text-[11px] uppercase text-danger">
                   high risk
                 </span>
               )}
               {!action.reversible && (
-                <span className="rounded-full border border-warn/40 bg-warn/10 px-2 py-0.5 text-[11px] text-warn">
+                <span className="border border-warn/40 bg-warn/10 px-2 py-0.5 text-[11px] text-warn">
                   irreversible
                 </span>
               )}

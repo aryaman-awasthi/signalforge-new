@@ -29,7 +29,7 @@ export function TopicFilter({
     <div className="flex flex-wrap items-center gap-1.5">
       <button
         onClick={() => onChange([])}
-        className={`rounded-full border px-2.5 py-1 text-xs ${
+        className={`border px-2.5 py-1 text-xs ${
           selected.length === 0
             ? "border-accent bg-accent/10 text-accent-strong"
             : "border-line text-ink-muted hover:text-ink"
@@ -43,7 +43,7 @@ export function TopicFilter({
           <button
             key={pattern}
             onClick={() => toggle(pattern)}
-            className={`rounded-full border px-2.5 py-1 text-xs ${
+            className={`border px-2.5 py-1 text-xs ${
               selected.includes(pattern)
                 ? "border-accent bg-accent/10 text-accent-strong"
                 : "border-line text-ink-muted hover:text-ink"
@@ -57,7 +57,7 @@ export function TopicFilter({
         <button
           key={topic}
           onClick={() => toggle(topic)}
-          className={`rounded-full border px-2.5 py-1 text-xs font-mono ${
+          className={`border px-2.5 py-1 text-xs font-mono ${
             selected.includes(topic)
               ? "border-accent bg-accent/10 text-accent-strong"
               : "border-line text-ink-muted hover:text-ink"

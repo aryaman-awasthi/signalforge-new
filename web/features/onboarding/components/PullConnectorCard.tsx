@@ -80,7 +80,7 @@ export function PullConnectorCard({
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium">{adapter.name}</span>
         <span className="font-mono text-xs text-ink-muted">{adapter.id}</span>
-        <span className="rounded-full border border-line px-2 py-0.5 text-[11px] uppercase text-ink-muted">
+        <span className="border border-line px-2 py-0.5 text-[11px] uppercase text-ink-muted">
           {adapter.kind}
         </span>
         <span className="text-xs text-ink-muted">{adapter.direction}</span>

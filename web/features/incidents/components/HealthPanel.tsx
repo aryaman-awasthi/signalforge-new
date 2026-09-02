@@ -119,7 +119,7 @@ export function HealthPanel({
                       {region.families.map((family) => (
                         <li
                           key={family.family}
-                          className="rounded-full border border-line px-2 py-0.5"
+                          className="border border-line px-2 py-0.5"
                         >
                           {family.family} {family.weight}
                           {family.fraction === null

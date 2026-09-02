@@ -131,11 +131,11 @@ function MobilePage({
   return (
     <li className="space-y-3 rounded-card border border-line bg-surface-raised p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="rounded-full border border-danger/40 bg-danger/10 px-2 py-0.5 font-mono text-sm font-semibold text-danger">
+        <span className="border border-danger/40 bg-danger/10 px-2 py-0.5 font-mono text-sm font-semibold text-danger">
           {page.severity}
         </span>
         {page.role && (
-          <span className="rounded-full border border-line px-2 py-0.5 text-[11px] text-ink-muted">
+          <span className="border border-line px-2 py-0.5 text-[11px] text-ink-muted">
             {page.role}
           </span>
         )}

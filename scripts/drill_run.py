@@ -608,6 +608,15 @@ def main() -> int:
     parser.add_argument("--org", default="Drill Co")
     parser.add_argument("--email", default="owner@drill.test")
     parser.add_argument(
+        "--join",
+        default=None,
+        metavar="ORG_SLUG",
+        help="Sign in to an organisation that already exists instead of creating "
+        "one. This is how a *second* application is onboarded into the same "
+        "estate, which is the only way to show that the screens are not shaped "
+        "around the first one.",
+    )
+    parser.add_argument(
         "--steady-s",
         type=float,
         default=75.0,
@@ -668,7 +677,8 @@ def main() -> int:
     # On a machine that ran reset.sh this costs a few seconds and changes
     # nothing; on one that did not, it is the difference between a demo and a
     # demo of the last demo.
-    heal(args.app_base_url, drill, drill_credential(drill))
+    if scenarios_of(drill):
+        heal(args.app_base_url, drill, drill_credential(drill))
     flush_ticks = int(traffic.get("flush_ticks", 20))
     if flush_ticks:
         log(f"flushing the application's own rolling windows ({flush_ticks} ticks)")
@@ -682,8 +692,20 @@ def main() -> int:
 
     api = Api(args.api)
     try:
-        log(f"signing up {args.email} in {args.org!r}")
-        owner = signup(api, args.org, args.email)
+        if args.join:
+            log(f"signing in as {args.email} in {args.join!r}")
+            owner = api.call(
+                "POST",
+                "/auth/login",
+                json={
+                    "org_slug": args.join,
+                    "email": args.email,
+                    "password": PASSWORD,
+                },
+            )
+        else:
+            log(f"signing up {args.email} in {args.org!r}")
+            owner = signup(api, args.org, args.email)
         owner_token = owner["tokens"]["access_token"]
 
         log("onboarding the application through its public contracts")

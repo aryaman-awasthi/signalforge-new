@@ -75,7 +75,7 @@ export function DeadLettersPanel({
           <li key={row.id} className="space-y-1 px-3 py-3 text-sm">
             <div className="flex flex-wrap items-center gap-2">
               <span
-                className={`rounded-full border px-2 py-0.5 text-[11px] uppercase ${
+                className={`border px-2 py-0.5 text-[11px] uppercase ${
                   STATE_STYLE[row.state]
                 }`}
               >

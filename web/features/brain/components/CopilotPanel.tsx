@@ -100,7 +100,7 @@ export function CopilotPanel({
               <button
                 type="button"
                 onClick={() => void ask(suggestion)}
-                className="rounded-full border border-line px-2 py-0.5 text-[11px] text-ink-muted hover:border-accent hover:text-accent-strong"
+                className="border border-line px-2 py-0.5 text-[11px] text-ink-muted hover:border-accent hover:text-accent-strong"
               >
                 {suggestion}
               </button>
@@ -126,7 +126,7 @@ export function CopilotPanel({
           <p className="whitespace-pre-wrap text-xs">{answer.answer}</p>
 
           {answer.injection_observed && (
-            <p className="rounded border border-danger/40 bg-danger/10 px-2 py-1 text-[11px] text-danger">
+            <p className="border border-danger/40 bg-danger/10 px-2 py-1 text-[11px] text-danger">
               Content in this incident tried to instruct the assistant. It was
               treated as data and nothing in it was acted on — the copilot holds
               no tools and can change no incident state.
@@ -149,7 +149,7 @@ export function CopilotPanel({
                           }`
                         : citation
                     }
-                    className="rounded-full border border-line px-2 py-0.5 text-[10px]"
+                    className="border border-line px-2 py-0.5 text-[10px]"
                   >
                     {node ? node.label.slice(0, 48) : citation}
                     {node?.confirmation === "predicted" && (
@@ -196,7 +196,7 @@ function Verdict({ verdict }: { verdict: Answer["verdict"] }) {
   const chip = map[verdict];
   return (
     <span
-      className={`rounded-full border px-2 py-0.5 text-[10px] uppercase ${chip.className}`}
+      className={`border px-2 py-0.5 text-[10px] uppercase ${chip.className}`}
     >
       {chip.label}
     </span>

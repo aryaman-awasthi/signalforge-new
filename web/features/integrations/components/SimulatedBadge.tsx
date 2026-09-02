@@ -9,7 +9,7 @@ export function SimulatedBadge({ simulated }: { simulated: boolean }) {
     return <span className="text-xs text-ink-muted">-</span>;
   }
   return (
-    <span className="rounded-full border border-warn/40 bg-warn/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-warn">
+    <span className="border border-warn/40 bg-warn/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-warn">
       simulated
     </span>
   );
