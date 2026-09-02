@@ -27,6 +27,7 @@ type Row = {
   key: string;
   name: string;
   detail: string;
+  statusDetail?: string | null;
   appId: string;
   direction: string;
   arrow: "in" | "out";
@@ -60,9 +61,13 @@ function connectorRow(row: ConnectorHealth): Row {
     freshnessLabel: isPush
       ? freshness(row.event_freshness_s)
       : freshness(row.freshness_s),
+    // An error and a status detail are different things and used to share this
+    // column, so a perfectly healthy connector reported "reachable" in red. The
+    // error is the error; the detail is what the last check actually said.
     errors: row.installed
-      ? (isPush ? row.ingest_last_error : row.last_error) ?? row.status_detail
+      ? (isPush ? row.ingest_last_error : row.last_error) ?? null
       : `adapter "${row.adapter_id}" is no longer installed on this node`,
+    statusDetail: row.status_detail,
     simulated: row.simulated,
     counters: isPush
       ? `${row.ingest_keys} key(s) · ${row.ingest_accepted} accepted · ${row.ingest_duplicates} duplicate · ${row.ingest_rejected} rejected`
@@ -201,7 +206,15 @@ export function IntegrationHealthScreen({ appId }: { appId?: string }) {
                 <td className="px-3 py-2 text-xs">{row.lastPull}</td>
                 <td className="px-3 py-2 text-xs">{row.lastPush}</td>
                 <td className="px-3 py-2 text-xs">{row.freshnessLabel}</td>
-                <td className="px-3 py-2 text-xs text-danger">{row.errors ?? ""}</td>
+                <td className="px-3 py-2 text-xs">
+                  {row.errors ? (
+                    <span className="text-accent-strong">{row.errors}</span>
+                  ) : (
+                    <span className="text-ink-muted">
+                      {row.statusDetail || "—"}
+                    </span>
+                  )}
+                </td>
                 <td className="px-3 py-2">
                   <SimulatedBadge simulated={row.simulated} />
                 </td>

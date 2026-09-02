@@ -730,8 +730,11 @@ def main() -> int:
 
         log("inviting the people an incident needs")
         people = invite_people(api, owner_token, drill)
-        if not people:
+        if not people and not args.join:
             # The older drills name no people; they still need somebody to page.
+            # Not when joining an existing organisation, though: a second
+            # application does not need a second set of responders, and inviting
+            # them would put four nameless people in every war room.
             first_sme = invite(
                 api, owner_token, email="sme1@drill.test", roles=["sme"], name="Sam SME"
             )
