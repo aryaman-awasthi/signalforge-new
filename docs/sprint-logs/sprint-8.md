@@ -6,8 +6,10 @@ Sprint 7 shipped a complete product with an invented palette. The design export
 arrived after the cockpit was built - `web/design-system/tokens.css` said so in
 its own header - and the demo drill was the smallest world in which the
 corroboration rule could be proved rather than the smallest world in which the
-screens are not empty. This sprint fixed both, and fixed the four defects that
-became visible once the screens were honest enough to show them.
+screens are not empty. This sprint fixed both, and fixed the seven defects that
+became visible once the screens were honest enough to show them - including two
+that only the final walkthrough could find: the primary action button had never
+worked, and the audit chain could fork under the platform's own load.
 
 ## Built
 
@@ -154,6 +156,45 @@ became visible once the screens were honest enough to show them.
   and a writer that gives up after its hash was computed leaves the next entry
   pointing at a row that never landed. `PRAGMA busy_timeout` is now 30s.
 
+- **[S8-T10][REQ-062, REQ-063] The Run button never worked.**
+  The walkthrough's job is to find what a test cannot see, and it found this: the
+  Next Best Action panel posted `args: {}` at every action, the reference
+  application's actions declare required parameters, so the primary control on
+  the most-looked-at panel answered 422 for every action at every risk class.
+  Nobody had clicked it - Sprint 6 built it, Sprint 7's suite drove the API with
+  arguments, and the gap was exactly the shape a test does not reach.
+
+  Nothing published the schema. The domain has kept `params_schema` from each
+  application's manifest since S6-T02, because the Tool Gateway validates against
+  it before anything is authorised, but no API response carried it. It is now on
+  the NBA candidate, and the panel renders the *required* properties from the
+  application's own schema - an enum becomes a select, everything else a field.
+  Values are typed on the way out, because a gateway that accepted `"1"` for an
+  integer would be a validator that had stopped checking. The platform does not
+  invent an argument: a screen that defaulted a region would be choosing which
+  half of an estate to act on.
+
+- **[S8-T10][REQ-016, REQ-072] The audit chain could fork under its own load.**
+  The new replay screen reported a broken chain on a freshly reset machine -
+  three records affected, nothing tampered with. `append` read the head and then
+  inserted: two statements. The detection loop, the probe runner and the
+  escalation sweep all append, two read the same head, both stored it as
+  `prev_hash`, and the chain forked. The busy-timeout change earlier in this
+  sprint was treating a symptom and made it *more* likely, because it stopped one
+  of the racing writers failing.
+
+  The link is now chosen inside the insert, by a scalar subquery: one statement
+  is atomic under the write lock. Negative-checked - the new test fails against
+  the old append and passes against the new one - and the screenshot in
+  `docs/screens/S20-replay-and-pir.png` is the chain verifying over 91 entries.
+
+- **[S8-T10][REQ-073] The shipped `reset.sh` refused to run inside the shipped
+  product.** It guards itself with three markers so a script whose job is `rm -rf`
+  cannot run in the wrong place, and one of them was `CLAUDE.md`, which the
+  package deliberately excludes. So unzipping the archive and running `reset.sh`
+  - the first thing `docs/22` tells an operator to do - refused. Found by doing
+  it. The markers are now three files a release actually contains.
+
 - **[S8-T09][REQ-012, REQ-045] S17: role views, as a map.**
   `features/warroom/roleLayouts.ts` plus one thin route. Presence, not position:
   a panel that stays is where the full cockpit puts it, so somebody who learns
@@ -217,14 +258,33 @@ became visible once the screens were honest enough to show them.
 
 ## Tests
 
-- **Added this sprint:** 2 - one on the detector's bootstrap region row, one on
-  the SQLite busy timeout that protects the audit chain. Both are regression
-  tests for defects found by building the screens, and both were seen to fail
-  before the fix.
-- **Changed:** 3 assertions moved with the code they describe - the live badge
-  is now rendered from `IncidentHeader`, the blast-radius caveat was reworded,
-  and a model rewrite must now *drop* the template's provenance line rather than
-  keep it.
+- **Added this sprint:** 3, all regression tests for defects the screens exposed
+  - the detector's bootstrap region row, the SQLite busy timeout, and concurrent
+  appends forking the audit chain. The third was negative-checked against the old
+  implementation; the first was seen to fail before its fix.
+- **Changed:** 3 assertions moved with the code they describe - the live badge is
+  now rendered from `IncidentHeader`, the blast-radius caveat was reworded, and a
+  model rewrite must now *drop* the template's provenance line rather than keep
+  it.
+- **Full suite: 1257 passed, 5 skipped, 0 failed** (23m41s), run on the clean
+  machine at the start of T10. Two defects were fixed *after* that run - the
+  action arguments and the chain fork - and the suites covering them were run
+  again rather than the whole tree: governance 73, audit 18, security 172, web +
+  cockpit-surface 89, api-spec docs 10, detection 8. The whole tree was not
+  re-run after those two commits, and this log says so rather than implying it
+  was.
+
+  | Gate | Result |
+  |---|---|
+  | Full Python suite | 1257 passed, 5 skipped, 0 failed |
+  | `make llm-smoke` | OK - chat and embeddings served |
+  | Frontend typecheck | clean |
+  | Frontend build (`next build`) | clean, 19 routes |
+  | `scripts/check_clean.sh` | OK |
+  | `reset.sh` then `run.sh` from empty | harness, API and cockpit all answering |
+  | `bash scripts/demo.sh` | corroborated P0, `declared: false` |
+  | `python scripts/demo_check.py` | **12/12** |
+  | Package unzipped and `reset.sh` run from it | refused, fixed, re-run, accepted |
 
 ## Artifacts updated
 
@@ -235,7 +295,9 @@ became visible once the screens were honest enough to show them.
 | 21 | `docs/21-test-report.md` | regenerated |
 | 23 | `docs/23-user-guide.md` | the twenty-three screens, captured from the running product |
 | — | `web/design-system/README.md` | new: every token and the prototype role it came from |
-| — | `docs/screens/` | new: S1 to S23 as built |
+| — | `docs/screens/` | new: S1 to S23 as built, 27 captures |
+| 11 | `docs/11-openapi.json`, `docs/11-api-spec.md` | regenerated after the NBA schema gained `params_schema` |
+| — | `dist/signalforge-<sha>.zip` | the package, verified against the exclusion list |
 
 ## Security notes
 
@@ -258,7 +320,18 @@ became visible once the screens were honest enough to show them.
 2. The demo world self-heals: every chaos scenario carries a `max_duration_s` the
    application enforces itself, so a walkthrough longer than ten minutes finds a
    healthy application. `--refault` re-arms it without touching the incident.
-3. Carried from Sprint 7: `next`/`postcss` advisories deferred; `pip-audit`
+3. **The archive was not booted end to end.** `dist/signalforge-<sha>.zip` was
+   unzipped into an empty directory, its contents checked against the exclusion
+   list (no `.env`, `var/`, `node_modules`, `.next`, `.venv`, `.git`, `target/`,
+   `playbook/`, `CLAUDE.md`), its entry points confirmed and its `reset.sh` run
+   successfully from inside it. A full `run.sh` needs `npm ci` and a Maven build
+   of the harness, which `docs/22` documents and which did not fit in the time
+   left. What is verified is stated; what is not is this line.
+4. **The gateway key still needs rotating by a human.** A previous release zip
+   carried `.env` with a live key. This one does not - asserted against the
+   archive - but the key that leaked is still valid until somebody rotates it in
+   the GenAI Lab console. That is not something this repository can do.
+5. Carried from Sprint 7: `next`/`postcss` advisories deferred; `pip-audit`
    unrunnable on this machine; single node, SQLite, Postgres-untested;
    performance numbers in-process and single-threaded.
 

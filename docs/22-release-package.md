@@ -1,9 +1,26 @@
 # 22 - Release package
 
-Owner: engineering. Sprint 7. Status: complete.
+Owner: engineering. Sprint 8. Status: complete.
 
 **SignalForge 0.2.0** - enterprise incident command centre.
-Release baseline: the Sprint 7 closure commit on `main`.
+Release baseline: the Sprint 8 closure commit on `main`.
+
+## The archive
+
+`dist/signalforge-<shortsha>.zip`, produced by `git archive` from the closure
+commit, so what ships is exactly what is committed and nothing else. Verified
+against the exclusion list before release: no `.env`, no `var/`, no
+`node_modules`, no `.next`, no `.venv`, no `.git`, no `target/`, no `playbook/`
+and no `CLAUDE.md`. It ships `.env.example` and the reference harness's source.
+
+Unzip it into an empty directory and start with `bash reset.sh` - which is what
+found, in Sprint 8, that `reset.sh` had been guarding itself with a marker the
+package deliberately excludes and so refused to run inside the product it shipped
+with. It runs now.
+
+A full `run.sh` from the archive needs `npm ci` in `web/` and a Maven build of
+the reference harness, both of which need a network the finale machine may not
+have. Fetch them once on a connected machine and the archive boots offline.
 
 ## What is in the release
 
