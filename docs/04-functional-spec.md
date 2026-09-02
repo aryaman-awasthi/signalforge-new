@@ -121,7 +121,7 @@ Shapes are in docs/11.
 
 ## 2. Integrations: the adapters this build ships (REQ-031, REQ-033, REQ-035)
 
-Seventeen adapters ship with a runtime and five ship as interfaces. None of them names an
+Nineteen adapters ship with a runtime and five ship as interfaces. None of them names an
 application: every one is configured by a binding, and the only file in the platform that names
 an adapter is `infrastructure/adapters/builtin.py`, which lives inside the adapters tree.
 
@@ -144,6 +144,32 @@ restart it are different permissions held as different credentials.
 
 Each pings the endpoint it actually uses. Pinging `/observe/health` for all of them would
 report a metrics binding healthy while `/observe/metrics` returns 500.
+
+### 2.1.1 The Spring Actuator pair
+
+The observe contract is what an application serves when it wants SignalForge to read its logs
+or execute a remediation. This pair is what SignalForge can read from an application that has
+been asked for *nothing at all*: a Spring Boot service with Micrometer on its classpath is
+already serving both endpoints, so onboarding it is two bindings and no code change on its
+side. Generic, not app-specific - any Boot application, no name anywhere.
+
+| Adapter | Kind | Capabilities | Notes |
+|---|---|---|---|
+| `spring-actuator-metrics` | metrics | `query_instant` | reads `GET /actuator/prometheus`; same text exposition and the same `name{label="value"}` selectors as the observe adapter. A scrape has no history, so ranges need `prometheus` against the server that stores the scrapes. |
+| `spring-actuator-health` | health | `get_health`, `run_probe` | reads `GET /actuator/health`. `UP`/`DOWN`/`OUT_OF_SERVICE` map to up/down/degraded and anything else to *unknown*, because Spring's status is an open set and a guess of "up" is the one answer that could hide an outage. |
+
+Both declare `auth.method: none`, which is how Actuator ships. Two things they deliberately do
+not do. The aggregate status is the application's own verdict and is carried through rather
+than recomputed from the components - a health group may exclude an indicator, and an adapter
+that decided the application was healthier than the application said would be the most
+expensive kind of helpful. And there is no logs, actions, chaos or traces adapter in the
+family: Actuator has no search endpoint, no action manifest, no fault-injection surface and no
+trace store, so nothing here claims one. Those still require `/observe/*`.
+
+A health indicator's `details` are free text the application chose without knowing it would be
+stored, shown and put in front of a model - datasource and mail indicators are the usual way a
+connection string arrives - so they go through the manifest's redaction policy at the boundary
+and are truncated to 200 characters.
 
 ### 2.2 Executing an action safely
 

@@ -156,6 +156,27 @@ what keeps replay and the audit trail truthful during a drill.
   Sprint 5 agent suite writes into a store that is already tenant-scoped, already in
   the migration history and already readable by the audit surface.
 
+### 4.1 Adapters, and how much an application has to serve
+
+An adapter is a folder with a `manifest.yaml` under
+`infrastructure/adapters/`; `builtin.py` maps id to runtime class and is the only file
+in the platform that names one. Two families answer the same question at different
+prices to the application being onboarded.
+
+| Family | Reads | The application must |
+|---|---|---|
+| `http-observe-*` (six) | `/observe/*` | implement the frozen observe contract - and get logs, traces, actions and chaos in return |
+| `spring-actuator-metrics`, `spring-actuator-health` | `GET /actuator/prometheus`, `GET /actuator/health` | do nothing: a Spring Boot service with Micrometer already serves both |
+| vendor adapters (`prometheus`, the webhooks, …) | a vendor API or an inbound post | already exist somewhere in the estate |
+
+The actuator pair is the cheapest onboarding path and the narrowest: metrics and health
+only. It exists so that "can SignalForge see this service" and "can this team afford to
+change this service" are separate questions. Its two runtimes share
+`adapters/probes.py` with the observe health adapter, because a synthetic probe is not
+a translation of anything a target publishes - it is SignalForge making a request and
+timing it, and two health adapters measuring that differently would report two
+latencies for one journey.
+
 ## 5. Process model
 
 One process, two asyncio groups, as the solution architecture specifies. The FastAPI

@@ -69,6 +69,21 @@ Your application needs to serve twelve `/observe/*` paths and, if it wants to
 push, speak the ingest contract with an HMAC. That is the whole integration
 requirement; `docs/11-api-spec.md` has the exact shapes.
 
+**A Spring Boot application can be onboarded with no changes at all.** If it has
+Micrometer on its classpath - most Boot services do - it is already serving
+`/actuator/prometheus` and `/actuator/health`. Bind `spring-actuator-metrics`
+and `spring-actuator-health` at step 1 with the application's base URL (or its
+management port, if management runs on one) and no credential: Actuator is
+unauthenticated by default, so those two adapters ask for none. You then get
+metrics, the health of every indicator the application registers, and synthetic
+probes, which is enough for detection, the golden signals and journeys.
+
+What you do *not* get that way is logs, actions and chaos. Actuator has no log
+search, no action manifest and no fault-injection surface, so no adapter can
+offer them honestly - those still require the `/observe` contract. Bind the
+actuator pair to start seeing the application today, and serve `/observe/*` when
+you want SignalForge to read its logs or execute a remediation on it.
+
 ---
 
 ## Part 2 - Running an incident
