@@ -267,3 +267,65 @@ async def test_a_writer_waits_for_the_lock_rather_than_breaking_the_chain(tmp_pa
     )
     assert SQLITE_BUSY_TIMEOUT_MS >= 10_000, "five seconds was not enough in practice"
     assert str(journal).lower() == "wal"
+
+
+@pytest.mark.req("REQ-016", "REQ-072")
+async def test_concurrent_appends_do_not_fork_the_chain(tmp_path):
+    """Two writers at once must not both point at the same predecessor.
+
+    This is the defect the S8 walkthrough found, twice. `append` used to read
+    the head and then insert, which is two statements: the detection loop, the
+    probe runner and the escalation sweep all append, two of them read the same
+    head, both stored it as `prev_hash`, and the chain forked. Every replay from
+    that seq onward then reported itself - correctly - as tampered with, on a
+    platform where nothing had been tampered with.
+
+    Raising the busy timeout made it *more* likely rather than less, because
+    both writers started succeeding. The fix is that the link is chosen inside
+    the insert, so there is no gap to lose.
+    """
+    import asyncio
+    from datetime import datetime, timezone
+
+    from signalforge.infrastructure.persistence.db import (
+        make_engine,
+        make_session_factory,
+    )
+    from signalforge.infrastructure.persistence.models import Base
+    from signalforge.infrastructure.security.audit import (
+        AuditChainWriter,
+        verify_chain,
+    )
+
+    class FixedClock:
+        def now(self) -> datetime:
+            return datetime(2026, 9, 2, 12, 0, tzinfo=timezone.utc)
+
+    engine = make_engine(f"sqlite+aiosqlite:///{tmp_path / 'chain.db'}")
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        sessions = make_session_factory(engine)
+
+        async def write(index: int) -> None:
+            async with sessions() as session:
+                writer = AuditChainWriter(session, FixedClock())
+                await writer.append(
+                    tenant_id="t1",
+                    topic="test.append",
+                    actor_type="system",
+                    actor_id="test",
+                    payload={"index": index},
+                )
+                await session.commit()
+
+        # Enough concurrency to lose a race that exists, few enough to stay fast.
+        for batch in range(6):
+            await asyncio.gather(*(write(batch * 4 + n) for n in range(4)))
+
+        async with sessions() as session:
+            broken = await verify_chain(session, "t1")
+    finally:
+        await engine.dispose()
+
+    assert broken == [], f"the chain forked under concurrent appends at {broken}"

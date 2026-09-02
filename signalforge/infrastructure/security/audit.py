@@ -14,7 +14,7 @@ import json
 import uuid
 from typing import Any, Optional, Sequence
 
-from sqlalchemy import select
+from sqlalchemy import insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from signalforge.contracts.envelope import canonical_payload_hash
@@ -38,16 +38,30 @@ class AuditChainWriter(AuditWriter):
         payload: dict[str, Any],
         app_id: Optional[str] = None,
     ) -> None:
-        last_hash = (
-            await self._s.execute(
-                select(AuditLogRow.payload_hash)
-                .where(AuditLogRow.tenant_id == tenant_id)
-                .order_by(AuditLogRow.seq.desc())
-                .limit(1)
-            )
-        ).scalars().first()
-        self._s.add(
-            AuditLogRow(
+        # The link to the previous entry is chosen *inside* the insert, by a
+        # scalar subquery, and that is the whole point of writing it this way.
+        #
+        # Reading the head and then inserting is two statements, and two writers
+        # doing it at once both read the same head and both point at it - so the
+        # chain forks and every replay from that seq onward correctly reports
+        # itself as tampered with. It is not a hypothetical: the detection loop,
+        # the probe runner and the escalation sweep all append, and a live chain
+        # broke three times this way. A single INSERT is atomic under the write
+        # lock, so the subquery sees the committed head and nothing can slip
+        # between the two halves.
+        #
+        # Portable SQL: a scalar subquery in the values of an INSERT. SQLite
+        # serialises the writers; Postgres would need the same statement plus its
+        # own serialisation, which is a note for the day this moves.
+        head = (
+            select(AuditLogRow.payload_hash)
+            .where(AuditLogRow.tenant_id == tenant_id)
+            .order_by(AuditLogRow.seq.desc())
+            .limit(1)
+            .scalar_subquery()
+        )
+        await self._s.execute(
+            insert(AuditLogRow).values(
                 tenant_id=tenant_id,
                 event_id=str(uuid.uuid4()),
                 topic=topic,
@@ -57,7 +71,7 @@ class AuditChainWriter(AuditWriter):
                 occurred_at=self._clock.now(),
                 payload=json.dumps(payload, sort_keys=True, ensure_ascii=False),
                 payload_hash=canonical_payload_hash(payload),
-                prev_hash=last_hash,
+                prev_hash=head,
             )
         )
         await self._s.flush()
