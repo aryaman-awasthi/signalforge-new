@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { ApiError } from "@/lib/api/client";
 import { fetchMe } from "@/features/auth/api";
@@ -30,6 +30,12 @@ import { TaskBoard } from "@/features/warroom/components/TaskBoard";
 import { joinWarRoom } from "@/features/warroom/api";
 import { ROOM_POLL_MS, useWarRoom } from "@/features/warroom/hooks/useWarRoom";
 import { getIncident, IncidentDetail } from "@/features/incidents/api";
+import {
+  layoutFor,
+  roleLabel,
+  ROLE_VIEWS,
+  type PanelKey,
+} from "@/features/warroom/roleLayouts";
 import { Avatar, Badge, EmptyState, StatePill } from "@/lib/ui/primitives";
 import { Button } from "@/lib/ui/patterns";
 
@@ -73,7 +79,21 @@ type Deep =
   | "verdict"
   | "copilot";
 
-export function WarRoomShell({ incidentId }: { incidentId: string }) {
+export function WarRoomShell({
+  incidentId,
+  role,
+}: {
+  incidentId: string;
+  /** S17. Absent means the full cockpit; a role means that role's view of it. */
+  role?: string;
+}) {
+  const layout = layoutFor(role);
+  const visible = new Set<PanelKey>(layout.panels);
+  /* Presence, not position. A panel this role does not need is absent; every
+     panel that stays is exactly where the full cockpit puts it, so a screenshot
+     in a runbook stays true for everybody. */
+  const show = (key: PanelKey, node: ReactNode) =>
+    visible.has(key) ? node : null;
   const { state, reload, connected } = useWarRoom(incidentId);
   const { state: brainState, reload: reloadBrain } = useBrain(incidentId);
   const { state: governanceState, reload: reloadGovernance } =
@@ -113,8 +133,14 @@ export function WarRoomShell({ incidentId }: { incidentId: string }) {
   const mine = me
     ? room.members.find((member) => member.user_id === me.user_id)
     : undefined;
-  const canCommand = Boolean(me?.permissions.includes("declare_incident"));
-  const canApprove = Boolean(me?.permissions.includes("approve_high_risk"));
+  // A read-only role view removes the controls and keeps the information. The
+  // server enforces permissions either way; this is about what a view is *for*,
+  // not about what a person is allowed to do - an executive pressing "run this
+  // action" during a P0 is a failure mode rather than a feature.
+  const canCommand =
+    !layout.readOnly && Boolean(me?.permissions.includes("declare_incident"));
+  const canApprove =
+    !layout.readOnly && Boolean(me?.permissions.includes("approve_high_risk"));
   const canAudit = Boolean(me?.permissions.includes("read_audit"));
   const governance = governanceState.kind === "ready" ? governanceState : null;
   // Approvals waiting for somebody. Rendered above the grid rather than inside
@@ -185,6 +211,34 @@ export function WarRoomShell({ incidentId }: { incidentId: string }) {
 
   const banner = (
     <>
+      {role && (
+        <section
+          aria-label="Role view"
+          className="flex flex-wrap items-baseline gap-3 border border-line bg-surface-raised px-4 py-2.5"
+        >
+          <span className="text-tiny uppercase tracking-panel text-accent">
+            {roleLabel(role)} view
+          </span>
+          <span className="text-dense text-ink-muted">{layout.purpose}</span>
+          <span className="ml-auto flex flex-wrap items-baseline gap-2 text-small">
+            {ROLE_VIEWS.filter((one) => one !== role).map((one) => (
+              <Link
+                key={one}
+                href={`/incidents/${encodeURIComponent(incidentId)}/as/${one}`}
+                className="text-accent hover:underline"
+              >
+                {roleLabel(one)}
+              </Link>
+            ))}
+            <Link
+              href={`/incidents/${encodeURIComponent(incidentId)}`}
+              className="font-semibold text-accent hover:underline"
+            >
+              full cockpit
+            </Link>
+          </span>
+        </section>
+      )}
       {error && (
         <p className="border border-accent bg-brand-100 px-3 py-2 text-dense text-accent-strong">
           {error}
@@ -232,56 +286,64 @@ export function WarRoomShell({ incidentId }: { incidentId: string }) {
 
   const left = (
     <>
-      <Panel
-        title="Live Bridge Transcript"
-        subtitle={room.bridge_channel ?? undefined}
-        actions={room.has_bridge ? <Badge label="SIMULATED" size="nano" /> : undefined}
-      >
-        <BridgePanel incidentId={incidentId} bridge={bridge} onPosted={reload} />
-      </Panel>
+      {show("bridge", (
+        <Panel
+          title="Live Bridge Transcript"
+          subtitle={room.bridge_channel ?? undefined}
+          actions={room.has_bridge ? <Badge label="SIMULATED" size="nano" /> : undefined}
+        >
+          <BridgePanel incidentId={incidentId} bridge={bridge} onPosted={reload} />
+        </Panel>
+      ))}
 
-      <Panel title="Team Chat" pending="Not built, and not scheduled. Room chat separate from the bridge transcript was reserved here in Sprint 4 and Sprint 6 did not fill it: the bridge is the record of what was said, and a second channel that is not part of that record is a place decisions go missing. It stays visible rather than removed so the layout an incident commander learned does not move." />
+      {show("chat", (
+        <Panel title="Team Chat" pending="Not built, and not scheduled. Room chat separate from the bridge transcript was reserved here in Sprint 4 and Sprint 6 did not fill it: the bridge is the record of what was said, and a second channel that is not part of that record is a place decisions go missing. It stays visible rather than removed so the layout an incident commander learned does not move." />
+      ))}
 
-      <Panel title="Who is in the room" subtitle={`${room.present_count} present`}>
-        <ul className="flex flex-col gap-1.5 text-small">
-          {room.members.map((member) => (
-            <li key={member.user_id} className="flex items-center gap-2">
-              <Avatar
-                name={member.display_name || member.user_id}
-                present={member.present}
-                lead={member.role === "incident_commander"}
-              />
-              <span className="min-w-0 truncate">
-                {member.display_name || member.user_id}
-                {member.role && (
-                  <span className="text-ink-muted"> · {member.role.replace(/_/g, " ")}</span>
-                )}
-              </span>
-              {/* Three separate facts, never collapsed into one status. */}
-              <span className="ml-auto shrink-0 text-tiny font-semibold uppercase tracking-label">
-                {member.present ? (
-                  <span className="text-ok">joined</span>
-                ) : member.paged ? (
-                  <span className="text-warn-ink">paged</span>
-                ) : (
-                  <span className="text-neutral-500">in the radius</span>
-                )}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </Panel>
+      {show("room", (
+        <Panel title="Who is in the room" subtitle={`${room.present_count} present`}>
+          <ul className="flex flex-col gap-1.5 text-small">
+            {room.members.map((member) => (
+              <li key={member.user_id} className="flex items-center gap-2">
+                <Avatar
+                  name={member.display_name || member.user_id}
+                  present={member.present}
+                  lead={member.role === "incident_commander"}
+                />
+                <span className="min-w-0 truncate">
+                  {member.display_name || member.user_id}
+                  {member.role && (
+                    <span className="text-ink-muted"> · {member.role.replace(/_/g, " ")}</span>
+                  )}
+                </span>
+                {/* Three separate facts, never collapsed into one status. */}
+                <span className="ml-auto shrink-0 text-tiny font-semibold uppercase tracking-label">
+                  {member.present ? (
+                    <span className="text-ok">joined</span>
+                  ) : member.paged ? (
+                    <span className="text-warn-ink">paged</span>
+                  ) : (
+                    <span className="text-neutral-500">in the radius</span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      ))}
 
-      <Panel
-        title="AI Copilot"
-        subtitle="answers only from this incident's record"
-      >
-        <CopilotPanel
-          incidentId={incidentId}
-          nodes={brainState.kind === "ready" ? brainState.brain.nodes : []}
-        />
-        <ExpandLink onClick={() => setDeep("copilot")}>Open copilot</ExpandLink>
-      </Panel>
+      {show("copilot", (
+        <Panel
+          title="AI Copilot"
+          subtitle="answers only from this incident's record"
+        >
+          <CopilotPanel
+            incidentId={incidentId}
+            nodes={brainState.kind === "ready" ? brainState.brain.nodes : []}
+          />
+          <ExpandLink onClick={() => setDeep("copilot")}>Open copilot</ExpandLink>
+        </Panel>
+      ))}
     </>
   );
 
@@ -289,110 +351,116 @@ export function WarRoomShell({ incidentId }: { incidentId: string }) {
 
   const centre = (
     <>
-      <Panel
-        title="AI Incident Brain"
-        subtitle={
-          brainState.kind === "ready"
-            ? `${brainState.brain.hypotheses.length} hypotheses`
-            : undefined
-        }
-        elevated
-      >
-        <BrainPanel
-          incidentId={incidentId}
-          state={brainState}
-          canRefresh={canCommand}
-          onRefreshed={() => {
-            reloadBrain();
-            reload();
-          }}
-        />
-        {brief && (
-          <div className="mt-3 border-t border-line pt-2">
-            <div className="flex items-baseline gap-2">
-              <h3 className="text-h6 text-ink-muted">Join brief</h3>
-              <span className="text-nano uppercase tracking-label text-neutral-600">
-                written by {brief.source}
-              </span>
+      {show("brain", (
+        <Panel
+          title="AI Incident Brain"
+          subtitle={
+            brainState.kind === "ready"
+              ? `${brainState.brain.hypotheses.length} hypotheses`
+              : undefined
+          }
+          elevated
+        >
+          <BrainPanel
+            incidentId={incidentId}
+            state={brainState}
+            canRefresh={canCommand}
+            onRefreshed={() => {
+              reloadBrain();
+              reload();
+            }}
+          />
+          {brief && (
+            <div className="mt-3 border-t border-line pt-2">
+              <div className="flex items-baseline gap-2">
+                <h3 className="text-h6 text-ink-muted">Join brief</h3>
+                <span className="text-nano uppercase tracking-label text-neutral-600">
+                  written by {brief.source}
+                </span>
+              </div>
+              <p className="mt-1 text-small font-semibold">{brief.headline}</p>
+              {brief.what_we_know.slice(0, 4).map((line) => (
+                <p key={line} className="text-micro text-ink-muted">
+                  {line}
+                </p>
+              ))}
+              {/* The caveats are rendered, not buried behind a toggle. A brief
+                  that reads confidently from thin evidence is the failure mode
+                  this section exists to prevent - and the model writer is
+                  required to keep every one of them. */}
+              <ul className="mt-1 flex flex-col gap-0.5 text-micro text-warn-ink">
+                {brief.caveats.map((caveat) => (
+                  <li key={caveat}>{caveat}</li>
+                ))}
+              </ul>
             </div>
-            <p className="mt-1 text-small font-semibold">{brief.headline}</p>
-            {brief.what_we_know.slice(0, 4).map((line) => (
-              <p key={line} className="text-micro text-ink-muted">
-                {line}
-              </p>
-            ))}
-            {/* The caveats are rendered, not buried behind a toggle. A brief
-                that reads confidently from thin evidence is the failure mode
-                this section exists to prevent - and the model writer is
-                required to keep every one of them. */}
-            <ul className="mt-1 flex flex-col gap-0.5 text-micro text-warn-ink">
-              {brief.caveats.map((caveat) => (
-                <li key={caveat}>{caveat}</li>
+          )}
+          <ExpandLink onClick={() => setDeep("brain")}>Expand the brain</ExpandLink>
+        </Panel>
+      ))}
+
+      {show("action", (
+        <Panel
+          title="Next Best Action"
+          subtitle={
+            governance?.nba
+              ? `${governance.nba.degraded ? "deterministic" : "model-explained"} · policy v${governance.nba.policy_version}`
+              : undefined
+          }
+          accent="accent"
+          elevated
+        >
+          {/* There is no auto-execute control here for any action, at any risk
+              class. A high-risk action's only path is Request approval, and the
+              backend refuses `intent: auto` on the floor whether or not this
+              panel offers it. */}
+          <NextBestAction
+            incidentId={incidentId}
+            nba={governance?.nba ?? null}
+            canCommand={canCommand}
+            onChanged={() => {
+              reloadGovernance();
+              reload();
+            }}
+          />
+          <ExpandLink onClick={() => setDeep("action")}>
+            Plan, risk and approval
+          </ExpandLink>
+        </Panel>
+      ))}
+
+      {show("timeline", (
+        <Panel
+          title="Incident Timeline"
+          subtitle={`${incident?.transitions.length ?? 0} moves`}
+        >
+          {incident && incident.transitions.length > 0 ? (
+            <ul className="flex flex-col text-small">
+              {incident.transitions.map((move, index) => (
+                <li
+                  key={`${move.at}-${index}`}
+                  className="grid grid-cols-[48px_1fr] gap-2.5 border-t border-line py-1.5"
+                >
+                  <span className="font-mono text-ink-muted">
+                    {move.at.slice(11, 16)}
+                  </span>
+                  <span>
+                    {move.kind === "severity"
+                      ? `severity ${move.severity_before ?? "?"} → ${move.severity_after ?? "?"}`
+                      : `${move.from_state} → ${move.to_state}`}
+                    <span className="text-ink-muted"> by {move.actor_id}</span>
+                    {move.reason && (
+                      <span className="text-ink-muted"> — {move.reason}</span>
+                    )}
+                  </span>
+                </li>
               ))}
             </ul>
-          </div>
-        )}
-        <ExpandLink onClick={() => setDeep("brain")}>Expand the brain</ExpandLink>
-      </Panel>
-
-      <Panel
-        title="Next Best Action"
-        subtitle={
-          governance?.nba
-            ? `${governance.nba.degraded ? "deterministic" : "model-explained"} · policy v${governance.nba.policy_version}`
-            : undefined
-        }
-        accent="accent"
-        elevated
-      >
-        {/* There is no auto-execute control here for any action, at any risk
-            class. A high-risk action's only path is Request approval, and the
-            backend refuses `intent: auto` on the floor whether or not this
-            panel offers it. */}
-        <NextBestAction
-          incidentId={incidentId}
-          nba={governance?.nba ?? null}
-          canCommand={canCommand}
-          onChanged={() => {
-            reloadGovernance();
-            reload();
-          }}
-        />
-        <ExpandLink onClick={() => setDeep("action")}>
-          Plan, risk and approval
-        </ExpandLink>
-      </Panel>
-
-      <Panel
-        title="Incident Timeline"
-        subtitle={`${incident?.transitions.length ?? 0} moves`}
-      >
-        {incident && incident.transitions.length > 0 ? (
-          <ul className="flex flex-col text-small">
-            {incident.transitions.map((move, index) => (
-              <li
-                key={`${move.at}-${index}`}
-                className="grid grid-cols-[48px_1fr] gap-2.5 border-t border-line py-1.5"
-              >
-                <span className="font-mono text-ink-muted">
-                  {move.at.slice(11, 16)}
-                </span>
-                <span>
-                  {move.kind === "severity"
-                    ? `severity ${move.severity_before ?? "?"} → ${move.severity_after ?? "?"}`
-                    : `${move.from_state} → ${move.to_state}`}
-                  <span className="text-ink-muted"> by {move.actor_id}</span>
-                  {move.reason && (
-                    <span className="text-ink-muted"> — {move.reason}</span>
-                  )}
-                </span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <EmptyState>Nothing has moved yet - this incident is new.</EmptyState>
-        )}
-      </Panel>
+          ) : (
+            <EmptyState>Nothing has moved yet - this incident is new.</EmptyState>
+          )}
+        </Panel>
+      ))}
     </>
   );
 
@@ -400,111 +468,119 @@ export function WarRoomShell({ incidentId }: { incidentId: string }) {
 
   const right = (
     <>
-      <Panel title="Incident Overview" subtitle={`opened ${room.opened_at.slice(11, 16)}`}>
-        <p className="text-dense font-semibold">{room.title}</p>
-        <dl className="mt-2 flex flex-col gap-1 text-small text-ink-muted">
-          <div>
-            <dt className="inline font-semibold">Blast radius: </dt>
-            <dd className="inline">{radius.summary}</dd>
-          </div>
-          <div>
-            <dt className="inline font-semibold">Evidence: </dt>
-            <dd className="inline">
-              {radius.source === "proposal"
-                ? "a detection verdict at declare time"
-                : "the severity a person typed; the detector had nothing to say"}
-            </dd>
-          </div>
-          {incident?.ticket && (
+      {show("overview", (
+        <Panel title="Incident Overview" subtitle={`opened ${room.opened_at.slice(11, 16)}`}>
+          <p className="text-dense font-semibold">{room.title}</p>
+          <dl className="mt-2 flex flex-col gap-1 text-small text-ink-muted">
             <div>
-              <dt className="inline font-semibold">ITSM: </dt>
+              <dt className="inline font-semibold">Blast radius: </dt>
+              <dd className="inline">{radius.summary}</dd>
+            </div>
+            <div>
+              <dt className="inline font-semibold">Evidence: </dt>
               <dd className="inline">
-                {incident.ticket.reference
-                  ? `${incident.ticket.reference} (${incident.ticket.state})`
-                  : incident.ticket.detail || incident.ticket.state}
+                {radius.source === "proposal"
+                  ? "a detection verdict at declare time"
+                  : "the severity a person typed; the detector had nothing to say"}
               </dd>
             </div>
-          )}
-          {incident?.change_windows.length ? (
-            <div>
-              <dt className="inline font-semibold">Changing: </dt>
-              <dd className="inline">
-                {incident.change_windows
-                  .map((change) => `${change.service} ${change.version ?? ""}`.trim())
-                  .join(", ")}
-              </dd>
-            </div>
-          ) : null}
-        </dl>
-      </Panel>
-
-      <Panel
-        title="Health Score and Metrics"
-        subtitle="as declared"
-        actions={
-          <Link
-            href={`/apps/${encodeURIComponent(room.app_id)}`}
-            className="text-small text-accent hover:underline"
-          >
-            live view
-          </Link>
-        }
-      >
-        {incident?.proposal ? (
-          <div className="flex flex-col gap-1 text-small">
-            <p className="flex items-baseline gap-2">
-              <span className="font-display text-hero font-extrabold leading-none">
-                {incident.proposal.health_score === null
-                  ? "--"
-                  : incident.proposal.health_score.toFixed(0)}
-              </span>
-              <StatePill state={incident.proposal.health_band || "unknown"} />
-            </p>
-            {/* A snapshot, and it says so: the live number has moved since. */}
-            <p className="text-ink-muted">
-              What the detector was reporting at the moment Declare was pressed.
-              It has not been recomputed since.
-            </p>
-            {incident.proposal.success_rate_pct !== null && (
-              <p className="font-mono text-ink-muted">
-                success {incident.proposal.success_rate_pct.toFixed(1)}% ·{" "}
-                {incident.proposal.regions_affected} of{" "}
-                {incident.proposal.regions_total} regions
-              </p>
+            {incident?.ticket && (
+              <div>
+                <dt className="inline font-semibold">ITSM: </dt>
+                <dd className="inline">
+                  {incident.ticket.reference
+                    ? `${incident.ticket.reference} (${incident.ticket.state})`
+                    : incident.ticket.detail || incident.ticket.state}
+                </dd>
+              </div>
             )}
-          </div>
-        ) : (
-          <EmptyState>
-            No detection verdict was attached to this declaration.
-          </EmptyState>
-        )}
-      </Panel>
+            {incident?.change_windows.length ? (
+              <div>
+                <dt className="inline font-semibold">Changing: </dt>
+                <dd className="inline">
+                  {incident.change_windows
+                    .map((change) => `${change.service} ${change.version ?? ""}`.trim())
+                    .join(", ")}
+                </dd>
+              </div>
+            ) : null}
+          </dl>
+        </Panel>
+      ))}
 
-      <Panel
-        title="Affected Services"
-        subtitle={radius.customer_facing ? "customers are feeling this" : undefined}
-      >
-        {/* S13. The blast radius the room was assembled from is the header's
-            summary above; this panel is the map it came from, with CONFIRMED
-            kept apart from PREDICTED. */}
-        <TopologyPanel incidentId={incidentId} />
-        {radius.regions.length > 0 && (
-          <p className="mt-2 text-small text-ink-muted">
-            Regions declared: {radius.regions.join(", ")}
-            {radius.regions_total ? ` of ${radius.regions_total}` : ""}
-          </p>
-        )}
-        <ExpandLink onClick={() => setDeep("radius")}>Open blast radius</ExpandLink>
-      </Panel>
+      {show("health", (
+        <Panel
+          title="Health Score and Metrics"
+          subtitle="as declared"
+          actions={
+            <Link
+              href={`/apps/${encodeURIComponent(room.app_id)}`}
+              className="text-small text-accent hover:underline"
+            >
+              live view
+            </Link>
+          }
+        >
+          {incident?.proposal ? (
+            <div className="flex flex-col gap-1 text-small">
+              <p className="flex items-baseline gap-2">
+                <span className="font-display text-hero font-extrabold leading-none">
+                  {incident.proposal.health_score === null
+                    ? "--"
+                    : incident.proposal.health_score.toFixed(0)}
+                </span>
+                <StatePill state={incident.proposal.health_band || "unknown"} />
+              </p>
+              {/* A snapshot, and it says so: the live number has moved since. */}
+              <p className="text-ink-muted">
+                What the detector was reporting at the moment Declare was pressed.
+                It has not been recomputed since.
+              </p>
+              {incident.proposal.success_rate_pct !== null && (
+                <p className="font-mono text-ink-muted">
+                  success {incident.proposal.success_rate_pct.toFixed(1)}% ·{" "}
+                  {incident.proposal.regions_affected} of{" "}
+                  {incident.proposal.regions_total} regions
+                </p>
+              )}
+            </div>
+          ) : (
+            <EmptyState>
+              No detection verdict was attached to this declaration.
+            </EmptyState>
+          )}
+        </Panel>
+      ))}
 
-      <Panel title="Warning and Guidance" subtitle="advisory, not measured">
-        <GuidancePanel
-          guidance={brainState.kind === "ready" ? brainState.guidance : null}
-        />
-        <ExpandLink onClick={() => setDeep("guidance")}>
-          History and relevance
-        </ExpandLink>
-      </Panel>
+      {show("radius", (
+        <Panel
+          title="Affected Services"
+          subtitle={radius.customer_facing ? "customers are feeling this" : undefined}
+        >
+          {/* S13. The blast radius the room was assembled from is the header's
+              summary above; this panel is the map it came from, with CONFIRMED
+              kept apart from PREDICTED. */}
+          <TopologyPanel incidentId={incidentId} />
+          {radius.regions.length > 0 && (
+            <p className="mt-2 text-small text-ink-muted">
+              Regions declared: {radius.regions.join(", ")}
+              {radius.regions_total ? ` of ${radius.regions_total}` : ""}
+            </p>
+          )}
+          <ExpandLink onClick={() => setDeep("radius")}>Open blast radius</ExpandLink>
+        </Panel>
+      ))}
+
+      {show("guidance", (
+        <Panel title="Warning and Guidance" subtitle="advisory, not measured">
+          <GuidancePanel
+            guidance={brainState.kind === "ready" ? brainState.guidance : null}
+          />
+          <ExpandLink onClick={() => setDeep("guidance")}>
+            History and relevance
+          </ExpandLink>
+        </Panel>
+      ))}
     </>
   );
 
@@ -513,103 +589,115 @@ export function WarRoomShell({ incidentId }: { incidentId: string }) {
   const below = (
     <div className="flex flex-col gap-4">
       <div className="grid gap-4 lg:grid-cols-2">
-        <Panel
-          title="Execution Ledger"
-          subtitle={
-            governance
-              ? `${governance.ledger.executions.length} attempt${governance.ledger.executions.length === 1 ? "" : "s"}`
-              : undefined
-          }
-        >
-          <ExecutionLedger
-            incidentId={incidentId}
-            ledger={governance?.ledger ?? { executions: [], approvals: [] }}
-            canCommand={canCommand}
-            onChanged={() => {
-              reloadGovernance();
-              reload();
-            }}
-          />
-          <ExpandLink onClick={() => setDeep("ledger")}>Open the ledger</ExpandLink>
-        </Panel>
+        {show("ledger", (
+          <Panel
+            title="Execution Ledger"
+            subtitle={
+              governance
+                ? `${governance.ledger.executions.length} attempt${governance.ledger.executions.length === 1 ? "" : "s"}`
+                : undefined
+            }
+          >
+            <ExecutionLedger
+              incidentId={incidentId}
+              ledger={governance?.ledger ?? { executions: [], approvals: [] }}
+              canCommand={canCommand}
+              onChanged={() => {
+                reloadGovernance();
+                reload();
+              }}
+            />
+            <ExpandLink onClick={() => setDeep("ledger")}>Open the ledger</ExpandLink>
+          </Panel>
+        ))}
 
-        <Panel
-          title="Recovery Validation"
-          subtitle={
-            governance?.validation?.latest
-              ? `cycle ${governance.validation.latest.cycle}`
-              : "not validated"
-          }
-        >
-          <ValidationPanel
-            incidentId={incidentId}
-            validation={governance?.validation ?? null}
-            canCommand={canCommand}
-            onChanged={() => {
-              reloadGovernance();
-              reload();
-              reloadBrain();
-            }}
-          />
-          <ExpandLink onClick={() => setDeep("verdict")}>
-            Layered verdict
-          </ExpandLink>
-        </Panel>
+        {show("validation", (
+          <Panel
+            title="Recovery Validation"
+            subtitle={
+              governance?.validation?.latest
+                ? `cycle ${governance.validation.latest.cycle}`
+                : "not validated"
+            }
+          >
+            <ValidationPanel
+              incidentId={incidentId}
+              validation={governance?.validation ?? null}
+              canCommand={canCommand}
+              onChanged={() => {
+                reloadGovernance();
+                reload();
+                reloadBrain();
+              }}
+            />
+            <ExpandLink onClick={() => setDeep("verdict")}>
+              Layered verdict
+            </ExpandLink>
+          </Panel>
+        ))}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Panel
-          title="Response Plan"
-          subtitle={
-            governance?.nba?.plan ? `version ${governance.nba.plan.version}` : undefined
-          }
-        >
-          <PlanDiff
-            incidentId={incidentId}
-            nba={governance?.nba ?? null}
-            canCommand={canCommand}
-            onChanged={reloadGovernance}
-          />
-        </Panel>
+        {show("plan", (
+          <Panel
+            title="Response Plan"
+            subtitle={
+              governance?.nba?.plan ? `version ${governance.nba.plan.version}` : undefined
+            }
+          >
+            <PlanDiff
+              incidentId={incidentId}
+              nba={governance?.nba ?? null}
+              canCommand={canCommand}
+              onChanged={reloadGovernance}
+            />
+          </Panel>
+        ))}
 
-        <Panel
-          title="Communications"
-          subtitle={
-            governance?.comms && governance.comms.contradicted.length > 0
-              ? `${governance.comms.contradicted.length} contradicted`
-              : "nothing sends itself"
-          }
-        >
-          <CommsPanel
-            incidentId={incidentId}
-            comms={governance?.comms ?? null}
-            permissions={me?.permissions ?? []}
-            onChanged={reloadGovernance}
-          />
-          <ExpandLink onClick={() => setDeep("comms")}>
-            Audiences and redlines
-          </ExpandLink>
-        </Panel>
+        {show("comms", (
+          <Panel
+            title="Communications"
+            subtitle={
+              governance?.comms && governance.comms.contradicted.length > 0
+                ? `${governance.comms.contradicted.length} contradicted`
+                : "nothing sends itself"
+            }
+          >
+            <CommsPanel
+              incidentId={incidentId}
+              comms={governance?.comms ?? null}
+              permissions={me?.permissions ?? []}
+              onChanged={reloadGovernance}
+            />
+            <ExpandLink onClick={() => setDeep("comms")}>
+              Audiences and redlines
+            </ExpandLink>
+          </Panel>
+        ))}
       </div>
 
-      <section aria-label="Acknowledgement board" className="flex flex-col gap-2">
-        <h2 className="text-h6 text-ink-muted">Paging</h2>
-        <AckBoard
+      {show("paging", (
+        <section aria-label="Acknowledgement board" className="flex flex-col gap-2">
+          <h2 className="text-h6 text-ink-muted">Paging</h2>
+          <AckBoard
+            incidentId={incidentId}
+            pages={room.pages}
+            currentUserId={me?.user_id ?? null}
+            canEscalate={canCommand}
+            onChanged={reload}
+          />
+        </section>
+      ))}
+
+      {show("tasks", (
+        <TaskBoard
           incidentId={incidentId}
-          pages={room.pages}
+          tasks={room.tasks}
           currentUserId={me?.user_id ?? null}
-          canEscalate={canCommand}
+          canCommand={canCommand}
           onChanged={reload}
         />
-      </section>
-
-      <TaskBoard
-        incidentId={incidentId}
-        tasks={room.tasks}
-        currentUserId={me?.user_id ?? null}
-        canCommand={canCommand}
-        onChanged={reload}
-      />
+      ))}
     </div>
   );
 
