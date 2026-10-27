@@ -104,6 +104,19 @@ notification binding; and nothing told anyone that a severity had been proposed.
   scope) so the page can list what is applied. *Verified:* in Chrome - inject from the page,
   tiles turn, abort, tiles recover.
 
+- **[S10-T08][REQ-040, REQ-052] A failing journey's detail is its last failure.** Found on
+  the second live incident: once a probe passed after a run of 403s, `JourneyHealth.last_detail`
+  became "ok", the license signature stopped matching, and the brain re-titled the slot
+  generically and counted the probe *for* "infrastructure" again (node versions at 17:04 and
+  17:16 in the walk-through database show the flip). `journey_health` now takes the detail
+  from the most recent failed record while the row is failing.
+
+- **Demo-day setting, not code: `LLM_INCIDENT_TOKEN_BUDGET=3000000` in `.env`.** On the Claude
+  API, thinking is on by default and counts as output tokens, and the brain re-reasons on every
+  incident event; the default 200,000-token budget per incident was spent in about ten minutes
+  (`budget_exhausted` at 199,693), after which every AI surface degraded by design. The budget
+  is an in-process ledger, so an API restart also resets it.
+
 ## Not built / deferred
 
 - **T13-T18 (P2).** Severity fallback to the application tier and a services-affected rule;

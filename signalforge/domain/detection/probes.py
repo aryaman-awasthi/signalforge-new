@@ -113,16 +113,23 @@ def journey_health(
     rows: list[JourneyHealth] = []
     for (journey_id, region), items in buckets.items():
         ordered = sorted(items, key=lambda record: record.at)
+        failures = [r for r in ordered if r.verdict is ProbeVerdict.FAILED]
         rows.append(
             JourneyHealth(
                 journey_id=journey_id,
                 region=region,
                 passed=sum(1 for r in ordered if r.verdict is ProbeVerdict.PASSED),
-                failed=sum(1 for r in ordered if r.verdict is ProbeVerdict.FAILED),
+                failed=len(failures),
                 unknown=sum(1 for r in ordered if r.verdict is ProbeVerdict.UNKNOWN),
                 tier=tiers.get(journey_id or ""),
                 last_at=ordered[-1].at,
-                last_detail=ordered[-1].detail,
+                # A failing journey's detail describes its most recent failure,
+                # not whichever probe happened to run last: the moment a probe
+                # passed after a run of refusals, the refusal's words ("403
+                # LICENSE_EXPIRED") vanished from the evidence while the row
+                # still counted as failing, and the brain lost the one thing
+                # that named the cause.
+                last_detail=(failures[-1] if failures else ordered[-1]).detail,
             )
         )
     return tuple(
