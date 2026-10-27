@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
  * One error shape for the whole application: {@code {"detail": "..."}}.
@@ -25,6 +26,17 @@ public class ApiExceptionHandler {
     @ExceptionHandler(NotFoundException.class)
     public ResponseEntity<Map<String, String>> notFound(NotFoundException exc) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("detail", exc.getMessage()));
+    }
+
+    /**
+     * A static path that does not exist is a 404, not a failure of the harness. Without this
+     * the catch-all below turned every browser's reflexive {@code /favicon.ico} into a 500 and
+     * a stack trace in the log.
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<Map<String, String>> noResource(NoResourceFoundException exc) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Map.of("detail", "no such resource: " + exc.getResourcePath()));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

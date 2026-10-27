@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PaySphere console</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23d9480f'/%3E%3C/svg%3E">
+<style>
+  :root { --bg:#f6f7f8; --panel:#ffffff; --ink:#1c1f23; --muted:#6b7280; --line:#e2e5e9;
+          --ok:#1a7f4b; --warn:#b45309; --bad:#c2271d; --accent:#d9480f; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  header { display:flex; flex-wrap:wrap; align-items:baseline; gap:14px; padding:14px 24px; background:var(--panel); border-bottom:2px solid var(--line); position:sticky; top:0; }
+  header h1 { margin:0; font-size:18px; } header .sub { color:var(--muted); font-size:12px; }
+  header .pill { margin-left:auto; font:12px var(--mono); padding:3px 8px; border:1px solid var(--line); }
+  main { max-width:1360px; margin:0 auto; padding:18px 24px 48px; display:grid; gap:18px; grid-template-columns:1fr 1fr; }
+  section { background:var(--panel); border:1px solid var(--line); padding:14px 16px; }
+  section.wide { grid-column:1/-1; }
+  h2 { margin:0 0 10px; font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:5px 6px; border-top:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:500; border-top:0; }
+  td.num, th.num { text-align:right; font-family:var(--mono); }
+  .ok { color:var(--ok); } .warn { color:var(--warn); } .bad { color:var(--bad); font-weight:600; }
+  .tiles { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+  .tile { border:1px solid var(--line); padding:10px 12px; background:#fafbfc; }
+  .tile .k { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; }
+  .tile .v { font:600 26px/1.1 var(--mono); margin-top:4px; }
+  .tile .d { font-size:11px; color:var(--muted); margin-top:4px; }
+  button { font:inherit; font-size:12px; padding:5px 10px; border:1px solid var(--line); background:#fff; cursor:pointer; }
+  button:hover { border-color:var(--accent); color:var(--accent); }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  button.danger { border-color:var(--bad); color:var(--bad); }
+  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .scenario { border:1px solid var(--line); padding:8px 10px; display:flex; gap:10px; align-items:flex-start; }
+  .scenario .name { font-weight:600; } .scenario .desc { font-size:12px; color:var(--muted); }
+  .kit code, code { font:12px var(--mono); background:#f1f3f5; padding:1px 5px; }
+  .kit dl { display:grid; grid-template-columns:max-content 1fr auto; gap:6px 12px; align-items:center; margin:0; }
+  .kit dt { color:var(--muted); } .kit dd { margin:0; font-family:var(--mono); font-size:12px; word-break:break-all; }
+  .log { font:12px var(--mono); white-space:pre-wrap; max-height:220px; overflow:auto; margin:0; }
+  .log .error { color:var(--bad); } .log .warning { color:var(--warn); }
+  .toast { position:fixed; right:18px; bottom:18px; background:var(--ink); color:#fff; padding:8px 12px; font-size:12px; opacity:0; transition:opacity .2s; }
+  .toast.show { opacity:1; }
+  .muted { color:var(--muted); font-size:12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>PaySphere</h1>
+  <span class="sub">payments simulator · the application SignalForge is onboarded against</span>
+  <span class="pill" id="where">—</span>
+</header>
+<main>
+  <section class="wide">
+    <h2>Right now</h2>
+    <div class="tiles" id="tiles"></div>
+  </section>
+
+  <section>
+    <h2>Journeys, by region</h2>
+    <table id="journeys"><thead><tr><th>journey</th><th>region</th><th class="num">success</th><th class="num">p95 ms</th><th class="num">ok</th><th class="num">failed</th></tr></thead><tbody></tbody></table>
+  </section>
+
+  <section>
+    <h2>Health, as the application reports it</h2>
+    <table id="health"><thead><tr><th>component</th><th>status</th><th>detail</th></tr></thead><tbody></tbody></table>
+  </section>
+
+  <section class="wide">
+    <h2>Faults <span class="muted">— injected through the application's own chaos contract, on the drill credential; each expires on its own</span></h2>
+    <div class="row" id="scenarios"></div>
+    <table id="injections" style="margin-top:12px"><thead><tr><th>active injection</th><th>scenario</th><th>started</th><th>scope</th><th></th></tr></thead><tbody></tbody></table>
+  </section>
+
+  <section class="kit wide">
+    <h2>Onboarding kit <span class="muted">— everything the SignalForge wizard asks for, ready to paste</span></h2>
+    <dl>
+      <dt>base URL</dt><dd id="kit-base"></dd><dd><button data-copy="#kit-base">copy</button></dd>
+      <dt>read-only credential</dt><dd>ps-ro-4f1c8a2b6d9e</dd><dd><button data-copy-text="ps-ro-4f1c8a2b6d9e">copy</button></dd>
+      <dt>remediation credential</dt><dd>ps-rem-7a3d5e0c1b84</dd><dd><button data-copy-text="ps-rem-7a3d5e0c1b84">copy</button></dd>
+      <dt>drill credential</dt><dd>ps-drill-2c9f6b1a7e35</dd><dd><button data-copy-text="ps-drill-2c9f6b1a7e35">copy</button></dd>
+      <dt>step 3 · mapping</dt><dd>six golden signals, two regions, four journeys, eight probes</dd><dd><button id="copy-mapping">copy mapping JSON</button></dd>
+      <dt>step 4 · topology</dt><dd>the live dependency map, as the application publishes it</dd><dd><button id="copy-topology">copy topology JSON</button></dd>
+      <dt>step 5 · SLOs</dt><dd>payments-availability 99.0% / 30 days / journey upi / indicator <code>payments-availability</code> · payments-latency 99.0% / 30 days / journey upi / indicator <code>payments-latency</code></dd><dd></dd>
+    </dl>
+    <p class="muted" style="margin:10px 0 0">Step 2: bind <code>http-observe-metrics</code>, <code>-health</code>, <code>-logs</code>, <code>-traces</code>, <code>topo-import</code> read-only; <code>http-observe-actions</code> at remediation scope; <code>http-observe-chaos</code> at drill scope; turn on <code>notify-in-app</code> and <code>page-sim</code>. The credentials are demo keys and are printed in the application's own configuration on purpose.</p>
+  </section>
+
+  <section class="wide">
+    <h2>Recent errors and warnings <span class="muted">— from /observe/logs</span></h2>
+    <pre class="log" id="log"></pre>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  const RO = "ps-ro-4f1c8a2b6d9e", DRILL = "ps-drill-2c9f6b1a7e35", SCOPE = "drill:paysphere-console";
+  const auth = (key) => ({ "Authorization": "Bearer " + key, "Content-Type": "application/json" });
+  const $ = (s) => document.querySelector(s);
+  const base = location.origin;
+  $("#where").textContent = base;
+  $("#kit-base").textContent = base;
+
+  // Parameters a fault needs when a button, not a form, injects it. One honest
+  // default per scenario; anything else is a drill's business.
+  const DEFAULT_PARAMS = {
+    "license-expiry": {},
+    "gateway-down": { link: "GW-B" },
+    "fabric-link-loss": { link: "FIB-7", loss_ratio: 0.6 },
+    "rail-latency": { latency_ms: 2500 },
+    "db-pool-shrink": { region: "region-b", pool_size: 2 },
+    "rollback-delay": { delay_ms: 30000 },
+  };
+
+  function toast(text) { const t = $("#toast"); t.textContent = text; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2200); }
+  async function copy(text, what) { try { await navigator.clipboard.writeText(text); toast("copied " + what); } catch { toast("copy failed - select it by hand"); } }
+
+  // Prometheus text exposition -> [{name, labels, value}]. Only the shape the
+  // harness writes; this is a console, not a scraper.
+  function parseMetrics(text) {
+    const out = [];
+    for (const line of text.split("\n")) {
+      if (!line || line[0] === "#") continue;
+      const m = /^([a-zA-Z_:][\w:]*)(\{([^}]*)\})?\s+(-?[\d.eE+]+|NaN)/.exec(line);
+      if (!m) continue;
+      const labels = {};
+      if (m[3]) for (const kv of m[3].split(",")) { const i = kv.indexOf("="); if (i > 0) labels[kv.slice(0, i).trim()] = kv.slice(i + 1).trim().replace(/^"|"$/g, ""); }
+      out.push({ name: m[1], labels, value: Number(m[4]) });
+    }
+    return out;
+  }
+  const pick = (ms, name, labels = {}) => ms.filter(x => x.name === name && Object.entries(labels).every(([k, v]) => x.labels[k] === v));
+  const one = (ms, name, labels) => { const r = pick(ms, name, labels); return r.length ? r[0].value : null; };
+  const fmt = (n, d = 0) => n === null || Number.isNaN(n) ? "—" : n.toFixed(d);
+
+  function tile(k, v, d, cls = "") { return `<div class="tile"><div class="k">${k}</div><div class="v ${cls}">${v}</div><div class="d">${d}</div></div>`; }
+
+  async function refresh() {
+    try {
+      const [mt, health, inj] = await Promise.all([
+        fetch(base + "/observe/metrics", { headers: auth(RO) }).then(r => r.text()),
+        fetch(base + "/observe/health", { headers: auth(RO) }).then(r => r.json()),
+        fetch(base + "/observe/chaos/injections", { headers: auth(DRILL) }).then(r => r.ok ? r.json() : { injections: [] }),
+      ]);
+      const ms = parseMetrics(mt);
+      const licenseValid = one(ms, "processor_license_valid") === 1;
+      const remaining = one(ms, "processor_license_seconds_remaining");
+      const ratios = pick(ms, "payment_success_ratio").map(x => x.value);
+      const worstRatio = ratios.length ? Math.min(...ratios) : null;
+      const p95s = pick(ms, "payment_latency_p95_ms").map(x => x.value);
+      const worstP95 = p95s.length ? Math.max(...p95s) : null;
+      const linksDown = pick(ms, "fabric_link_up").filter(x => x.value === 0).map(x => x.labels.link);
+      const unknown = pick(ms, "payments_unknown").reduce((a, x) => a + x.value, 0);
+      const active = (inj.injections || []);
+
+      $("#tiles").innerHTML =
+        tile("processor license", licenseValid ? "valid" : "EXPIRED", licenseValid ? `${Math.round((remaining || 0) / 86400)} days left` : "every payment refused with LICENSE_EXPIRED", licenseValid ? "ok" : "bad") +
+        tile("worst success ratio", fmt(worstRatio, 2), "over the last 200 payments, any region / journey", worstRatio === null ? "" : worstRatio < 0.8 ? "bad" : worstRatio < 0.95 ? "warn" : "ok") +
+        tile("worst p95 latency", fmt(worstP95) + " ms", "nearest-rank, last 200 payments", worstP95 !== null && worstP95 > 1500 ? "warn" : "") +
+        tile("fabric links down", String(linksDown.length), linksDown.length ? linksDown.join(", ") : "all seven carrying traffic", linksDown.length ? "bad" : "ok") +
+        tile("payments unknown", fmt(unknown), "rail never confirmed; reconciliation backlog", unknown > 50 ? "warn" : "") +
+        tile("health", health.status, (health.components || []).filter(c => c.status !== "up").map(c => c.component).join(", ") || "every component up", health.status === "up" ? "ok" : health.status === "degraded" ? "warn" : "bad") +
+        tile("active faults", String(active.length), active.map(i => i.scenario_id).join(", ") || "none injected", active.length ? "warn" : "ok") +
+        tile("pool in use", pick(ms, "db_pool_in_use").map(x => `${x.labels.region.slice(-1)}:${x.value}`).join("  "), "ledger connections held, per region");
+
+      const rows = [];
+      for (const j of ["upi", "card", "wallet", "refund"]) for (const r of ["region-a", "region-b"]) {
+        const ratio = one(ms, "payment_success_ratio", { journey: j, region: r });
+        const p95 = one(ms, "payment_latency_p95_ms", { journey: j, region: r });
+        const okc = one(ms, "payment_requests_total", { journey: j, region: r, status: "success" });
+        const failed = one(ms, "payment_requests_total", { journey: j, region: r, status: "failed" });
+        const cls = ratio === null ? "" : ratio < 0.8 ? "bad" : ratio < 0.95 ? "warn" : "ok";
+        rows.push(`<tr><td>${j}</td><td>${r}</td><td class="num ${cls}">${fmt(ratio, 2)}</td><td class="num">${fmt(p95)}</td><td class="num">${fmt(okc)}</td><td class="num">${fmt(failed)}</td></tr>`);
+      }
+      $("#journeys tbody").innerHTML = rows.join("");
+
+      $("#health tbody").innerHTML = (health.components || []).map(c =>
+        `<tr><td>${c.component}</td><td class="${c.status === "up" ? "ok" : c.status === "degraded" ? "warn" : "bad"}">${c.status}</td><td class="muted">${c.detail || ""}</td></tr>`).join("");
+
+      $("#injections tbody").innerHTML = active.length ? active.map(i =>
+        `<tr><td class="num" style="text-align:left">${i.injection_id}</td><td>${i.scenario_id}</td><td>${new Date(i.started_at).toLocaleTimeString()}</td><td class="muted">${i.scope}</td><td><button class="danger" data-abort="${i.injection_id}">abort</button></td></tr>`).join("")
+        : `<tr><td colspan="5" class="muted">nothing injected</td></tr>`;
+    } catch (e) {
+      $("#tiles").innerHTML = tile("console", "offline", String(e.message || e), "bad");
+    }
+    try {
+      const logs = await fetch(base + "/observe/logs?limit=40", { headers: auth(RO) }).then(r => r.json());
+      const lines = (logs.records || []).filter(x => x.level === "error" || x.level === "warning").slice(0, 14);
+      $("#log").innerHTML = lines.map(x => `<span class="${x.level}">${x.ts.slice(11, 19)} ${x.level.padEnd(7)} ${x.service.padEnd(16)}</span> ${x.message}`).join("\n") || "nothing above info";
+    } catch {}
+  }
+
+  async function loadScenarios() {
+    const doc = await fetch(base + "/observe/chaos", { headers: auth(DRILL) }).then(r => r.json());
+    $("#scenarios").innerHTML = (doc.scenarios || []).map(s => {
+      const params = DEFAULT_PARAMS[s.scenario_id] || {};
+      return `<div class="scenario"><div><div class="name">${s.name}</div><div class="desc">${s.description.split(".")[0]}. ${Math.round(s.max_duration_s / 60)} min · <code>${JSON.stringify(params)}</code></div></div><button class="primary" data-inject="${s.scenario_id}">inject</button></div>`;
+    }).join("");
+  }
+
+  document.addEventListener("click", async (ev) => {
+    const b = ev.target.closest("button"); if (!b) return;
+    if (b.dataset.inject) {
+      const id = b.dataset.inject;
+      const r = await fetch(`${base}/observe/chaos/${id}/inject`, { method: "POST", headers: auth(DRILL),
+        body: JSON.stringify({ params: DEFAULT_PARAMS[id] || {}, scope: SCOPE, idempotency_key: `console-${id}-${Date.now()}` }) });
+      toast(r.ok ? `injected ${id}` : `refused: ${(await r.json()).detail || r.status}`); refresh();
+    } else if (b.dataset.abort) {
+      const r = await fetch(`${base}/observe/chaos/injections/${b.dataset.abort}/abort`, { method: "POST", headers: auth(DRILL) });
+      toast(r.ok ? "aborted" : `refused: ${r.status}`); refresh();
+    } else if (b.dataset.copyText) {
+      copy(b.dataset.copyText, "credential");
+    } else if (b.dataset.copy) {
+      copy($(b.dataset.copy).textContent, "base URL");
+    } else if (b.id === "copy-mapping") {
+      const mapping = await fetch(base + "/onboarding/mapping.json").then(r => r.text());
+      copy(mapping, "mapping JSON - paste it into the wizard's Map step");
+    } else if (b.id === "copy-topology") {
+      const t = await fetch(base + "/observe/topology", { headers: auth(RO) }).then(r => r.json());
+      const doc = { version: t.version || t.fingerprint || undefined, nodes: t.nodes, edges: t.edges };
+      copy(JSON.stringify(doc, null, 2), "topology JSON - paste it into the wizard's Topology step");
+    }
+  });
+
+  loadScenarios(); refresh(); setInterval(refresh, 3000);
+})();
+</script>
+</body>
+</html>

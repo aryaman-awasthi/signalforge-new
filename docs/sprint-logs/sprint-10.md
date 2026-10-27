@@ -87,6 +87,23 @@ notification binding; and nothing told anyone that a severity had been proposed.
   reading; the warning is correctly absent in the screenshot because the drill binds
   `notify-in-app`.
 
+- **[S10-T15][REQ-036] The wizard prefills what it knows, and the Map step takes a paste.**
+  `PullConnectorCard.tsx` merges the application's base URL and discovery's suggestions into
+  empty declared fields by effect (the `useState` initializer never saw them); `MapStep.tsx`
+  gains "Import mapping from JSON", which fills the form and leaves Save to a person.
+  *Verified:* typecheck; the harness console's "copy mapping JSON" produces the document it
+  reads.
+
+- **[S10-T20][REQ-070] A console for the reference application.** `reference-app/.../static/
+  index.html`, served at `/` on :8080 with no credential (the filter guards `/observe/*`
+  only): live tiles (license, worst success ratio, worst p95, links down, unknown payments,
+  health, active faults, pool), journeys by region, the health report, every published fault
+  as a button with one honest default parameter set, the active injections with abort, the
+  recent errors, and an onboarding kit - base URL, the three demo credentials, "copy mapping
+  JSON", "copy topology JSON", the SLO values. Plus `GET /observe/chaos/injections` (drill
+  scope) so the page can list what is applied. *Verified:* in Chrome - inject from the page,
+  tiles turn, abort, tiles recover.
+
 ## Not built / deferred
 
 - **T13-T18 (P2).** Severity fallback to the application tier and a services-affected rule;

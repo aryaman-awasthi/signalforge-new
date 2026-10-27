@@ -2,7 +2,9 @@ package com.novapay.paysphere.chaos;
 
 import java.time.Clock;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -222,6 +224,16 @@ public class ChaosEngine {
                 null,
                 Map.of("scenario_id", scenarioId, "injection_id", row.injectionId(), "scope", scope));
         return toInjection(row);
+    }
+
+    /** Every injection currently applied, oldest first. What a console lists and aborts. */
+    public List<Injection> active() {
+        List<Injection> out = new ArrayList<>();
+        for (InjectionRow row : ledger.injectionsInState(ACTIVE)) {
+            out.add(toInjection(row));
+        }
+        out.sort(java.util.Comparator.comparing(Injection::startedAt));
+        return out;
     }
 
     public Injection status(String injectionId) {

@@ -1,0 +1,76 @@
+{
+  "region_label": "region",
+  "regions": ["region-a", "region-b"],
+  "signals": [
+    {
+      "key": "payments-availability",
+      "signal": "availability",
+      "selector": "payment_success_ratio",
+      "direction": "lower_is_worse",
+      "unit": "ratio",
+      "description": "Share of the last 200 payments that succeeded or are legitimately pending.",
+      "business_counter": false
+    },
+    {
+      "key": "payments-latency",
+      "signal": "latency",
+      "selector": "payment_latency_p95_ms",
+      "direction": "higher_is_worse",
+      "unit": "ms",
+      "description": "Nearest-rank p95 over the last 200 payment latencies.",
+      "business_counter": false
+    },
+    {
+      "key": "payments-traffic",
+      "signal": "traffic",
+      "selector": "payment_requests_total",
+      "direction": "lower_is_worse",
+      "unit": "requests",
+      "description": "Customer payment requests. A collapse in traffic is an outage nobody reported.",
+      "business_counter": false
+    },
+    {
+      "key": "payments-errors",
+      "signal": "errors",
+      "selector": "payment_requests_total{status=\"failed\"}",
+      "direction": "higher_is_worse",
+      "unit": "requests",
+      "description": "Payment requests the application recorded as failed, by region and journey.",
+      "business_counter": false
+    },
+    {
+      "key": "ledger-pool",
+      "signal": "saturation",
+      "selector": "db_pool_in_use",
+      "direction": "higher_is_worse",
+      "unit": "connections",
+      "description": "Payments currently holding a ledger connection.",
+      "business_counter": false
+    },
+    {
+      "key": "payments-unknown",
+      "signal": "business",
+      "selector": "payments_unknown",
+      "direction": "higher_is_worse",
+      "unit": "payments",
+      "description": "Payments whose outcome the rail never confirmed. This is money in an unknown state.",
+      "business_counter": true
+    }
+  ],
+  "journeys": [
+    { "journey_id": "upi", "name": "UPI payment", "tier": 1, "description": "" },
+    { "journey_id": "card", "name": "Card payment", "tier": 1, "description": "" },
+    { "journey_id": "wallet", "name": "Wallet top-up", "tier": 2, "description": "" },
+    { "journey_id": "refund", "name": "Refund", "tier": 2, "description": "" }
+  ],
+  "probes": [
+    { "probe_id": "upi-region-a", "path": "/api/payments/probe/upi?region=region-a", "method": "GET", "expected_status": 200, "timeout_s": 5, "journey_id": "upi", "per_region": false, "synthetic_header": "X-SignalForge-Synthetic" },
+    { "probe_id": "upi-region-b", "path": "/api/payments/probe/upi?region=region-b", "method": "GET", "expected_status": 200, "timeout_s": 5, "journey_id": "upi", "per_region": false, "synthetic_header": "X-SignalForge-Synthetic" },
+    { "probe_id": "card-region-a", "path": "/api/payments/probe/card?region=region-a", "method": "GET", "expected_status": 200, "timeout_s": 5, "journey_id": "card", "per_region": false, "synthetic_header": "X-SignalForge-Synthetic" },
+    { "probe_id": "card-region-b", "path": "/api/payments/probe/card?region=region-b", "method": "GET", "expected_status": 200, "timeout_s": 5, "journey_id": "card", "per_region": false, "synthetic_header": "X-SignalForge-Synthetic" },
+    { "probe_id": "wallet-region-a", "path": "/api/payments/probe/wallet?region=region-a", "method": "GET", "expected_status": 200, "timeout_s": 5, "journey_id": "wallet", "per_region": false, "synthetic_header": "X-SignalForge-Synthetic" },
+    { "probe_id": "wallet-region-b", "path": "/api/payments/probe/wallet?region=region-b", "method": "GET", "expected_status": 200, "timeout_s": 5, "journey_id": "wallet", "per_region": false, "synthetic_header": "X-SignalForge-Synthetic" },
+    { "probe_id": "refund-region-a", "path": "/api/payments/probe/refund?region=region-a", "method": "GET", "expected_status": 200, "timeout_s": 5, "journey_id": "refund", "per_region": false, "synthetic_header": "X-SignalForge-Synthetic" },
+    { "probe_id": "refund-region-b", "path": "/api/payments/probe/refund?region=region-b", "method": "GET", "expected_status": 200, "timeout_s": 5, "journey_id": "refund", "per_region": false, "synthetic_header": "X-SignalForge-Synthetic" }
+  ]
+}

@@ -170,6 +170,12 @@ public class ObserveController {
         return chaos.inject(scenarioId, request.params(), request.scope(), request.idempotencyKey());
     }
 
+    /** Active injections, for a console that has to show what is applied and abort it. */
+    @GetMapping("/observe/chaos/injections")
+    public Map<String, Object> activeInjections() {
+        return Map.of("injections", chaos.active());
+    }
+
     @GetMapping("/observe/chaos/injections/{injection_id}")
     public ChaosEngine.Injection injectionStatus(@PathVariable("injection_id") String injectionId) {
         return chaos.status(injectionId);
