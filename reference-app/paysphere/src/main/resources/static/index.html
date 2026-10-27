@@ -218,7 +218,9 @@
       copy(mapping, "mapping JSON - paste it into the wizard's Map step");
     } else if (b.id === "copy-topology") {
       const t = await fetch(base + "/observe/topology", { headers: auth(RO) }).then(r => r.json());
-      const doc = { version: t.version || t.fingerprint || undefined, nodes: t.nodes, edges: t.edges };
+      // Exactly the application's snapshot, including when it was captured:
+      // the platform's topology contract requires captured_at.
+      const doc = { version: t.version || t.fingerprint || undefined, captured_at: t.captured_at || new Date().toISOString(), nodes: t.nodes, edges: t.edges };
       copy(JSON.stringify(doc, null, 2), "topology JSON - paste it into the wizard's Topology step");
     }
   });

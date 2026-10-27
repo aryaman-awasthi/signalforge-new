@@ -374,13 +374,21 @@ class OnboardingService:
                 binding_id,
             )
 
+        # An uploaded map is `nodes`, `edges` and an optional `version` - that
+        # is what the screen promises. The snapshot contract also wants a
+        # capture time, and for a document somebody pasted the honest value is
+        # the moment it was uploaded. A document that declares its own is kept.
+        document = dict(document)
+        if not document.get("captured_at"):
+            document["captured_at"] = self._clock.now().isoformat()
+
         try:
             if binding is not None:
                 # The bound adapter is the translator when there is one, so an
                 # upload and a scheduled pull produce the same snapshot from the
                 # same content - which is what makes versions comparable.
                 snapshot: TopologySnapshot = await self._invoker.invoke(
-                    principal.tenant_id, binding.id, NORMALIZE_CAPABILITY, dict(document)
+                    principal.tenant_id, binding.id, NORMALIZE_CAPABILITY, document
                 )
                 normalized_by = binding.adapter_id
             else:
