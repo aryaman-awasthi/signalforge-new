@@ -73,6 +73,16 @@ public class TopologyService {
         nodes.add(node("core-switch", "Core switch", "other", null, "CORE"));
         nodes.add(node("settlement-rail", "Settlement rail", "external", null, "RAIL"));
         nodes.add(new Node("ledger-db", "Payment ledger", "database", null, Map.of("engine", "h2")));
+        // The vendor SDK every aggregator authorises through. Not on any fabric link: a fault here
+        // is a fault in a credential, and blast radius has to be able to reach it from both regions
+        // without walking a route.
+        nodes.add(
+                new Node(
+                        "payment-processor",
+                        "Payment processor SDK",
+                        "external",
+                        null,
+                        Map.of("licensed", "true")));
         nodes.add(
                 new Node(
                         "config-registry",
@@ -99,6 +109,9 @@ public class TopologyService {
                     edges.add(new Edge(source, target, "calls", Map.of("region", entry.getKey())));
                 }
             }
+        }
+        for (String aggregator : List.of("aggregator-a", "aggregator-b")) {
+            edges.add(new Edge(aggregator, "payment-processor", "depends_on", Map.of()));
         }
         for (String gateway : List.of("gateway-a", "gateway-b")) {
             edges.add(new Edge(gateway, "ledger-db", "depends_on", Map.of()));

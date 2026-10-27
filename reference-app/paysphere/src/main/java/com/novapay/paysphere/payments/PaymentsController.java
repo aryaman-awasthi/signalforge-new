@@ -63,15 +63,27 @@ public class PaymentsController {
 
         PaymentService.Outcome outcome = payments.place(journey, region, amountMinor, synthetic);
         HttpStatus status =
-                switch (outcome.state()) {
-                    case SUCCESS -> HttpStatus.CREATED;
-                    case PENDING -> HttpStatus.ACCEPTED;
-                    // A payment whose outcome is unknown is not a failure of this request, and a
-                    // caller told "failed" would retry and pay twice. 202 says "accepted, ask again".
-                    case UNKNOWN -> HttpStatus.ACCEPTED;
-                    default -> HttpStatus.SERVICE_UNAVAILABLE;
-                };
+                refusedByProcessor(outcome)
+                        ? HttpStatus.FORBIDDEN
+                        : switch (outcome.state()) {
+                            case SUCCESS -> HttpStatus.CREATED;
+                            case PENDING -> HttpStatus.ACCEPTED;
+                            // A payment whose outcome is unknown is not a failure of this request,
+                            // and a caller told "failed" would retry and pay twice. 202 says
+                            // "accepted, ask again".
+                            case UNKNOWN -> HttpStatus.ACCEPTED;
+                            default -> HttpStatus.SERVICE_UNAVAILABLE;
+                        };
         return ResponseEntity.status(status).body(body(outcome, region, journey));
+    }
+
+    /**
+     * The processor refused the request on its license, which is a 403 and not a 503: nothing is
+     * unavailable, the application is being told no. A probe has to see the same code a customer's
+     * client sees, or the platform would be told "down" about a service that is up and refusing.
+     */
+    private static boolean refusedByProcessor(PaymentService.Outcome outcome) {
+        return ProcessorLicense.ERROR_CODE.equals(outcome.errorCode());
     }
 
     @GetMapping("/api/payments/probe/{journey}")
@@ -85,7 +97,11 @@ public class PaymentsController {
         // as business traffic would be wrong even if somebody curled it by hand.
         PaymentService.Outcome outcome = payments.place(journey, region, 100L, true);
         HttpStatus status =
-                outcome.customerVisibleFailure() ? HttpStatus.SERVICE_UNAVAILABLE : HttpStatus.OK;
+                refusedByProcessor(outcome)
+                        ? HttpStatus.FORBIDDEN
+                        : outcome.customerVisibleFailure()
+                                ? HttpStatus.SERVICE_UNAVAILABLE
+                                : HttpStatus.OK;
         return ResponseEntity.status(status).body(body(outcome, region, journey));
     }
 
@@ -130,6 +146,9 @@ public class PaymentsController {
         body.put("route", outcome.route());
         if (outcome.reason() != null) {
             body.put("reason", outcome.reason());
+        }
+        if (outcome.errorCode() != null) {
+            body.put("error_code", outcome.errorCode());
         }
         return body;
     }

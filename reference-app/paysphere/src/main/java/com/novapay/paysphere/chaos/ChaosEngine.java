@@ -14,6 +14,7 @@ import com.novapay.paysphere.fabric.FabricSimulator;
 import com.novapay.paysphere.ledger.InjectionRow;
 import com.novapay.paysphere.ledger.Ledger;
 import com.novapay.paysphere.observe.LogStore;
+import com.novapay.paysphere.payments.ProcessorLicense;
 import com.novapay.paysphere.runtimeconfig.ConfigRegistry;
 
 import jakarta.annotation.PostConstruct;
@@ -70,6 +71,7 @@ public class ChaosEngine {
     private final ChaosCatalog catalog;
     private final FabricSimulator fabric;
     private final ConfigRegistry config;
+    private final ProcessorLicense license;
     private final Ledger ledger;
     private final LogStore logs;
     private final Clock clock;
@@ -80,12 +82,14 @@ public class ChaosEngine {
             ChaosCatalog catalog,
             FabricSimulator fabric,
             ConfigRegistry config,
+            ProcessorLicense license,
             Ledger ledger,
             LogStore logs,
             Clock clock) {
         this.catalog = catalog;
         this.fabric = fabric;
         this.config = config;
+        this.license = license;
         this.ledger = ledger;
         this.logs = logs;
         this.clock = clock;
@@ -134,6 +138,12 @@ public class ChaosEngine {
                 fault(
                         params -> fabric.setUp(linkOf(params), false),
                         params -> fabric.setUp(linkOf(params), true)));
+        // Not a fabric fault at all. Latency stays excellent and every link stays up; the processor
+        // simply refuses everything. Reverting installs a fresh one-year key, which is also what
+        // the renew-license-key action does, so the two cannot leave the harness in different states.
+        faults.put(
+                "license-expiry",
+                fault(params -> license.expire(), params -> license.renew(365)));
     }
 
     private static Fault fault(

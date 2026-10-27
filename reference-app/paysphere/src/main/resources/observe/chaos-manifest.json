@@ -62,6 +62,22 @@
       "simulated": true
     },
     {
+      "scenario_id": "license-expiry",
+      "name": "Expire the payment processor license",
+      "description": "Lapse the license key of the payment processor SDK. The processor then refuses every payment immediately with LICENSE_EXPIRED (HTTP 403): no link is down, no pool is full, latency is excellent, and the success rate is zero in both regions. The kind of incident whose cause has to be read from what the application says, not from the shape of its metrics.",
+      "fault_type": "dependency_down",
+      "target": "payment-processor",
+      "params_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "max_duration_s": 900,
+      "blast_radius": "Every payment in every region. Nothing reaches the fabric or the rail while the license is lapsed.",
+      "abort_conditions": ["drill scope revoked"],
+      "simulated": true
+    },
+    {
       "scenario_id": "rollback-delay",
       "name": "Delay the config apply",
       "description": "Make the config registry take longer to apply a change than the caller is prepared to wait, so a rollback times out on the caller and still succeeds on the harness. This is how an UNCERTAIN execution is produced on purpose.",

@@ -8,6 +8,7 @@ import java.util.List;
 import com.novapay.paysphere.fabric.FabricSimulator;
 import com.novapay.paysphere.ledger.Ledger;
 import com.novapay.paysphere.ledger.PaymentState;
+import com.novapay.paysphere.payments.ProcessorLicense;
 import com.novapay.paysphere.runtimeconfig.ConfigRegistry;
 
 import org.springframework.stereotype.Component;
@@ -35,19 +36,26 @@ public class HealthService {
     private final FabricSimulator fabric;
     private final ConfigRegistry config;
     private final Ledger ledger;
+    private final ProcessorLicense license;
     private final Clock clock;
 
     public HealthService(
-            FabricSimulator fabric, ConfigRegistry config, Ledger ledger, Clock clock) {
+            FabricSimulator fabric,
+            ConfigRegistry config,
+            Ledger ledger,
+            ProcessorLicense license,
+            Clock clock) {
         this.fabric = fabric;
         this.config = config;
         this.ledger = ledger;
+        this.license = license;
         this.clock = clock;
     }
 
     public Report report() {
         List<ComponentStatus> components = new ArrayList<>();
         components.add(ledgerHealth());
+        components.add(licenseHealth());
         for (String region : config.regions()) {
             components.add(regionHealth(region));
         }
@@ -67,6 +75,20 @@ public class HealthService {
         } catch (RuntimeException exc) {
             return new ComponentStatus("ledger", DOWN, exc.getClass().getSimpleName() + ": " + exc.getMessage());
         }
+    }
+
+    /**
+     * The one component whose failure has nothing to do with the fabric. The detail is the
+     * processor's own refusal sentence, because the platform reads component details as evidence and
+     * "down" alone would send it looking for a link that is not broken.
+     */
+    private ComponentStatus licenseHealth() {
+        if (license.expired()) {
+            return new ComponentStatus(ProcessorLicense.COMPONENT, DOWN, license.refusalDetail());
+        }
+        long days = license.secondsRemaining() / 86_400L;
+        return new ComponentStatus(
+                ProcessorLicense.COMPONENT, UP, "valid until " + license.validUntil() + " (" + days + " days)");
     }
 
     private ComponentStatus regionHealth(String region) {

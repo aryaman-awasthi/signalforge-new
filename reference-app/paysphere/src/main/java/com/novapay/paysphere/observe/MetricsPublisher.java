@@ -9,6 +9,7 @@ import com.novapay.paysphere.ledger.Ledger;
 import com.novapay.paysphere.ledger.PaymentState;
 import com.novapay.paysphere.payments.Journey;
 import com.novapay.paysphere.payments.PaymentService;
+import com.novapay.paysphere.payments.ProcessorLicense;
 import com.novapay.paysphere.runtimeconfig.ConfigRegistry;
 
 import jakarta.annotation.PostConstruct;
@@ -37,18 +38,21 @@ public class MetricsPublisher {
     private final FabricSimulator fabric;
     private final ConfigRegistry config;
     private final Ledger ledger;
+    private final ProcessorLicense license;
 
     public MetricsPublisher(
             MetricsRegistry metrics,
             PaymentService payments,
             FabricSimulator fabric,
             ConfigRegistry config,
-            Ledger ledger) {
+            Ledger ledger,
+            ProcessorLicense license) {
         this.metrics = metrics;
         this.payments = payments;
         this.fabric = fabric;
         this.config = config;
         this.ledger = ledger;
+        this.license = license;
     }
 
     @PostConstruct
@@ -85,7 +89,19 @@ public class MetricsPublisher {
                 "endpoint",
                 "method",
                 "status");
+        metrics.declareCounter(
+                "payment_rejections_total",
+                "Customer payments refused upstream before reaching the fabric, by reason.",
+                "region",
+                "journey",
+                "reason");
 
+        metrics.declareGauge(
+                "processor_license_valid",
+                "1 while the payment processor SDK's license is valid, 0 once it has lapsed.");
+        metrics.declareGauge(
+                "processor_license_seconds_remaining",
+                "Seconds until the payment processor SDK's license lapses; 0 once it has.");
         metrics.declareGauge(
                 "payment_success_ratio",
                 "Share of the last 200 payments that succeeded or are legitimately pending.",
@@ -130,6 +146,9 @@ public class MetricsPublisher {
                         "payment_latency_ms_sum", labels("region", region, "journey", journey.id()));
                 metrics.preregister(
                         "payment_latency_ms_count", labels("region", region, "journey", journey.id()));
+                metrics.preregister(
+                        "payment_rejections_total",
+                        labels("region", region, "journey", journey.id(), "reason", "license_expired"));
             }
             metrics.preregister("settlements_completed_total", labels("region", region));
         }
@@ -161,6 +180,9 @@ public class MetricsPublisher {
             metrics.setGauge("fabric_link_loss_ratio", linkLabel, link.lossRatio());
         }
         metrics.setGauge("chaos_injections_active", Map.of(), ledger.injectionsInState("active").size());
+        metrics.setGauge("processor_license_valid", Map.of(), license.expired() ? 0 : 1);
+        metrics.setGauge(
+                "processor_license_seconds_remaining", Map.of(), license.secondsRemaining());
     }
 
     public void countHttp(String endpoint, String method, int status) {

@@ -56,6 +56,7 @@ public class PaymentService {
     private final FabricSimulator fabric;
     private final Ledger ledger;
     private final ConfigRegistry config;
+    private final ProcessorLicense license;
     private final MetricsRegistry metrics;
     private final LogStore logs;
     private final TraceStore traces;
@@ -70,6 +71,7 @@ public class PaymentService {
             FabricSimulator fabric,
             Ledger ledger,
             ConfigRegistry config,
+            ProcessorLicense license,
             MetricsRegistry metrics,
             LogStore logs,
             TraceStore traces,
@@ -78,6 +80,7 @@ public class PaymentService {
         this.fabric = fabric;
         this.ledger = ledger;
         this.config = config;
+        this.license = license;
         this.metrics = metrics;
         this.logs = logs;
         this.traces = traces;
@@ -85,8 +88,13 @@ public class PaymentService {
         this.random = new Random(properties.getTrafficgen().getSeed());
     }
 
+    /**
+     * {@code errorCode} is the machine-readable code an upstream refusal carried, or null. It is
+     * separate from {@code reason} because a status code is chosen from it: a fabric drop is a 503,
+     * a refusal by the processor's license is the 403 the processor answered with.
+     */
     public record Outcome(String paymentId, PaymentState state, double latencyMs, String traceId,
-            String route, String reason) {
+            String route, String reason, String errorCode) {
 
         public boolean customerVisibleFailure() {
             return state == PaymentState.FAILED || state == PaymentState.UNKNOWN;
@@ -118,6 +126,13 @@ public class PaymentService {
         int throttle = throttlePercent(region);
         if (throttle > 0 && random.nextInt(100) < throttle) {
             return shed(journey, region, amountMinor, synthetic, paymentId, traceId, createdAt);
+        }
+
+        // Before the fabric is even touched: the processor SDK checks its license first and refuses
+        // outright when it has lapsed. Nothing downstream of this line sees the request.
+        if (license.expired()) {
+            return refusedByLicense(
+                    journey, region, amountMinor, synthetic, paymentId, traceId, createdAt, spanStart);
         }
 
         AtomicInteger flight = inFlight.computeIfAbsent(region, key -> new AtomicInteger());
@@ -171,10 +186,98 @@ public class PaymentService {
             writeLog(paymentId, traceId, journey, region, state, reason, latencyMs, synthetic);
             countOutcome(journey, region, state, latencyMs, synthetic);
 
-            return new Outcome(paymentId, state, latencyMs, traceId, route, reason);
+            return new Outcome(paymentId, state, latencyMs, traceId, route, reason, null);
         } finally {
             flight.decrementAndGet();
         }
+    }
+
+    /**
+     * The processor SDK refusing a request because its license has lapsed.
+     *
+     * <p>Deliberately nothing like a fabric failure: no route is walked, no latency accrues, no
+     * payment reaches the rail. The ledger row, the log line, the span and the counters all say the
+     * same thing - refused with {@code LICENSE_EXPIRED} - because the platform has to be able to name
+     * this cause from the application's own words rather than from the shape of a metric. It is a
+     * FAILED customer outcome all the same, so the success ratio and the probes show it the way a
+     * customer sees it.
+     */
+    private Outcome refusedByLicense(
+            Journey journey,
+            String region,
+            long amountMinor,
+            boolean synthetic,
+            String paymentId,
+            String traceId,
+            OffsetDateTime createdAt,
+            Instant spanStart) {
+        double latencyMs = 3.0 + random.nextInt(5);
+        String reason = license.refusalDetail();
+        ledger.insertPayment(
+                new PaymentRow(
+                        paymentId,
+                        region,
+                        journey.id(),
+                        amountMinor,
+                        "INR",
+                        PaymentState.FAILED,
+                        synthetic,
+                        traceId,
+                        ProcessorLicense.PROCESSOR,
+                        latencyMs,
+                        reason,
+                        createdAt,
+                        createdAt));
+
+        Map<String, String> attributes = new LinkedHashMap<>();
+        attributes.put("region", region);
+        attributes.put("journey", journey.id());
+        attributes.put("payment_id", paymentId);
+        attributes.put("state", PaymentState.FAILED.name());
+        attributes.put("error_type", "license_expired");
+        attributes.put("error_code", ProcessorLicense.ERROR_CODE);
+        attributes.put("component", ProcessorLicense.COMPONENT);
+        attributes.put("upstream_status", "403");
+        attributes.put("synthetic", Boolean.toString(synthetic));
+        logs.record(
+                "error",
+                SERVICE_GATEWAY,
+                "payments",
+                "payment " + paymentId + " refused in " + region + ": " + ProcessorLicense.ERROR_CODE
+                        + " - " + reason,
+                traceId,
+                attributes);
+
+        traces.record(
+                new TraceStore.Span(
+                        traceId,
+                        shortId(),
+                        null,
+                        SERVICE_GATEWAY,
+                        "POST /api/payments/" + journey.id(),
+                        spanStart,
+                        spanStart.plusMillis((long) latencyMs),
+                        TraceStore.ERROR,
+                        labels(
+                                "region", region,
+                                "journey", journey.id(),
+                                "error_code", ProcessorLicense.ERROR_CODE)));
+
+        countOutcome(journey, region, PaymentState.FAILED, latencyMs, synthetic);
+        if (!synthetic) {
+            metrics.increment(
+                    "payment_rejections_total",
+                    labels("region", region, "journey", journey.id(), "reason", "license_expired"),
+                    1);
+        }
+        return new Outcome(
+                paymentId,
+                PaymentState.FAILED,
+                latencyMs,
+                traceId,
+                ProcessorLicense.PROCESSOR,
+                reason,
+                ProcessorLicense.ERROR_CODE);
     }
 
     private Outcome shed(
@@ -215,7 +318,7 @@ public class PaymentService {
                 labels("region", region, "journey", journey.id(), "status", "throttled"),
                 1);
         return new Outcome(paymentId, PaymentState.FAILED, 0.0, traceId, "throttled",
-                "shed by an operator throttle");
+                "shed by an operator throttle", null);
     }
 
     private PaymentState stateOf(Journey journey, FabricSimulator.Transit transit) {

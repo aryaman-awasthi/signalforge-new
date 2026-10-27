@@ -134,6 +134,26 @@
       "approver_roles": ["incident_commander"]
     },
     {
+      "action_id": "renew-license-key",
+      "name": "Renew the payment processor license key",
+      "description": "Install a renewed license key for the payment processor SDK so it stops refusing requests with LICENSE_EXPIRED. Changes the processor's credential and nothing else: no route moves, no process restarts, no configuration version changes. The first payment after the renewal is accepted.",
+      "action_class": "config_change",
+      "risk": "high",
+      "target": "payment-processor",
+      "params_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "valid_days": { "type": "integer", "minimum": 1, "maximum": 3650 }
+        }
+      },
+      "timeout_s": 30,
+      "idempotent": true,
+      "reversible": false,
+      "verification": ["license_valid", "success_ratio_recovering"],
+      "approver_roles": ["incident_commander", "tech_lead"]
+    },
+    {
       "action_id": "restart-gateway",
       "name": "Restart a regional gateway",
       "description": "Bounce the region's payment gateway process. In flight payments are lost and land in UNKNOWN. It exists so that the policy floor has something genuinely dangerous to refuse.",

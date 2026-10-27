@@ -1,5 +1,6 @@
 package com.novapay.paysphere.actions;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -12,6 +13,7 @@ import com.novapay.paysphere.ledger.PaymentRow;
 import com.novapay.paysphere.ledger.PaymentState;
 import com.novapay.paysphere.observe.LogStore;
 import com.novapay.paysphere.payments.PaymentService;
+import com.novapay.paysphere.payments.ProcessorLicense;
 import com.novapay.paysphere.runtimeconfig.ConfigRegistry;
 
 import org.springframework.stereotype.Component;
@@ -31,6 +33,7 @@ public class ActionHandlers {
     private final ConfigRegistry config;
     private final FabricSimulator fabric;
     private final PaymentService payments;
+    private final ProcessorLicense license;
     private final Ledger ledger;
     private final LogStore logs;
 
@@ -38,11 +41,13 @@ public class ActionHandlers {
             ConfigRegistry config,
             FabricSimulator fabric,
             PaymentService payments,
+            ProcessorLicense license,
             Ledger ledger,
             LogStore logs) {
         this.config = config;
         this.fabric = fabric;
         this.payments = payments;
+        this.license = license;
         this.ledger = ledger;
         this.logs = logs;
     }
@@ -56,7 +61,35 @@ public class ActionHandlers {
         handlers.put("restore-route", params -> setRoute(params, FabricSimulator.ROUTE_PRIMARY));
         handlers.put("throttle-traffic", this::throttleTraffic);
         handlers.put("restart-gateway", this::restartGateway);
+        handlers.put("renew-license-key", this::renewLicenseKey);
         return handlers;
+    }
+
+    /**
+     * Install a renewed processor license key. Idempotent in the only sense that matters: a second
+     * renewal under the same key extends the same license rather than installing a second one, and
+     * a renewal of a license that had not lapsed is harmless.
+     */
+    private Map<String, Object> renewLicenseKey(Map<String, Object> params) {
+        int days = intOr(params.get("valid_days"), 365);
+        boolean wasExpired = license.expired();
+        Instant validUntil = license.renew(days);
+        logs.record(
+                "warning",
+                "payment-gateway",
+                "actions",
+                "payment processor license key renewed; valid until " + validUntil
+                        + (wasExpired ? " (the previous key had expired)" : ""),
+                null,
+                Map.of(
+                        "component", ProcessorLicense.COMPONENT,
+                        "valid_days", Integer.toString(days),
+                        "was_expired", Boolean.toString(wasExpired)));
+        return Map.of(
+                "component", ProcessorLicense.COMPONENT,
+                "was_expired", wasExpired,
+                "valid_until", validUntil.toString(),
+                "valid_days", days);
     }
 
     private Map<String, Object> readConfig(Map<String, Object> params) {
