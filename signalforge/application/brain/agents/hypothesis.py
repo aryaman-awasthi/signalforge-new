@@ -120,6 +120,15 @@ class ResourceSignature:
     markers: tuple[str, ...]
     title: str
     rationale: str
+    subject_pattern: str = ""
+    """A regex whose first group is the thing the evidence says is broken -
+    "payment processor" in "payment processor license expired". A journey or a
+    signal key is the node's subject; the component the application itself
+    named is a better one, and only the text has it."""
+    fallback_subject: str = ""
+    """What to call the subject when neither the text nor the node names one.
+    Empty means "use the worst signal", which is right for a saturated resource
+    and wrong for a license, where the worst signal is a symptom."""
 
 
 _EXHAUSTION_RATIONALE = (
@@ -143,13 +152,21 @@ RESOURCE_SIGNATURES: tuple[ResourceSignature, ...] = (
             "invalid license", "license invalid", "entitlement expired",
             "subscription expired", "activation expired", "license_expired",
         ),
-        title="An expired license on {subject} is refusing every request outright",
+        title="An expired {subject} license is refusing every request outright",
         rationale=(
             "A credential-shaped failure, not a capacity one: nothing is slow and "
             "nothing is saturated; a dependency is refusing requests because an "
             "entitlement has lapsed. The remediation is a renewal - a rollback or "
             "a failover does not touch it."
         ),
+        # Letters, digits and spaces only in the group: an error code such as
+        # LICENSE_EXPIRED sits in the same sentence, and a class that admitted
+        # underscores captured it as part of the name.
+        subject_pattern=(
+            r"\b([a-z][a-z0-9 ]{2,40}?)\s+licen[cs]e\s+"
+            r"(?:key\s+)?(?:has\s+)?(?:expired|lapsed|is\s+expired|is\s+invalid)"
+        ),
+        fallback_subject="dependency",
     ),
     ResourceSignature(
         root_cause="disk_saturation",
@@ -575,7 +592,10 @@ def catalogue(
             HypothesisSpec(
                 slug="saturation",
                 title=signature.title.format(
-                    subject=subject or worst or "the application"
+                    subject=subject
+                    or signature.fallback_subject
+                    or worst
+                    or "the application"
                 ),
                 subject=subject or worst,
                 rationale=signature.rationale,
@@ -714,22 +734,51 @@ def _resource_exhaustion(
             if hit is None:
                 continue
             subject = ""
-            for node in nodes:
-                detail = dict(node.detail or {})
-                blob = f"{node.label} {node.content} {detail.get('last_detail') or ''}".lower()
-                if _contains(hit, blob):
-                    # A component the application itself named is the best
-                    # subject; the node's own subject (a journey, a signal) is
-                    # the fallback.
-                    subject = (
-                        str(detail.get("component") or "")
-                        or str(detail.get("subject") or "")
-                        or subject
-                    )
-                    if subject:
+            if signature.subject_pattern:
+                # The component the application itself named, read from the
+                # sentence that named it. "payment processor license expired"
+                # says what is broken better than the journey that noticed.
+                for text in corpus:
+                    found = re.search(signature.subject_pattern, text)
+                    if found:
+                        subject = re.sub(
+                            r"^(?:the|a|an|our|its)\s+", "", found.group(1).strip()
+                        )
                         break
+            if not subject and not signature.subject_pattern:
+                for node in nodes:
+                    detail = dict(node.detail or {})
+                    blob = (
+                        f"{node.label} {node.content} {detail.get('last_detail') or ''}"
+                    ).lower()
+                    if _contains(hit, blob):
+                        subject = (
+                            str(detail.get("component") or "")
+                            or str(detail.get("subject") or "")
+                            or subject
+                        )
+                        if subject:
+                            break
             return ResourceMatch(signature=signature, subject=subject)
     return None
+
+
+def names_a_resource(text: str) -> bool:
+    """Whether the text names one of the resource signatures outright.
+
+    Used where a first-hand observation has to be read for *what it says*
+    rather than for the fact that it failed: a probe refused with
+    LICENSE_EXPIRED is not evidence of a fault below the application, however
+    many of them there are.
+    """
+    lowered = (text or "").lower()
+    if not lowered:
+        return False
+    return any(
+        _contains(marker, lowered)
+        for signature in RESOURCE_SIGNATURES
+        for marker in signature.markers
+    )
 
 
 def _deployment_link(
@@ -854,6 +903,15 @@ def _link(spec: HypothesisSpec, node: GraphNode) -> Optional[WeightedEvidence]:
         # Corroboration across families is the signature of something below the
         # application; a single-family anomaly argues the other way.
         if kind is EvidenceKind.CORROBORATION and not detail.get("corroborated", True):
+            stance = Stance.REFUTES
+        if kind is EvidenceKind.PROBE_FAILURE and names_a_resource(
+            str(detail.get("last_detail") or node.content or "")
+        ):
+            # The probe was *answered* - with a refusal that names what is
+            # wrong. A fault beneath the application does not write "license
+            # expired" into a 403. Every such probe argues against this slot,
+            # and without this a room full of them would rank "something
+            # below the application" level with the cause the probes named.
             stance = Stance.REFUTES
     elif spec.slug.startswith("recurrence-"):
         if kind is not EvidenceKind.HISTORICAL_SIMILARITY:
