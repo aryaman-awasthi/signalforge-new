@@ -186,7 +186,7 @@ export function GovernanceStep({
               </label>
               <input
                 value={slo.indicator}
-                placeholder="indicator (a mapped signal key, e.g. payment_success_ratio)"
+                placeholder="indicator (a signal key from step 3, e.g. payments-availability)"
                 onChange={(event) =>
                   setSlos((current) =>
                     current.map((item, i) =>
