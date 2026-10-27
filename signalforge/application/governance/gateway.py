@@ -32,7 +32,11 @@ client could swallow.
 
 **A duplicate submit** does not execute twice. The idempotency key is derived
 from the request, the unique index on it is the control, and a second submit
+while the first is still open - pending, awaiting approval, running, uncertain -
 returns the first execution with `duplicate=True` rather than sending anything.
+A request made after the earlier attempt has *settled* is a new attempt with
+the next attempt number, so an action that genuinely has to be performed twice
+in one incident (a licence renewed, lapsed, and renewed again) can be.
 
 **A timeout is not a failure.** It lands `UNCERTAIN` with `retry_blocked`, and
 the only way out is `reconcile`, which asks the target system what actually
@@ -1362,17 +1366,24 @@ class ToolGateway:
     ) -> tuple[Optional[ExecutionRecord], str, int]:
         """The idempotency key this request should use, and what already holds it.
 
-        Returns `(existing, key, attempt)`. `existing` is non-None only when a
-        *real* attempt already holds the key - one that reached the target or is
-        on its way there - and the caller then returns it as a duplicate without
-        sending anything.
+        Returns `(existing, key, attempt)`. `existing` is non-None only when an
+        attempt that is *still open* holds the key - pending a decision, waiting
+        for approval, running at the target, or uncertain - and the caller then
+        returns it as a duplicate without sending anything. That is the hazard
+        the key exists for: the same mutation sent twice while the first one's
+        outcome is not yet known.
 
-        Attempts whose row shows nothing was sent - refused by policy, cancelled
-        before it ran - are stepped over rather than treated as duplicates. A
-        commander whose auto-execute attempt was refused by the floor and who
-        then asks for the same rollback properly is making a new request, not
-        repeating one, and answering "you already did that" would be false in the
-        most dangerous possible direction.
+        Settled attempts are stepped over rather than treated as duplicates, and
+        the next attempt number (hence a new key at the target) is handed back.
+        Two kinds of settled row, both for the same reason: a row that shows
+        nothing was sent - refused by policy, cancelled before it ran - and a row
+        whose outcome is known and terminal. A commander whose auto-execute
+        attempt was refused by the floor and who then asks for the same rollback
+        properly is making a new request; a commander who renewed a licence key
+        at 10:20 and asks for the renewal again at 10:40, after the key lapsed a
+        second time, is making a new request too. Answering "you already did
+        that" would be false in the most dangerous possible direction, and the
+        approval gate stands in front of every high-risk attempt either way.
 
         The loop is bounded by the retry ceiling plus headroom, so a pathological
         history cannot make this scan forever; a caller that exhausts it gets the
@@ -1392,7 +1403,7 @@ class ToolGateway:
             if found is None:
                 return None, key, attempt
             last = found
-            if not found.state.nothing_was_sent:
+            if not found.state.settled:
                 return found, key, attempt
         return last, last.idempotency_key if last else "", MAX_KEY_PROBES
 

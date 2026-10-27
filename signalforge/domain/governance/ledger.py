@@ -110,6 +110,22 @@ class LedgerState(str, Enum):
         """
         return self in (LedgerState.BLOCKED, LedgerState.CANCELLED)
 
+    @property
+    def settled(self) -> bool:
+        """The attempt is over and its outcome is known.
+
+        Nothing is in flight and nobody owes the row a decision, so a later
+        request for the same action with the same arguments is a *new attempt*,
+        not a resubmission of this one. The case that proved it: a licence key
+        renewed at 10:20 succeeded; the licence lapsed again at 10:40; the second
+        renewal request found the 10:20 row under its idempotency key and was
+        answered "already done" while the application kept refusing every
+        payment. A duplicate is a request repeated while the first is still
+        pending, running or uncertain - that is the double-click, the retried
+        HTTP call, the redelivered event - and only those rows block a new one.
+        """
+        return self.terminal
+
 
 _TERMINAL: frozenset[LedgerState] = frozenset(
     {
