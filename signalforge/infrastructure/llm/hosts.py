@@ -29,10 +29,11 @@ APPROVED_LLM_HOSTS = frozenset({"genailab.tcs.in", "api.anthropic.com"})
 `genailab.tcs.in.example.net` is a different host and is refused.
 
 `api.anthropic.com` is the Claude API's OpenAI-compatible endpoint
-(`/v1/chat/completions`, bearer-authenticated with a Claude API key). It ignores
-`response_format` - the provider restates every schema in the prompt and
-validates the answer regardless - and serves no `/embeddings`, so embeddings
-degrade to the structural path when it is in use."""
+(`/v1/chat/completions`, bearer-authenticated with a Claude API key). It takes
+`response_format` only as a strict `json_schema` with `additionalProperties:
+false` on every object, refuses `json_object`, and refuses any `temperature` -
+the provider walks a ladder of modes for exactly this - and it serves no
+`/embeddings`, so embeddings degrade to the structural path when it is in use."""
 
 PROVIDER_BY_HOST = {"genailab.tcs.in": "genailab", "api.anthropic.com": "anthropic"}
 """The provider label an approved host answers as. Part of every cache key, so

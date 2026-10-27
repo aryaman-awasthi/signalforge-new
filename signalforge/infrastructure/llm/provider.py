@@ -86,6 +86,13 @@ class GatewayLlmProvider(LlmProvider):
         self._ledger = ledger or InMemoryTokenLedger(settings.incident_token_budget)
         self._listener = listener
         self._metrics = metrics
+        # Per model: the rung of the structured-output ladder that answered
+        # last time, and whether a temperature was accepted. Learned, not
+        # configured, and held only in this process: a gateway that refuses
+        # json_schema will refuse it on the next call too, and walking the
+        # ladder from the top on every call would cost three failed round
+        # trips per answer on the endpoints that need the lower rungs.
+        self._mode_hints: dict[str, tuple[int, bool]] = {}
         if not settings.endpoint_approved:
             # Loud, once, at wiring time - and then the platform runs
             # deterministically rather than refusing to start (CLAUDE.md rule 6).
@@ -217,19 +224,42 @@ class GatewayLlmProvider(LlmProvider):
         """
         messages = _wire_messages(request)
         temperature: Optional[float] = request.temperature
-        response_format = _json_schema_format(request.schema)
-        # At most three calls: the request as asked, then one retry per
-        # parameter a gateway can refuse by name. Each retry drops exactly one
-        # thing, so a 400 that survives all of them is a real 400.
-        for _ in range(3):
+        # The structured-output modes, most demanding first, and the order the
+        # mixed fleet behind the gateway has always been walked in: json_schema
+        # as declared, then a plain json object. The two further rungs exist
+        # for the Claude API's compatibility layer, which accepts *only*
+        # json_schema, insists on strict=true with additionalProperties=false
+        # on every object, and refuses json_object outright. The last rung
+        # sends no response_format at all - the schema is restated in the
+        # prompt and the answer is validated here either way, so the guarantee
+        # the caller gets does not depend on which rung answered.
+        rungs: list[Optional[dict]] = (
+            [
+                _json_schema_format(request.schema),
+                {"type": "json_object"},
+                _strict_json_schema_format(request.schema),
+                None,
+            ]
+            if request.schema is not None
+            else [None]
+        )
+        rung, temperature_ok = self._mode_hints.get(model, (0, True))
+        rung = min(rung, len(rungs) - 1)
+        if not temperature_ok:
+            temperature = None
+        # One call per rung plus one for a dropped temperature: a 400 that
+        # survives the whole ladder is a real 400.
+        for _ in range(len(rungs) + 1):
             try:
-                return await self._gateway.chat(
+                answer = await self._gateway.chat(
                     model=model,
                     messages=messages,
                     max_tokens=request.max_tokens,
                     temperature=temperature,
-                    response_format=response_format,
+                    response_format=rungs[rung],
                 )
+                self._mode_hints[model] = (rung, temperature is not None)
+                return answer
             except GatewayFailure as failure:
                 if failure.status_code not in SCHEMA_RETRY_STATUS:
                     raise
@@ -245,12 +275,13 @@ class GatewayLlmProvider(LlmProvider):
                     )
                     temperature = None
                     continue
-                if response_format is not None and response_format.get("type") == "json_schema":
+                if rung + 1 < len(rungs):
+                    rung += 1
                     logger.info(
-                        "gateway refused json_schema output; retrying as a json object",
+                        "gateway refused the structured-output mode; retrying as %s",
+                        _describe_rung(rungs[rung]),
                         extra={"purpose": request.purpose, "model": model},
                     )
-                    response_format = {"type": "json_object"}
                     continue
                 raise
         raise AssertionError("unreachable: the retry loop returns or raises")
@@ -551,6 +582,43 @@ def _refuses_temperature(failure: GatewayFailure) -> bool:
     """
     detail = getattr(failure, "detail", None) or str(failure)
     return "temperature" in str(detail).lower()
+
+
+def _describe_rung(response_format: Optional[dict]) -> str:
+    if response_format is None:
+        return "no response_format"
+    if response_format.get("type") == "json_object":
+        return "a json object"
+    strict = bool((response_format.get("json_schema") or {}).get("strict"))
+    return "a strict json_schema" if strict else "a json_schema"
+
+
+def _strictify(schema: Any) -> Any:
+    """The schema with `additionalProperties: false` on every object, which is
+    what a strict structured-output mode demands. Nothing else is touched: the
+    validator here reads the original, so an answer that satisfies the strict
+    form satisfies the declared one."""
+    if isinstance(schema, dict):
+        out = {key: _strictify(value) for key, value in schema.items()}
+        if out.get("type") == "object" or "properties" in out:
+            out.setdefault("additionalProperties", False)
+        return out
+    if isinstance(schema, list):
+        return [_strictify(item) for item in schema]
+    return schema
+
+
+def _strict_json_schema_format(schema: Optional[dict]) -> Optional[dict]:
+    if schema is None:
+        return None
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "signalforge_response",
+            "schema": _strictify(schema),
+            "strict": True,
+        },
+    }
 
 
 def _json_schema_format(schema: Optional[dict]) -> Optional[dict]:

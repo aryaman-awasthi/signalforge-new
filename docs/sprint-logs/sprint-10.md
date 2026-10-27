@@ -108,11 +108,13 @@ notification binding; and nothing told anyone that a severity had been proposed.
   "for this i just for today i'll use claude api" (2026-10-27), while the GenAI Lab gateway
   answers 403 to the organisation's key. The rule "LLM only through the organizer endpoint"
   is deviated from by one constant in `infrastructure/llm/hosts.py` - still code, still not
-  configuration. Its OpenAI-compatible endpoint ignores `response_format` (the provider
-  restates every schema in the prompt and validates regardless), serves no `/embeddings`
-  (degrades as designed), and Claude 4.7+ refuses `temperature` below 1, so the provider
-  retries once without a temperature. Verified offline only; a live call needs a Claude API
-  key in `.env`, which the sprint did not have.
+  configuration. Its OpenAI-compatible endpoint takes `response_format` only as a strict
+  `json_schema` (`additionalProperties: false` everywhere) and refuses `json_object` and any
+  `temperature` - Anthropic's own page says "ignored"; the live endpoint says otherwise - so
+  the provider's single retry became a ladder: json_schema -> json_object (the gateway's
+  path, unchanged) -> strict json_schema -> no response_format, with a temperature dropped
+  when named. Every rung is validated here against the declared schema. No `/embeddings`
+  there, so embeddings degrade as designed.
 - Commit `[S10-T09]` lands uncommitted work found in the tree (the causal-fit layer) rather
   than discarding it; it parsed, was wired end to end, and the sprint built on it.
 
