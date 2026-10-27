@@ -86,6 +86,7 @@ for harness in "$ROOT"/reference-app/*/run.sh; do
     (cd "$harness_dir" && bash run.sh) >"$LOG_DIR/harness.log" 2>&1 &
     pids+=($!)
     started=1
+    harness_started=1
     wait_for "reference harness" "http://127.0.0.1:$HARNESS_PORT/observe/health" \
       "$LOG_DIR/harness.log"
   else
@@ -137,7 +138,7 @@ cat <<BANNER
     api docs       http://$API_HOST:$API_PORT/docs
     health         http://$API_HOST:$API_PORT/health
     metrics        http://$API_HOST:$API_PORT/metrics
-    reference app  http://127.0.0.1:$HARNESS_PORT
+$( [ "${harness_started:-0}" = "1" ] && echo "    reference app  http://127.0.0.1:$HARNESS_PORT" )
 
   Logs: $LOG_DIR
   Model: $( [ -n "${GENAILAB_API_KEY:-}" ] && echo "gateway configured" || echo "no key set - deterministic mode, which is supported" )
