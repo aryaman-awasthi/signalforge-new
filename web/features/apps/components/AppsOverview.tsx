@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 
+import { fetchMe } from "@/features/auth/api";
 import { ReadinessBar } from "@/features/apps/components/ReadinessBar";
 import { RegisterAppForm } from "@/features/apps/components/RegisterAppForm";
 import { StanceChip } from "@/features/apps/components/StanceChip";
@@ -12,14 +14,38 @@ import { relativeTime } from "@/lib/format";
 /**
  * Screen 4 - applications overview.
  *
- * One row per onboarded application with its readiness score, and a way in to
- * the wizard. Readiness is the API's number, not one the cockpit derives: the
- * thirteen weighted checks and the blocking rule live in the domain, so a
- * screen cannot accidentally call something ready that the platform would not.
+ * One row per application the signed-in person's bindings cover, with its
+ * readiness score and a way in. Readiness is the API's number, not one the
+ * cockpit derives: the thirteen weighted checks and the blocking rule live in
+ * the domain, so a screen cannot accidentally call something ready that the
+ * platform would not.
+ *
+ * Every role can open this page (S10). The onboarding controls - register, the
+ * wizard - are shown only to somebody holding `manage_apps`, because a button
+ * that only ever answers 403 teaches people the product is broken; the "Open"
+ * button is everybody's, because the application page is where an incident is
+ * declared from and where a paged responder lands.
  */
+
+const DENIED: Record<string, string> = {
+  setup: "Organisation setup",
+  settings: "Platform settings",
+  "integration-health": "Integration health",
+  onboard: "The onboarding wizard",
+};
+
 export function AppsOverview() {
   const { state, reload } = useApps();
+  const params = useSearchParams();
+  const denied = params.get("denied");
   const [adding, setAdding] = useState(false);
+  const [canManage, setCanManage] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    void fetchMe()
+      .then((who) => setCanManage(who.permissions.includes("manage_apps")))
+      .catch(() => setCanManage(false));
+  }, []);
 
   if (state.kind === "loading") {
     return <p className="text-ink-muted">Loading applications…</p>;
@@ -34,6 +60,19 @@ export function AppsOverview() {
 
   return (
     <div className="space-y-5">
+      {denied && (
+        <p
+          role="status"
+          className="border border-warn bg-warn-bg px-3 py-2 text-dense text-warn-ink"
+        >
+          <strong className="font-semibold">
+            {DENIED[denied] ?? "That page"} is for the organisation owner.
+          </strong>{" "}
+          Everything your role covers is here: open an application to see its
+          health, declare an incident, or join a war room.
+        </p>
+      )}
+
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-semibold">Applications</h1>
         <span className="text-xs text-ink-muted">
@@ -41,21 +80,25 @@ export function AppsOverview() {
           ready
         </span>
         <span className="flex-1" />
-        <Link
-          href="/integration-health"
-          className="rounded-card border border-line px-2.5 py-1 text-xs hover:border-accent hover:text-accent-strong"
-        >
-          Integration health
-        </Link>
-        <button
-          onClick={() => setAdding((current) => !current)}
-          className="rounded-card bg-accent px-3 py-1.5 text-sm font-medium text-surface-raised hover:bg-accent-strong"
-        >
-          {adding ? "Cancel" : "Onboard an application"}
-        </button>
+        {canManage && (
+          <>
+            <Link
+              href="/integration-health"
+              className="rounded-card border border-line px-2.5 py-1 text-xs hover:border-accent hover:text-accent-strong"
+            >
+              Integration health
+            </Link>
+            <button
+              onClick={() => setAdding((current) => !current)}
+              className="rounded-card bg-accent px-3 py-1.5 text-sm font-medium text-surface-raised hover:bg-accent-strong"
+            >
+              {adding ? "Cancel" : "Onboard an application"}
+            </button>
+          </>
+        )}
       </div>
 
-      {adding && (
+      {adding && canManage && (
         <RegisterAppForm
           onRegistered={() => {
             setAdding(false);
@@ -126,32 +169,36 @@ export function AppsOverview() {
               >
                 Open
               </Link>
-              <Link
-                href={`/apps/${encodeURIComponent(app.app_id)}/onboard/1`}
-                className="border border-line px-3 py-1.5 text-small hover:bg-ink/[0.07]"
-              >
-                {app.ready ? "Review onboarding" : "Continue onboarding"}
-              </Link>
+              {canManage && (
+                <Link
+                  href={`/apps/${encodeURIComponent(app.app_id)}/onboard/1`}
+                  className="border border-line px-3 py-1.5 text-small hover:bg-ink/[0.07]"
+                >
+                  {app.ready ? "Review onboarding" : "Continue onboarding"}
+                </Link>
+              )}
             </div>
           </li>
         ))}
 
-        <li>
-          <button
-            type="button"
-            onClick={() => setAdding((current) => !current)}
-            className="flex h-full min-h-[220px] w-full items-center justify-center border border-dashed border-line p-4 text-dense font-semibold text-accent hover:bg-brand-100"
-          >
-            + Onboard an application
-          </button>
-        </li>
+        {canManage && (
+          <li>
+            <button
+              type="button"
+              onClick={() => setAdding((current) => !current)}
+              className="flex h-full min-h-[220px] w-full items-center justify-center border border-dashed border-line p-4 text-dense font-semibold text-accent hover:bg-brand-100"
+            >
+              + Onboard an application
+            </button>
+          </li>
+        )}
       </ul>
 
       {state.apps.length === 0 && (
         <p className="text-dense text-ink-muted">
-          No applications yet. Anything that serves the public observe contract -
-          or posts to the ingest API - can be onboarded here; SignalForge needs no
-          code of its own for it.
+          {canManage
+            ? "No applications yet. Anything that serves the public observe contract - or posts to the ingest API - can be onboarded here; SignalForge needs no code of its own for it."
+            : "No application is bound to your role yet. The organisation owner invites people per application, or org-wide; ask them to widen yours."}
         </p>
       )}
     </div>

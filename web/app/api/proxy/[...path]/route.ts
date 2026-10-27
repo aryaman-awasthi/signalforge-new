@@ -11,9 +11,9 @@ import {
   COOKIE_ACCESS,
   COOKIE_REFRESH,
   clearSessionCookies,
+  setTokenCookies,
+  type Tokens,
 } from "@/app/api/_lib/session";
-
-type Tokens = { access_token: string; refresh_token: string; expires_in: number };
 
 async function forward(
   request: NextRequest,
@@ -75,23 +75,7 @@ async function handle(request: NextRequest, params: { path: string[] }) {
         : {}),
     },
   });
-  if (rotated) {
-    const secure = process.env.NODE_ENV === "production";
-    response.cookies.set(COOKIE_ACCESS, rotated.access_token, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure,
-      path: "/",
-      maxAge: rotated.expires_in,
-    });
-    response.cookies.set(COOKIE_REFRESH, rotated.refresh_token, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure,
-      path: "/api",
-      maxAge: 14 * 86400,
-    });
-  }
+  if (rotated) setTokenCookies(response, rotated);
   return response;
 }
 

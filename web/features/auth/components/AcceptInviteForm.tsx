@@ -7,7 +7,9 @@ import { useAuthForm } from "@/features/auth/hooks/useAuthForm";
 import { Field, FormError, SubmitButton } from "@/features/auth/components/Field";
 
 export function AcceptInviteForm({ token }: { token: string }) {
-  const { status, run } = useAuthForm("/");
+  // Straight to the applications the invite covers - not the landing page,
+  // which greets a signed-in person with a sign-up form.
+  const { status, run } = useAuthForm("/apps");
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
 

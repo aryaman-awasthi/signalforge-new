@@ -30,13 +30,27 @@ import { Pill } from "@/lib/ui/primitives";
  * route decides which, because that is what the route already means.
  */
 
-const NAV = [
-  { href: "/health", label: "Health" },
+/**
+ * The navigation names only what the signed-in person can open. Before this it
+ * showed Setup and Settings to everybody and sent an Incident Commander who
+ * clicked them to a "denied" page - a product that offers a door and then
+ * refuses it teaches people the product is broken. `owner` links need
+ * `manage_org` or `manage_apps`; the rest is every role's.
+ */
+const NAV: { href: string; label: string; owner?: boolean }[] = [
   { href: "/apps", label: "Applications" },
-  { href: "/integration-health", label: "Integrations" },
-  { href: "/setup", label: "Setup" },
-  { href: "/settings", label: "Settings" },
+  { href: "/incidents", label: "Incidents" },
+  { href: "/my/pages", label: "Your pages" },
+  { href: "/integration-health", label: "Integrations", owner: true },
+  { href: "/setup", label: "Setup", owner: true },
+  { href: "/settings", label: "Settings", owner: true },
+  { href: "/health", label: "Health" },
 ];
+
+function canAdminister(me: Me | null): boolean {
+  if (!me) return false;
+  return me.permissions.includes("manage_org") || me.permissions.includes("manage_apps");
+}
 
 /** Routes that are watched rather than read, and get the cockpit frame. */
 function isCockpit(pathname: string): boolean {
@@ -116,7 +130,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           )}
 
           <nav className="flex flex-wrap items-center gap-4 text-dense">
-            {NAV.map((item) => {
+            {NAV.filter((item) => !item.owner || canAdminister(me)).map((item) => {
               const current = pathname === item.href || pathname.startsWith(`${item.href}/`);
               return (
                 <Link

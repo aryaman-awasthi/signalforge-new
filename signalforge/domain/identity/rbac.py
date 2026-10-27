@@ -26,6 +26,25 @@ class Decision:
 
 class RBACDecisionService:
     @staticmethod
+    def visible_apps(bindings: Iterable[RoleBinding]) -> Optional[frozenset[str]]:
+        """Which applications a person's bindings *name*, for reads that carry
+        no permission.
+
+        `None` means every application in the tenant: at least one binding is
+        org-wide, whatever its role. Otherwise the set of app_ids the bindings
+        are scoped to. An Incident Commander bound to `payments` can open
+        `payments`; an SME holding no permission at all can still open the
+        application they were invited for - reading what you are responsible
+        for is not a permission in the frozen matrix, it is membership.
+        """
+        ids: set[str] = set()
+        for binding in bindings:
+            if binding.app_id is None:
+                return None
+            ids.add(binding.app_id)
+        return frozenset(ids)
+
+    @staticmethod
     def decide(
         bindings: Iterable[RoleBinding],
         permission: Permission,

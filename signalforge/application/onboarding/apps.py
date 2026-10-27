@@ -29,7 +29,9 @@ from signalforge.application.onboarding.common import (
     record,
     require_application,
 )
+from signalforge.domain.identity.errors import PermissionDeniedError
 from signalforge.domain.identity.ports import Clock
+from signalforge.domain.identity.rbac import RBACDecisionService
 from signalforge.domain.onboarding.applications import (
     Application,
     AppTier,
@@ -65,8 +67,17 @@ class ApplicationService:
         self.on_removed: list[Callable[[str, str], Awaitable[Any]]] = []
 
     # -- reads -------------------------------------------------------------
+    #
+    # Reads are scoped by *membership*, not by permission (REQ-012). The frozen
+    # matrix gives the SME nothing and the Incident Commander no `manage_apps`,
+    # and those are exactly the people an invite names for an application: a
+    # list they could not open would hide the one thing they were invited to
+    # look at. An org-wide binding sees the whole estate; an app-scoped binding
+    # sees the applications it names. Writes still carry `manage_apps` on the
+    # route, so nothing here lets a reader change anything.
 
     async def list(self, principal: Principal) -> Sequence[ApplicationView]:
+        visible = RBACDecisionService.visible_apps(principal.bindings)
         async with self._uow_factory() as uow:
             applications = await uow.applications.list(principal.tenant_id)
             return [
@@ -77,9 +88,18 @@ class ApplicationService:
                     ),
                 )
                 for application in applications
+                if visible is None or application.app_id in visible
             ]
 
     async def get(self, principal: Principal, app_id: str) -> ApplicationView:
+        visible = RBACDecisionService.visible_apps(principal.bindings)
+        if visible is not None and app_id not in visible:
+            # The same tenant, so saying why is safe (REQ-013 is about other
+            # tenants) and a refusal that names the fix is the useful one.
+            raise PermissionDeniedError(
+                f"your roles are bound to {', '.join(sorted(visible)) or 'no application'}, "
+                f"not to {app_id}; ask the organisation owner to widen the binding"
+            )
         async with self._uow_factory() as uow:
             application = await require_application(uow, principal.tenant_id, app_id)
             profile = await load_profile(uow, principal.tenant_id, app_id)

@@ -1,9 +1,12 @@
 ﻿"""/apps: the onboarding wizard's seven steps (REQ-036, REQ-012).
 
-All of it is manage_apps work, and the application is named in the *path* rather
-than in the query string - which is why the RBAC dependency reads `app_id` from
-the path parameters as well: an operator whose manage_apps binding is scoped to
-one application must be evaluated against that application, not org-wide.
+Every write is manage_apps work, and the application is named in the *path*
+rather than in the query string - which is why the RBAC dependency reads
+`app_id` from the path parameters as well: an operator whose manage_apps binding
+is scoped to one application must be evaluated against that application, not
+org-wide. The two plain reads (the list and one application) are tenant-scoped
+and filtered by the caller's bindings instead, so the people an invite names for
+an application can open it.
 
 The routes are thin. Every rule that matters - the policy floor, topology
 idempotency, what a connection test is allowed to call - lives in the domain and
@@ -70,9 +73,17 @@ router = APIRouter(prefix="/apps", tags=["onboarding"])
 
 @router.get("", response_model=list[ApplicationSummaryOut])
 async def list_applications(
-    principal: Principal = Depends(deps.require(Permission.MANAGE_APPS)),
+    principal: Principal = Depends(deps.get_principal),
     container: deps.Container = Depends(deps.get_container),
 ):
+    """The applications this person's bindings cover.
+
+    A tenant-scoped read rather than `manage_apps`, like the incident list and
+    the lifecycle route: the Incident Commander and the SME hold no
+    `manage_apps` in the frozen matrix, and they are the people an invite names
+    for an application. The service filters by binding - org-wide sees all,
+    app-scoped sees its own - and every write below still carries the permission.
+    """
     views = await container.applications.list(principal)
     summaries = []
     for view in views:
@@ -108,9 +119,12 @@ async def register_application(
 @router.get("/{app_id}", response_model=ApplicationDetailOut)
 async def get_application(
     app_id: str,
-    principal: Principal = Depends(deps.require_app(Permission.MANAGE_APPS)),
+    principal: Principal = Depends(deps.get_principal),
     container: deps.Container = Depends(deps.get_container),
 ):
+    """One application, readable by anybody whose binding names it. A binding
+    scoped to another application is refused with the reason, in the same
+    tenant, so the fix is in the message."""
     view = await container.applications.get(principal, app_id)
     _app, _profile, readiness = await container.readiness.readiness(principal, app_id)
     return application_detail_out(view, readiness)

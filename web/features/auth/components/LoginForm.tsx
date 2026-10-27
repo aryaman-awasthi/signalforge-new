@@ -8,7 +8,11 @@ import { useAuthForm } from "@/features/auth/hooks/useAuthForm";
 import { Field, FormError, SubmitButton } from "@/features/auth/components/Field";
 
 export function LoginForm() {
-  const { status, run } = useAuthForm("/setup");
+  // `/apps`, not `/setup`: the applications list is the one page every role can
+  // open. Landing an invited Incident Commander on organisation setup bounced
+  // them straight back out with "denied", which read as "my account does not
+  // work". The owner gets to setup from the navigation.
+  const { status, run } = useAuthForm("/apps");
   const [orgSlug, setOrgSlug] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

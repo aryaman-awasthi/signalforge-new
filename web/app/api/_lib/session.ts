@@ -2,6 +2,14 @@
  * Server-only session plumbing for the auth cookie proxy (REQ-010).
  * Tokens live in httpOnly cookies; browser JavaScript never sees them.
  * sf_roles is a display/guard hint for middleware - the API is the enforcer.
+ *
+ * The refresh cookie is sent on every same-origin request (`path: "/"`), not
+ * only to the route handlers. It is still httpOnly, so nothing in the page can
+ * read it; what the wider path buys is that the middleware can *see* that a
+ * session exists after the fifteen-minute access token has lapsed, and send
+ * the browser through `/api/auth/refresh` instead of back to the sign-in form.
+ * Before this, every page opened after a quarter of an hour of reading was a
+ * fresh sign-in, which is what "I keep getting logged out" meant.
  */
 
 import { NextResponse } from "next/server";
@@ -14,14 +22,13 @@ export const COOKIE_ROLES = "sf_roles";
 
 const secure = process.env.NODE_ENV === "production";
 
-type Tokens = { access_token: string; refresh_token: string; expires_in: number };
+export type Tokens = { access_token: string; refresh_token: string; expires_in: number };
 type Binding = { role: string; app_id: string | null };
 
-export function setSessionCookies(
-  response: NextResponse,
-  tokens: Tokens,
-  bindings: Binding[],
-): void {
+/** The two credential cookies, from a token pair. Used on login, on accept-invite,
+ * on the proxy's one-shot refresh and on the middleware-driven refresh, so the
+ * four can never disagree about a flag. */
+export function setTokenCookies(response: NextResponse, tokens: Tokens): void {
   response.cookies.set(COOKIE_ACCESS, tokens.access_token, {
     httpOnly: true,
     sameSite: "lax",
@@ -33,9 +40,17 @@ export function setSessionCookies(
     httpOnly: true,
     sameSite: "lax",
     secure,
-    path: "/api", // only the route handlers ever need it
+    path: "/",
     maxAge: 14 * 86400,
   });
+}
+
+export function setSessionCookies(
+  response: NextResponse,
+  tokens: Tokens,
+  bindings: Binding[],
+): void {
+  setTokenCookies(response, tokens);
   const roles = Array.from(
     new Set(bindings.filter((b) => b.app_id === null).map((b) => b.role)),
   ).join(",");
@@ -51,6 +66,9 @@ export function setSessionCookies(
 export function clearSessionCookies(response: NextResponse): void {
   for (const [name, path] of [
     [COOKIE_ACCESS, "/"],
+    [COOKIE_REFRESH, "/"],
+    // The refresh cookie used to be scoped to /api; a browser that still holds
+    // one from before is cleared on that path too, or it lingers for a fortnight.
     [COOKIE_REFRESH, "/api"],
     [COOKIE_ROLES, "/"],
   ] as const) {
@@ -88,4 +106,12 @@ export async function bootstrapSession(path: string, body: unknown): Promise<Nex
   const response = NextResponse.json({ user, org }, { status: upstream.status });
   setSessionCookies(response, tokens, user.bindings);
   return response;
+}
+
+/** Where a sign-in or a refresh should land. Only a same-origin path is honoured:
+ * a `next` that names another host is how a sign-in form becomes a redirector. */
+export function safeNext(candidate: string | null | undefined, fallback = "/apps"): string {
+  if (!candidate) return fallback;
+  if (!candidate.startsWith("/") || candidate.startsWith("//")) return fallback;
+  return candidate;
 }
