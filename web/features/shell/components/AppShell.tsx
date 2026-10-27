@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 
 import { fetchMe, logout, type Me } from "@/features/auth/api";
 import { fetchOrg, type Org } from "@/features/shell/api";
+import { NotificationToasts } from "@/features/shell/components/NotificationToasts";
 import { Pill } from "@/lib/ui/primitives";
 
 /**
@@ -169,6 +170,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       >
         {children}
       </main>
+      {/* The socket is held open only while somebody is signed in: a signed-out
+          shell has no ticket to fetch and nothing to be told. */}
+      <NotificationToasts active={me !== null} />
     </>
   );
 }

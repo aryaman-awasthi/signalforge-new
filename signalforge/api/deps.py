@@ -31,6 +31,11 @@ from signalforge.application.brain.service import IncidentBrainService
 from signalforge.application.adapters.health import ConnectorHealthSources
 from signalforge.application.adapters.invoker import ConnectorInvoker
 from signalforge.application.adapters.registry_service import AdapterRegistryService
+from signalforge.application.detection.alerts import (
+    PROPOSAL_ALERT_GROUP,
+    ProposalAlertConsumer,
+)
+from signalforge.application.detection.common import PROPOSAL_TOPIC
 from signalforge.application.detection.poller import MetricRollupPoller
 from signalforge.application.detection.probes import ProbeRunner
 from signalforge.application.detection.service import DetectionService
@@ -252,6 +257,16 @@ class Container:
             COCKPIT_SOCKET_GROUP,
             CockpitSocketConsumer(self.notification_hub, metrics=self.metrics),
             topics=COCKPIT_TOPIC_PATTERNS,
+        )
+        # A proposal is addressed to the people who can answer it (S10-T11,
+        # REQ-042). Same hub, same frame shape as a page, no countdown: the
+        # platform is asking somebody to look, not to act.
+        self.dispatcher.register(
+            PROPOSAL_ALERT_GROUP,
+            ProposalAlertConsumer(
+                self.uow_factory, self.notification_hub, self.clock, metrics=self.metrics
+            ),
+            topics=(PROPOSAL_TOPIC,),
         )
         self.integration_uow_factory = lambda: SqlIntegrationUnitOfWork(
             self.session_factory

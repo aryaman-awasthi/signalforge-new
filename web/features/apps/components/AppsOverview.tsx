@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { ReadinessBar } from "@/features/apps/components/ReadinessBar";
 import { RegisterAppForm } from "@/features/apps/components/RegisterAppForm";
+import { StanceChip } from "@/features/apps/components/StanceChip";
 import { useApps } from "@/features/apps/hooks/useApps";
 import { relativeTime } from "@/lib/format";
 
@@ -71,15 +72,21 @@ export function AppsOverview() {
           <li key={app.app_id} className="flex flex-col gap-3 bg-surface-raised p-4">
             <div className="flex items-start justify-between gap-2">
               <h2 className="text-h4">{app.name}</h2>
-              <span
-                className={`shrink-0 px-2 py-1 text-tiny font-semibold uppercase tracking-label ${
-                  app.ready
-                    ? "border border-ok bg-ok-bg text-ok"
-                    : "border border-warn bg-warn-bg text-warn-ink"
-                }`}
-              >
-                {app.ready ? "ready" : "onboarding"}
-              </span>
+              <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+                {/* What the platform believes about it right now, beside how
+                    far its onboarding got. The two answer different questions
+                    and an estate screen needs both. */}
+                {app.ready && <StanceChip appId={app.app_id} />}
+                <span
+                  className={`shrink-0 px-2 py-1 text-tiny font-semibold uppercase tracking-label ${
+                    app.ready
+                      ? "border border-ok bg-ok-bg text-ok"
+                      : "border border-warn bg-warn-bg text-warn-ink"
+                  }`}
+                >
+                  {app.ready ? "ready" : "onboarding"}
+                </span>
+              </div>
             </div>
 
             <div className="flex items-baseline gap-2">
