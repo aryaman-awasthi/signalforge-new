@@ -88,8 +88,123 @@ export function MapStep({
 
   const businessCount = signals.filter((signal) => signal.business_counter).length;
 
+  // An application that publishes its own mapping - or an operator with one in
+  // a file - should not have to retype six signals and eight probes into
+  // fields. The import fills the *form*; nothing is saved until Save, so the
+  // domain's validation and the operator's eyes both still stand between a
+  // pasted document and the profile.
+  const [importText, setImportText] = useState("");
+  const [importOpen, setImportOpen] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+
+  function importMapping() {
+    setImportError(null);
+    let doc: Record<string, unknown>;
+    try {
+      doc = JSON.parse(importText) as Record<string, unknown>;
+    } catch {
+      setImportError("That is not valid JSON.");
+      return;
+    }
+    const asList = (value: unknown): Record<string, unknown>[] =>
+      Array.isArray(value) ? value.filter((item) => item && typeof item === "object") : [];
+    const str = (value: unknown, fallback = ""): string =>
+      typeof value === "string" ? value : fallback;
+    const signalsIn = asList(doc.signals);
+    const journeysIn = asList(doc.journeys);
+    const probesIn = asList(doc.probes);
+    if (signalsIn.length === 0 && journeysIn.length === 0 && probesIn.length === 0) {
+      setImportError("Expected an object with signals, journeys and/or probes.");
+      return;
+    }
+    if (signalsIn.length > 0) {
+      setSignals(
+        signalsIn.map((item) => ({
+          key: str(item.key),
+          signal: (SIGNALS.includes(str(item.signal) as GoldenSignal)
+            ? str(item.signal)
+            : "errors") as GoldenSignal,
+          selector: str(item.selector),
+          direction: item.direction === "lower_is_worse" ? "lower_is_worse" : "higher_is_worse",
+          unit: str(item.unit),
+          business_counter: item.business_counter === true,
+        })),
+      );
+    }
+    if (typeof doc.region_label === "string") setRegionLabel(doc.region_label);
+    if (Array.isArray(doc.regions)) setRegions(doc.regions.map(String).join(", "));
+    if (journeysIn.length > 0) {
+      setJourneys(
+        journeysIn.map((item) => ({
+          journey_id: str(item.journey_id),
+          name: str(item.name, str(item.journey_id)),
+          tier: Number(item.tier) || 2,
+          description: str(item.description),
+        })),
+      );
+    }
+    if (probesIn.length > 0) {
+      setProbes(
+        probesIn.map((item) => ({
+          probe_id: str(item.probe_id),
+          path: str(item.path),
+          method: str(item.method, "GET").toUpperCase(),
+          expected_status: Number(item.expected_status) || 200,
+          timeout_s: Number(item.timeout_s) || 5,
+          journey_id: typeof item.journey_id === "string" ? item.journey_id : null,
+          per_region: item.per_region === true,
+          synthetic_header: str(item.synthetic_header, "X-SignalForge-Synthetic"),
+        })),
+      );
+    }
+    setImportOpen(false);
+    setImportText("");
+    setSaved(false);
+  }
+
   return (
     <div className="space-y-6">
+      <section className="space-y-2">
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setImportOpen((current) => !current)}
+            className="rounded-card border border-line px-2.5 py-1 text-xs hover:border-accent hover:text-accent-strong"
+          >
+            {importOpen ? "Cancel import" : "Import mapping from JSON…"}
+          </button>
+          <span className="text-xs text-ink-muted">
+            Paste a document with <span className="font-mono">signals</span>,{" "}
+            <span className="font-mono">region_label</span>,{" "}
+            <span className="font-mono">regions</span>,{" "}
+            <span className="font-mono">journeys</span> and{" "}
+            <span className="font-mono">probes</span>. It fills the form below;
+            Save is still yours to press.
+          </span>
+        </div>
+        {importOpen && (
+          <div className="space-y-2">
+            <textarea
+              value={importText}
+              onChange={(event) => setImportText(event.target.value)}
+              rows={8}
+              spellCheck={false}
+              placeholder='{"region_label": "region", "regions": ["region-a"], "signals": [...], "journeys": [...], "probes": [...]}'
+              className="w-full rounded-card border border-line bg-surface px-2 py-1.5 font-mono text-xs"
+            />
+            {importError && <p className="text-xs text-danger">{importError}</p>}
+            <button
+              type="button"
+              onClick={importMapping}
+              disabled={importText.trim() === ""}
+              className="rounded-card bg-accent px-3 py-1.5 text-sm font-medium text-surface-raised hover:bg-accent-strong disabled:opacity-50"
+            >
+              Load into the form
+            </button>
+          </div>
+        )}
+      </section>
+
       <section className="space-y-3">
         <div className="flex flex-wrap items-center gap-3">
           <h2 className="text-lg font-medium">Golden signals</h2>

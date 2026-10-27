@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { ApiError } from "@/lib/api/client";
 import { StatusPill } from "@/features/platform/components/StatusPill";
@@ -43,20 +43,50 @@ export function PullConnectorCard({
   binding,
   appId,
   suggestedConfig,
+  defaultConfig,
   onChanged,
 }: {
   adapter: Adapter;
   binding?: Connector;
   appId: string;
+  /** What auto-discovery found for this adapter. Arrives after the card is
+   *  mounted, so it is applied by effect rather than read once at mount. */
   suggestedConfig?: Record<string, unknown>;
+  /** What the application itself already says - its base URL - for any field
+   *  of that name the adapter's manifest declares. */
+  defaultConfig?: Record<string, unknown>;
   onChanged: () => void;
 }) {
   const [scope, setScope] = useState<CredentialScope>(adapter.credential_scopes[0]);
-  const [config, setConfig] = useState<Record<string, string>>(() =>
-    Object.fromEntries(
-      Object.entries(suggestedConfig ?? {}).map(([key, value]) => [key, String(value)]),
-    ),
-  );
+  const [config, setConfig] = useState<Record<string, string>>({});
+
+  // Prefill, without overwriting. Discovery and the application's base URL
+  // both arrive after mount and both may change; a field the operator has
+  // typed into is theirs, and a field the manifest does not declare is never
+  // written, because the API validates the config against that manifest.
+  const declared = adapter.config_schema.properties ?? {};
+  const suggestedKey = JSON.stringify(suggestedConfig ?? {});
+  const defaultKey = JSON.stringify(defaultConfig ?? {});
+  useEffect(() => {
+    const incoming: Record<string, string> = {};
+    for (const source of [defaultConfig ?? {}, suggestedConfig ?? {}]) {
+      for (const [key, value] of Object.entries(source)) {
+        if (key in declared && value !== null && value !== undefined && String(value) !== "") {
+          incoming[key] = String(value);
+        }
+      }
+    }
+    if (Object.keys(incoming).length === 0) return;
+    setConfig((current) => {
+      const next = { ...current };
+      for (const [key, value] of Object.entries(incoming)) {
+        if (!(next[key] ?? "").trim()) next[key] = value;
+      }
+      return next;
+    });
+    // Keyed on the serialised sources so a new discovery result re-applies.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [suggestedKey, defaultKey]);
   const [credentials, setCredentials] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

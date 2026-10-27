@@ -262,6 +262,7 @@ export function ConnectStep({
               binding={bindings.get(adapter.id)}
               appId={appId}
               suggestedConfig={suggested.get(adapter.id)}
+              defaultConfig={{ base_url: data.detail.application.base_url ?? "" }}
               onChanged={onChanged}
             />
           ))}
