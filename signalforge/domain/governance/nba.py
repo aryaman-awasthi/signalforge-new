@@ -98,6 +98,201 @@ BASE_VALIDATION_S = 60
 PER_CHECK_VALIDATION_S = 30
 
 
+# --- causal fit: an action must address the mechanism, not the symptom ----------
+#
+# The four scoring terms above say how *powerful* and how *dangerous* an action
+# is. None of them says whether it acts on the thing that is actually broken,
+# and without that a rollback - the highest mitigation power in the table - wins
+# every ranking in which a rollback exists, including the incident whose root
+# cause is a full filesystem. "A recent deployment exists" is not evidence that
+# the deployment caused the fault, and a plan built on that reasoning restarts
+# the estate without freeing a byte.
+#
+# So each candidate is asked one question before it is ranked: how does this
+# action remove the identified failure mechanism? An action that cannot answer
+# it from the evidence is not eliminated - sometimes it is all there is - but it
+# is scored as what it is and it cannot be the primary recommendation while
+# something that can answer it is available.
+
+CAUSAL_UNSUPPORTED_FACTOR = 0.15
+"""What an action's impact is worth when nothing connects it to the mechanism.
+
+Not zero: an unexplained action is still an action, and a war room with no
+causally-supported option left should still see its least-bad choice ranked
+rather than hidden."""
+
+CAUSAL_INDIRECT_FACTOR = 0.45
+"""For an action that slows the mechanism without removing it - shifting traffic
+away from a filling disk buys time and does not reclaim a byte. Worth doing when
+nothing direct is available, never the first answer when something direct is."""
+
+DEPLOYMENT_ROOT_CAUSES: frozenset[str] = frozenset(
+    {"deployment_change", "configuration_change"}
+)
+"""Root causes for which undoing the change is, by construction, the thing that
+removes the mechanism."""
+
+DEPLOYMENT_CAUSAL_MARKER = "deployment_induced"
+"""The marker a mechanism carries when the evidence links a deployment to the
+failure - `deployment_induced_log_growth`, say. The brain writes it only when
+that link is evidenced, so this, and never the bare existence of a change window,
+is what makes a rollback causally supported for some other root cause."""
+
+REGIONAL_ROOT_CAUSES: frozenset[str] = frozenset(
+    {"infrastructure_fault", "regional_fault"}
+)
+
+REMEDIATION_KEYWORDS: Mapping[str, tuple[str, ...]] = {
+    # Matched against the action's own name and description, because the class
+    # of an action ("config_change") says nothing about what it acts on and the
+    # application's manifest is where "rotate-and-compress-logs" is written down.
+    "license_expiry": (
+        # "licen" covers license and licence. Nothing capacity-shaped belongs
+        # here: scaling, throttling and restarting do not renew an entitlement.
+        "licen", "renew", "entitlement", "activation", "subscription",
+        "re-activate", "reactivate",
+    ),
+    "disk_saturation": (
+        "log rotat", "logrotate", "rotate log", "rotate", "compress", "clean",
+        "cleanup", "purge", "prune", "truncate", "reclaim", "evict", "vacuum",
+        "archive", "retention", "disk", "filesystem", "file system", "volume",
+        "storage", "capacity", "expand", "resize", "grow", "inode", "temp",
+        "tmp", "cache", "core dump", "coredump", "garbage", "free space",
+        "log level", "log volume", "verbosity", "debug logging",
+    ),
+    "memory_exhaustion": (
+        "memory", "heap", "cache", "evict", "garbage", "gc", "limit", "scale",
+        "restart", "leak",
+    ),
+    "cpu_saturation": (
+        "cpu", "scale", "throttle", "rate limit", "shed", "concurrency",
+        "worker", "queue",
+    ),
+    "connection_pool_exhaustion": (
+        "pool", "connection", "timeout", "throttle", "shed", "limit", "scale",
+        "restart", "recycle",
+    ),
+    "dependency_saturation": (
+        "throttle", "rate limit", "shed", "scale", "pool", "timeout", "circuit",
+        "retry", "backoff", "queue",
+    ),
+}
+
+INDIRECT_RELIEF: Mapping[str, frozenset[ActionClass]] = {
+    # Nothing slows an expired license down. Moving traffic moves it to the same
+    # refusal; a restart re-reads the same lapsed key.
+    "license_expiry": frozenset(),
+    "disk_saturation": frozenset({ActionClass.TRAFFIC_SHIFT}),
+    "memory_exhaustion": frozenset({ActionClass.TRAFFIC_SHIFT, ActionClass.RESTART}),
+    "cpu_saturation": frozenset({ActionClass.TRAFFIC_SHIFT}),
+    "connection_pool_exhaustion": frozenset(
+        {ActionClass.TRAFFIC_SHIFT, ActionClass.RESTART}
+    ),
+    "dependency_saturation": frozenset({ActionClass.TRAFFIC_SHIFT}),
+}
+
+
+@dataclass(frozen=True)
+class CausalFit:
+    """Whether an action addresses the identified mechanism, and how directly."""
+
+    supported: bool
+    factor: float
+    reason: str = ""
+
+    @property
+    def direct(self) -> bool:
+        return self.supported and self.factor >= 1.0
+
+
+NEUTRAL_FIT = CausalFit(True, 1.0, "")
+"""No root cause has been established yet, so there is nothing to test an action
+against. The ranking is exactly what it was before this check existed - the
+platform does not penalise an action for a conclusion it has not reached."""
+
+
+def is_action_causally_supported(
+    root_cause: str,
+    mechanism: str,
+    action: Any,
+    evidence: Sequence[str] = (),
+) -> CausalFit:
+    """How does this action directly address the identified failure mechanism?
+
+    `action` is anything carrying `action_class`, `name` and (optionally)
+    `description` - the application's own manifest entry, in its own words.
+    `evidence` is the supporting evidence's labels, used the same way the
+    mechanism is: as text that may establish a deployment link.
+
+    Answerable from the evidence -> supported. Not answerable -> not the primary
+    recommendation, whatever its mitigation power says.
+    """
+    cause = (root_cause or "").strip().lower()
+    if not cause:
+        return NEUTRAL_FIT
+
+    action_class = getattr(action, "action_class", ActionClass.OTHER)
+    text = " ".join(
+        str(getattr(action, field_name, "") or "")
+        for field_name in ("name", "description", "action_id")
+    ).lower()
+    corpus = " ".join(
+        [(mechanism or "").strip().lower(), *(str(item).lower() for item in evidence)]
+    )
+    named = (mechanism or "").strip().lower().replace("_", " ") or cause.replace(
+        "_", " "
+    )
+
+    if action_class is ActionClass.DIAGNOSTIC:
+        # Reading the system is always causally defensible: the thing an
+        # unproven mechanism most needs is the evidence that would prove it.
+        return CausalFit(True, 1.0, f"gathers evidence about {named}")
+
+    if action_class is ActionClass.ROLLBACK:
+        if cause in DEPLOYMENT_ROOT_CAUSES or DEPLOYMENT_CAUSAL_MARKER in corpus:
+            return CausalFit(
+                True,
+                1.0,
+                f"the evidence connects a deployment to {named}, so undoing it "
+                "removes the mechanism",
+            )
+        return CausalFit(
+            False,
+            CAUSAL_UNSUPPORTED_FACTOR,
+            f"no evidence connects a deployment to {named}; a change near the "
+            "onset is not evidence that it caused this",
+        )
+
+    if action_class is ActionClass.FAILOVER:
+        if cause in REGIONAL_ROOT_CAUSES:
+            return CausalFit(
+                True, 1.0, f"{named} follows the region, so moving off it helps"
+            )
+        return CausalFit(
+            False,
+            CAUSAL_UNSUPPORTED_FACTOR,
+            f"moves traffic elsewhere without removing {named}",
+        )
+
+    keywords = REMEDIATION_KEYWORDS.get(cause, ())
+    if not keywords:
+        # A root cause this table has no opinion about. Saying nothing is the
+        # honest answer; inventing a verdict would be worse than the symptom
+        # ranking this check exists to fix.
+        return NEUTRAL_FIT
+    if any(word in text for word in keywords):
+        return CausalFit(True, 1.0, f"directly reduces {named}")
+    if action_class in INDIRECT_RELIEF.get(cause, frozenset()):
+        return CausalFit(
+            True, CAUSAL_INDIRECT_FACTOR, f"slows {named} without removing it"
+        )
+    return CausalFit(
+        False,
+        CAUSAL_UNSUPPORTED_FACTOR,
+        f"does not act on {named}",
+    )
+
+
 class Eligibility(str, Enum):
     ELIGIBLE = "eligible"
     BLOCKED_BY_POLICY = "blocked_by_policy"
@@ -198,6 +393,16 @@ class ActionCandidate:
     rationale_degraded: bool = True
     """True until a model wrote it. The cockpit renders the badge from this, so
     a deterministic sentence is never presented as model reasoning."""
+    root_cause: str = ""
+    causal_mechanism: str = ""
+    causally_supported: bool = True
+    causal_fit: float = 1.0
+    causal_reason: str = ""
+    """Why this action does or does not address the identified mechanism.
+
+    Defaults are the neutral answer, so a candidate built without a root cause -
+    an incident the brain has not reasoned about yet, or a caller that does not
+    supply one - ranks exactly as it did before this check existed."""
 
     @property
     def value(self) -> float:
@@ -228,6 +433,11 @@ class ActionCandidate:
             parts.append(
                 f"addresses \"{self.hypothesis_label}\" "
                 f"({self.hypothesis_confidence:.0%} confidence)"
+            )
+        if self.causal_reason:
+            parts.append(
+                ("causally supported: " if self.causally_supported else "not causally supported: ")
+                + self.causal_reason
             )
         if self.decision.needs_approval:
             parts.append(
@@ -267,6 +477,11 @@ class ActionCandidate:
             "params_schema": dict(self.params_schema or {}),
             "rationale": self.rationale or self.explain(),
             "rationale_degraded": self.rationale_degraded,
+            "root_cause": self.root_cause,
+            "causal_mechanism": self.causal_mechanism,
+            "causally_supported": self.causally_supported,
+            "causal_fit": round(self.causal_fit, 4),
+            "causal_reason": self.causal_reason,
         }
 
 
@@ -282,6 +497,7 @@ def impact_of(
     *,
     hypothesis_confidence: float,
     customer_facing: bool,
+    causal_fit: float = 1.0,
 ) -> float:
     """How much of the harm this action can remove.
 
@@ -289,8 +505,14 @@ def impact_of(
     attacking the right thing. A rollback aimed at a 20%-confidence hypothesis is
     a 20%-confidence rollback, and the arithmetic should say that out loud rather
     than let "rollback is powerful" carry the ranking.
+
+    `causal_fit` is the second half of that same argument: confidence says how
+    sure we are of the cause, and the fit says whether *this action* removes it.
+    A rollback attached to a 90%-confidence disk-saturation hypothesis is a
+    confident action against a mechanism it does not touch, and multiplying the
+    power by the fit is where the arithmetic says so.
     """
-    power = MITIGATION_POWER.get(action_class, 0.3)
+    power = MITIGATION_POWER.get(action_class, 0.3) * max(0.0, min(1.0, causal_fit))
     confidence = max(0.0, min(1.0, float(hypothesis_confidence)))
     # A floor of 0.15 so that an action with no hypothesis attached is not
     # multiplied out of existence: sometimes the right move is to restart the
@@ -339,16 +561,27 @@ def expected_validation_s(verification_checks: int, *, stability_window_s: int) 
 
 
 def rank(candidates: Sequence[ActionCandidate]) -> tuple[ActionCandidate, ...]:
-    """Eligible first, then by score, then by action id.
+    """Eligible first, then causally supported, then by score, then by action id.
 
-    The third key is what makes the ranking *stable*: two actions that score
+    The causal tier is a tier rather than another term in the arithmetic because
+    the requirement is categorical: an action nobody can connect to the
+    mechanism must not be the primary recommendation while one that can is
+    available, however powerful the unconnected one is. Inside each tier the
+    score decides, so the four numbers still do the ordering.
+
+    The last key is what makes the ranking *stable*: two actions that score
     identically must come back in the same order on every call, or the top
     recommendation flickers between refreshes and nobody trusts the panel.
     """
     return tuple(
         sorted(
             candidates,
-            key=lambda c: (0 if c.eligible else 1, -c.value, c.action_id),
+            key=lambda c: (
+                0 if c.eligible else 1,
+                0 if c.causally_supported else 1,
+                -c.value,
+                c.action_id,
+            ),
         )
     )
 

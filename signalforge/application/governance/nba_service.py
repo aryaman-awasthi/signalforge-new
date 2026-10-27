@@ -70,6 +70,7 @@ from signalforge.domain.governance.nba import (
     expected_validation_s,
     impact_of,
     information_gain_of,
+    is_action_causally_supported,
     recommend,
     revise_plan,
     risk_of,
@@ -263,6 +264,14 @@ class NextBestActionService:
                     limit=50,
                 )
             )
+            evidence_nodes = list(
+                await uow.incident_graph.list(
+                    principal.tenant_id,
+                    incident_id,
+                    types=[NodeType.EVIDENCE, NodeType.FACT],
+                    limit=40,
+                )
+            )
             changes = await uow.changes.list(
                 principal.tenant_id, incident.app_id, limit=20
             )
@@ -275,6 +284,11 @@ class NextBestActionService:
         policy = await self._policies.current(principal.tenant_id, incident.app_id)
 
         top = _top_hypothesis(nodes)
+        # The RCA the brain wrote, read rather than re-derived: the action ranked
+        # now has to be justifiable against the belief that was actually held
+        # when it was ranked.
+        root_cause, mechanism = _root_cause_of(top)
+        evidence_text = _evidence_labels(top, evidence_nodes)
         customer_facing = _customer_facing(incident)
         urgency = urgency_of(
             incident.severity.value, customer_facing=customer_facing
@@ -298,6 +312,9 @@ class NextBestActionService:
                     context=context,
                     approver_roles=approver_roles,
                     discriminating=_discriminates(action, nodes),
+                    root_cause=root_cause,
+                    mechanism=mechanism,
+                    evidence_text=evidence_text,
                 )
             )
         return tuple(candidates), policy
@@ -313,16 +330,26 @@ class NextBestActionService:
         context: "_Context",
         approver_roles: frozenset[str],
         discriminating: bool,
+        root_cause: str = "",
+        mechanism: str = "",
+        evidence_text: Sequence[str] = (),
     ) -> ActionCandidate:
         decision = PolicyEngine.decide(action, policy)
         risk_class = classify_action(action)
         confidence = float(top.confidence or 0.0) if top is not None else 0.0
+        # Before the action is ranked: how does it remove the mechanism? An
+        # action that cannot answer that from the evidence is scored as what it
+        # is and cannot be the primary recommendation while one that can exists.
+        fit = is_action_causally_supported(
+            root_cause, mechanism, action, evidence_text
+        )
         score = Score(
             urgency=urgency,
             impact=impact_of(
                 action.action_class,
                 hypothesis_confidence=confidence,
                 customer_facing=customer_facing,
+                causal_fit=fit.factor,
             ),
             information_gain=information_gain_of(
                 action.action_class, discriminating=discriminating
@@ -365,6 +392,11 @@ class NextBestActionService:
             reversible=action.reversible,
             idempotent=action.idempotent,
             params_schema=action.params_schema,
+            root_cause=root_cause,
+            causal_mechanism=mechanism,
+            causally_supported=fit.supported,
+            causal_fit=fit.factor,
+            causal_reason=fit.reason,
         )
 
     async def _explain(
@@ -575,6 +607,41 @@ def _top_hypothesis(nodes: Sequence[GraphNode]) -> Optional[GraphNode]:
     return max(live, key=lambda n: (n.confidence or 0.0, n.seq))
 
 
+def _root_cause_of(top: Optional[GraphNode]) -> tuple[str, str]:
+    """The leading hypothesis's root cause and causal mechanism, as the brain
+    recorded them.
+
+    Empty when the brain has not reached a conclusion, and empty is the neutral
+    answer: the causal check makes no judgement about an action when there is no
+    established cause to judge it against.
+    """
+    if top is None:
+        return "", ""
+    detail = dict(top.detail or {})
+    return (
+        str(detail.get("root_cause") or "").strip(),
+        str(detail.get("causal_mechanism") or "").strip(),
+    )
+
+
+def _evidence_labels(
+    top: Optional[GraphNode], evidence_nodes: Sequence[GraphNode]
+) -> tuple[str, ...]:
+    """What the causal check reads besides the mechanism.
+
+    The leading hypothesis's own supporting evidence first - it is the evidence
+    that actually argued for this cause - then the incident's other current
+    evidence, so a deployment link recorded by one agent is visible to a check
+    reading another agent's hypothesis.
+    """
+    labels: list[str] = []
+    if top is not None:
+        detail = dict(top.detail or {})
+        labels.extend(str(item) for item in (detail.get("supporting_evidence") or []))
+    labels.extend(node.label for node in evidence_nodes if node.current and node.label)
+    return tuple(dict.fromkeys(labels))[:30]
+
+
 def _discriminates(action: MappedAction, nodes: Sequence[GraphNode]) -> bool:
     """Whether doing this would tell two live hypotheses apart.
 
@@ -627,7 +694,22 @@ def _prompt(candidates: Sequence[ActionCandidate]) -> str:
         "Write one short sentence per action explaining, to an incident "
         "commander, why the platform ranked it where it did. SignalForge has "
         "already computed each score deterministically.\n\n"
+        "Every sentence must be causal, not symptomatic. Before writing one, "
+        "read from the material below:\n"
+        "1. which resource or component is failing;\n"
+        "2. the causal mechanism by which it produces the symptom;\n"
+        "3. the evidence recorded for that mechanism;\n"
+        "4. how this action acts on that mechanism;\n"
+        "5. whether a safer or more reversible action would act on it too.\n\n"
         "Rules:\n"
+        "- Explain the action in terms of the mechanism it removes. Never "
+        "justify an action by the symptom, by its availability, or by its being "
+        "a familiar remedy.\n"
+        "- Where the material says an action is not causally supported, say so "
+        "plainly and say what evidence would change that. Never argue against "
+        "the platform's causal verdict.\n"
+        "- A deployment existing near the onset is not evidence that it caused "
+        "the fault. Do not treat it as a reason to undo the change.\n"
         "- Use only the material below. Add no new facts.\n"
         "- Do not invent, restate or adjust any number. The scores are shown "
         "beside your text.\n"

@@ -31,6 +31,7 @@ populated regardless.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from typing import Optional, Sequence
 
@@ -105,6 +106,126 @@ NARRATIVE_SCHEMA = {
 
 
 @dataclass(frozen=True)
+class ResourceSignature:
+    """A root cause the evidence can name outright, and the words that name it.
+
+    `title` and `rationale` are per cause because the sentence an incident
+    commander reads has to say what kind of thing is broken: an expired license
+    is not a saturated resource, and a card that called it one would send the
+    room looking for load that is not there.
+    """
+
+    root_cause: str
+    mechanism: str
+    markers: tuple[str, ...]
+    title: str
+    rationale: str
+
+
+_EXHAUSTION_RATIONALE = (
+    "A resource is not slow, it is gone: operations fail rather than queue. The "
+    "remediation has to remove what is consuming the resource, which is a "
+    "different action from undoing a change that happened to be nearby."
+)
+
+RESOURCE_SIGNATURES: tuple[ResourceSignature, ...] = (
+    # Ordered most specific first: a filesystem that is full is a different
+    # incident from a service that is merely slow, and the remediation that
+    # removes it is a different action. Markers match as whole words (see
+    # `_contains`), so "oom" is not found inside "war room".
+    ResourceSignature(
+        root_cause="license_expiry",
+        mechanism="expired_license_refuses_requests",
+        markers=(
+            "license expired", "licence expired", "license has expired",
+            "licence has expired", "expired license", "expired licence",
+            "license lapsed", "licence lapsed", "license is expired",
+            "invalid license", "license invalid", "entitlement expired",
+            "subscription expired", "activation expired", "license_expired",
+        ),
+        title="An expired license on {subject} is refusing every request outright",
+        rationale=(
+            "A credential-shaped failure, not a capacity one: nothing is slow and "
+            "nothing is saturated; a dependency is refusing requests because an "
+            "entitlement has lapsed. The remediation is a renewal - a rollback or "
+            "a failover does not touch it."
+        ),
+    ),
+    ResourceSignature(
+        root_cause="disk_saturation",
+        mechanism="log_and_temp_file_growth",
+        markers=(
+            "no space left on device", "disk full", "filesystem full",
+            "disk saturation", "disk utilisation", "disk utilization",
+            "disk usage", "disk_used", "disk", "filesystem", "file system",
+            "inode", "volume full", "storage full", "enospc", "/var/log",
+        ),
+        title="Disk saturation on {subject} is failing operations outright",
+        rationale=_EXHAUSTION_RATIONALE,
+    ),
+    ResourceSignature(
+        root_cause="memory_exhaustion",
+        mechanism="memory_growth",
+        markers=(
+            "out of memory", "oom", "heap exhaust", "memory exhaust",
+            "memory usage", "memory_used", "swap",
+        ),
+        title="Memory exhaustion on {subject} is failing operations outright",
+        rationale=_EXHAUSTION_RATIONALE,
+    ),
+    ResourceSignature(
+        root_cause="connection_pool_exhaustion",
+        mechanism="connection_pool_starvation",
+        markers=(
+            "connection pool", "pool exhaust", "pool saturation",
+            "connection_pool", "no connections available",
+        ),
+        title="Connection pool exhaustion on {subject} is failing operations outright",
+        rationale=_EXHAUSTION_RATIONALE,
+    ),
+)
+
+
+@dataclass(frozen=True)
+class ResourceMatch:
+    signature: ResourceSignature
+    subject: str
+
+
+_MARKER_PATTERNS: dict[str, "re.Pattern[str]"] = {}
+
+
+def _contains(marker: str, text: str) -> bool:
+    """Whole-word presence of `marker` in lowercase `text`.
+
+    A bare substring test found "oom" in "war room" and "swap" in "swapped",
+    and renamed the incident. Word boundaries are letters and digits; a space
+    in the marker matches a space, an underscore or a hyphen, so the error code
+    `LICENSE_EXPIRED` and the sentence "license expired" are the same marker.
+    """
+    pattern = _MARKER_PATTERNS.get(marker)
+    if pattern is None:
+        body = re.escape(marker).replace(r"\ ", r"[\s_\-]+")
+        pattern = re.compile(rf"(?<![a-z0-9]){body}(?![a-z0-9])")
+        _MARKER_PATTERNS[marker] = pattern
+    return pattern.search(text) is not None
+
+DEPLOYMENT_LINK_MARKERS: tuple[str, ...] = (
+    "log level", "logging level", "log verbosity", "verbosity", "debug logging",
+    "debug log", "trace logging", "log volume increase", "increased logging",
+    "logging enabled", "new log",
+)
+"""What has to be said somewhere in the record before a change is treated as the
+*cause* of a resource being consumed rather than merely a thing that happened
+nearby.
+
+This is the whole rollback question in one constant. "A deployment exists and
+the disk is full" is a coincidence until something connects the two, and a
+platform that rolls back on the coincidence is a platform that restarts the
+estate without freeing a byte."""
+
+
+@dataclass(frozen=True)
 class HypothesisSpec:
     """One candidate explanation, before any evidence is attached."""
 
@@ -112,6 +233,18 @@ class HypothesisSpec:
     title: str
     subject: str
     rationale: str
+    root_cause: str = ""
+    """The taxonomy name for what is broken - `disk_saturation`,
+    `deployment_change`. Read by the next-best-action engine, which asks of every
+    candidate action how it removes *this*."""
+    mechanism: str = ""
+    """How the root cause produces the symptom - `log_and_temp_file_growth`. The
+    remediation has to act on the mechanism; the root cause alone is not enough
+    to choose between rotating logs and rolling back."""
+    missing_evidence: tuple[str, ...] = ()
+    """What would settle this that the platform does not hold. Named rather than
+    assumed absent, because "we have no evidence the deploy caused it" and "we
+    never looked" are different sentences and only one of them justifies waiting."""
 
     @property
     def key(self) -> str:
@@ -137,7 +270,6 @@ class HypothesisAgent(ModelBackedAgent):
         trigger: str = "",
     ) -> tuple[AgentOutcome, list[ConfidenceEntry]]:
         """Score every hypothesis against the graph as it now stands."""
-        specs = catalogue(context)
         evidence_nodes = [
             node
             for node in nodes
@@ -145,6 +277,10 @@ class HypothesisAgent(ModelBackedAgent):
             in (NodeType.EVIDENCE, NodeType.FACT, NodeType.RISK, NodeType.IMPACT)
             and node.current
         ]
+        # The catalogue is built from the evidence rather than from the incident
+        # alone: a filesystem that is measurably full is a named root cause with
+        # a named mechanism, not a generic "something is saturated".
+        specs = catalogue(context, nodes=evidence_nodes)
 
         proposals: list[NodeProposal] = []
         edges: list[EdgeProposal] = []
@@ -192,6 +328,24 @@ class HypothesisAgent(ModelBackedAgent):
                         "supporting": list(entry.supporting),
                         "refuting": list(entry.refuting),
                         "explain": entry.explain(),
+                        # The RCA the remediation planner consumes. Written on
+                        # the node rather than derived at read time so that the
+                        # action ranked at 03:14 can be justified from the row
+                        # six months later, against the belief that was actually
+                        # held then.
+                        "root_cause": spec.root_cause,
+                        "causal_mechanism": spec.mechanism,
+                        "supporting_evidence": [
+                            link.label
+                            for link in weighted
+                            if link.stance is Stance.SUPPORTS
+                        ][:10],
+                        "contradicting_evidence": [
+                            link.label
+                            for link in weighted
+                            if link.stance is Stance.REFUTES
+                        ][:10],
+                        "missing_evidence": list(spec.missing_evidence),
                     },
                     tags=("hypothesis",),
                 )
@@ -339,7 +493,9 @@ class HypothesisAgent(ModelBackedAgent):
 # --- the catalogue -------------------------------------------------------------
 
 
-def catalogue(context: IncidentContext) -> tuple[HypothesisSpec, ...]:
+def catalogue(
+    context: IncidentContext, *, nodes: Sequence[GraphNode] = ()
+) -> tuple[HypothesisSpec, ...]:
     """The competing explanations this incident is scored against.
 
     Three are always present, because they are the three first-order causes of
@@ -353,7 +509,10 @@ def catalogue(context: IncidentContext) -> tuple[HypothesisSpec, ...]:
     """
     specs: list[HypothesisSpec] = []
 
+    resource = _resource_exhaustion(context, nodes)
     change = proximate_change(context)
+    linked = _deployment_link(context, nodes)
+
     if change is not None:
         specs.append(
             HypothesisSpec(
@@ -369,6 +528,22 @@ def catalogue(context: IncidentContext) -> tuple[HypothesisSpec, ...]:
                     "Temporal proximity is not causality; this hypothesis exists "
                     "so the timing can be tested rather than assumed."
                 ),
+                root_cause="deployment_change",
+                mechanism=(
+                    f"deployment_induced_{resource.signature.mechanism}"
+                    if resource is not None and linked
+                    else "change_introduced_fault"
+                ),
+                missing_evidence=(
+                    ()
+                    if linked or resource is None
+                    else (
+                        "evidence connecting this change to the "
+                        f"{resource.signature.root_cause.replace('_', ' ')} - a "
+                        "log-volume, configuration or verbosity difference across "
+                        "the deploy",
+                    )
+                ),
             )
         )
     else:
@@ -382,24 +557,61 @@ def catalogue(context: IncidentContext) -> tuple[HypothesisSpec, ...]:
                     "window sits inside the onset window, so nothing supports "
                     "this yet - which is itself worth knowing."
                 ),
+                root_cause="deployment_change",
+                mechanism="change_introduced_fault",
+                missing_evidence=("a change window inside the onset window",),
             )
         )
 
     worst = _worst_subject(context)
-    specs.append(
-        HypothesisSpec(
-            slug="saturation",
-            title=(
-                f"{worst or 'A dependency'} is saturated or degraded and callers "
-                "are queueing behind it"
-            ),
-            subject=worst,
-            rationale=(
-                "The classic shape: one resource slows, its callers retry, and "
-                "the symptom appears everywhere except where the cause is."
-            ),
+    if resource is not None:
+        # The saturation slot, made specific. Same slug, so the node keeps its
+        # identity and simply gains a version as the belief sharpens - which is
+        # what the graph's versioning is for, and what lets the card show "we
+        # thought a dependency was slow; it is the filesystem".
+        signature = resource.signature
+        subject = resource.subject
+        specs.append(
+            HypothesisSpec(
+                slug="saturation",
+                title=signature.title.format(
+                    subject=subject or worst or "the application"
+                ),
+                subject=subject or worst,
+                rationale=signature.rationale,
+                root_cause=signature.root_cause,
+                mechanism=(
+                    f"deployment_induced_{signature.mechanism}"
+                    if linked
+                    else signature.mechanism
+                ),
+                missing_evidence=(
+                    ()
+                    if linked or change is None
+                    else (
+                        "evidence connecting the change in the onset window to "
+                        "the resource growth",
+                    )
+                ),
+            )
         )
-    )
+    else:
+        specs.append(
+            HypothesisSpec(
+                slug="saturation",
+                title=(
+                    f"{worst or 'A dependency'} is saturated or degraded and callers "
+                    "are queueing behind it"
+                ),
+                subject=worst,
+                rationale=(
+                    "The classic shape: one resource slows, its callers retry, and "
+                    "the symptom appears everywhere except where the cause is."
+                ),
+                root_cause="dependency_saturation",
+                mechanism="callers_queueing_behind_a_slow_dependency",
+            )
+        )
 
     regions = _regions(context)
     specs.append(
@@ -415,6 +627,8 @@ def catalogue(context: IncidentContext) -> tuple[HypothesisSpec, ...]:
                 "below it is. Distinguished from the others by whether the fault "
                 "follows the region rather than the service."
             ),
+            root_cause="infrastructure_fault",
+            mechanism="fault_below_the_application_follows_the_region",
         )
     )
 
@@ -436,6 +650,106 @@ def catalogue(context: IncidentContext) -> tuple[HypothesisSpec, ...]:
         break
 
     return tuple(specs)
+
+
+def _evidence_text(
+    context: IncidentContext, nodes: Sequence[GraphNode]
+) -> tuple[str, ...]:
+    """Everything the incident has actually said, as lowercase text.
+
+    Nodes first, because they are the platform's own measurements; bridge
+    messages after, because a person naming what they are looking at is evidence
+    even when nothing has measured it yet.
+    """
+    parts: list[str] = []
+    for node in nodes:
+        detail = dict(node.detail or {})
+        parts.append(
+            " ".join(
+                str(value)
+                for value in (
+                    node.label,
+                    node.content,
+                    detail.get("subject"),
+                    detail.get("signal_key"),
+                    # What the application answered a failing probe with.
+                    detail.get("last_detail"),
+                )
+                if value
+            ).lower()
+        )
+    for message in tuple(getattr(context, "messages", ()) or ())[:50]:
+        text = str(message.get("text") or message.get("body") or "")
+        if text:
+            parts.append(text.lower())
+    if context.verdict is not None:
+        parts.extend(
+            f"{state.signal_key} {state.family}".lower()
+            for state in context.verdict.anomalous
+            if state.signal_key
+        )
+    return tuple(part for part in parts if part)
+
+
+def _resource_exhaustion(
+    context: IncidentContext, nodes: Sequence[GraphNode]
+) -> Optional[ResourceMatch]:
+    """The signature the evidence names outright, and the subject it names it on,
+    when a resource has been exhausted - or an entitlement has lapsed - rather
+    than merely degraded.
+
+    Read from what the incident holds, never from the severity or the symptom: a
+    payment failure rate tells you customers are hurting and tells you nothing
+    about which resource ran out.
+    """
+    corpus = _evidence_text(context, nodes)
+    if not corpus:
+        return None
+    for signature in RESOURCE_SIGNATURES:
+        for part in corpus:
+            hit = next(
+                (marker for marker in signature.markers if _contains(marker, part)),
+                None,
+            )
+            if hit is None:
+                continue
+            subject = ""
+            for node in nodes:
+                detail = dict(node.detail or {})
+                blob = f"{node.label} {node.content} {detail.get('last_detail') or ''}".lower()
+                if _contains(hit, blob):
+                    # A component the application itself named is the best
+                    # subject; the node's own subject (a journey, a signal) is
+                    # the fallback.
+                    subject = (
+                        str(detail.get("component") or "")
+                        or str(detail.get("subject") or "")
+                        or subject
+                    )
+                    if subject:
+                        break
+            return ResourceMatch(signature=signature, subject=subject)
+    return None
+
+
+def _deployment_link(
+    context: IncidentContext, nodes: Sequence[GraphNode]
+) -> bool:
+    """Whether anything connects a change to the resource being consumed.
+
+    A change in the onset window is not this. Something has to say that the
+    change altered what generates the load - a log level, a verbosity, a new
+    writer - and until it does, rolling back is an action against a coincidence.
+    """
+    if proximate_change(context) is None:
+        return False
+    corpus = _evidence_text(context, nodes) + tuple(
+        f"{change.service} {change.version or ''} {change.diff_ref or ''}".lower()
+        for change in context.changes
+    )
+    return any(
+        _contains(marker, part) for part in corpus for marker in DEPLOYMENT_LINK_MARKERS
+    )
 
 
 def _worst_subject(context: IncidentContext) -> str:
@@ -497,6 +811,11 @@ def _link(spec: HypothesisSpec, node: GraphNode) -> Optional[WeightedEvidence]:
         if kind not in (
             EvidenceKind.TELEMETRY_ANOMALY,
             EvidenceKind.SLO_BURN,
+            # A failing synthetic probe is first-hand evidence that callers are
+            # failing at the dependency this slot names - and when the probe's
+            # detail carries the application's own refusal, it is the evidence
+            # the slot was named from.
+            EvidenceKind.PROBE_FAILURE,
             EvidenceKind.TOPOLOGY_PATH,
             EvidenceKind.CORROBORATION,
             EvidenceKind.ALERT_CLUSTER,
