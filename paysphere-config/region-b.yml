@@ -1,0 +1,10 @@
+# region-b: routed over the shared fibre span FIB-7 on its primary path.
+#
+# The tighter timeout and the smaller pool here are not a mistake - they are the
+# kind of well-intentioned tuning that turns a shared-fibre wobble into a customer
+# incident in one region and not the other, which is exactly what the harness
+# exists to reproduce.
+region: region-b
+settings:
+  timeout_ms: 1200
+  pool_size: 8

@@ -1,0 +1,17 @@
+# PaySphere runtime configuration: values shared by every region.
+#
+# This directory is the application's configuration repository. It is the thing a
+# change management process actually changes, and deploy.sh is what applies it.
+# SignalForge does not read these files: it learns about a deployment because the
+# pipeline announces it over the public ingest contract.
+release: v12
+service: payments
+owner: payments-platform
+journeys:
+  - upi
+  - card
+  - wallet
+  - refund
+settings:
+  timeout_ms: 2000
+  pool_size: 16
