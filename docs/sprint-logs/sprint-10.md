@@ -104,6 +104,15 @@ notification binding; and nothing told anyone that a severity had been proposed.
 
 - The reference harness, removed earlier the same day on instruction, was restored on a
   later instruction (quoted in commit 3b92f68). No contract or spec changed.
+- **[S10-T19][REQ-051] The Claude API joins the model-endpoint allowlist** on the instruction
+  "for this i just for today i'll use claude api" (2026-10-27), while the GenAI Lab gateway
+  answers 403 to the organisation's key. The rule "LLM only through the organizer endpoint"
+  is deviated from by one constant in `infrastructure/llm/hosts.py` - still code, still not
+  configuration. Its OpenAI-compatible endpoint ignores `response_format` (the provider
+  restates every schema in the prompt and validates regardless), serves no `/embeddings`
+  (degrades as designed), and Claude 4.7+ refuses `temperature` below 1, so the provider
+  retries once without a temperature. Verified offline only; a live call needs a Claude API
+  key in `.env`, which the sprint did not have.
 - Commit `[S10-T09]` lands uncommitted work found in the tree (the causal-fit layer) rather
   than discarding it; it parsed, was wired end to end, and the sprint built on it.
 
