@@ -492,6 +492,33 @@ class CandidateOut(BaseModel):
         description="True when the sentence is the platform's deterministic "
         "explanation rather than a model's."
     )
+    # The causal check, published. Defaults are the neutral answer so a candidate
+    # built before the brain reached a conclusion reads exactly as it did.
+    root_cause: str = Field(
+        default="",
+        description="The leading hypothesis's root cause, as the brain recorded "
+        "it - `license_expiry`, `disk_saturation`, `deployment_change`. Empty "
+        "when no cause has been established.",
+    )
+    causal_mechanism: str = Field(
+        default="", description="How that cause produces the symptom."
+    )
+    causally_supported: bool = Field(
+        default=True,
+        description="Whether this action addresses the identified mechanism. "
+        "An unsupported action is ranked below every supported one, whatever "
+        "its mitigation power.",
+    )
+    causal_fit: float = Field(
+        default=1.0,
+        description="The factor the action's mitigation power was multiplied by: "
+        "1.0 direct, 0.45 indirect, 0.15 unsupported.",
+    )
+    causal_reason: str = Field(
+        default="",
+        description="Why the action does or does not act on the mechanism, in "
+        "one deterministic clause.",
+    )
 
 
 class PlanItemOut(BaseModel):

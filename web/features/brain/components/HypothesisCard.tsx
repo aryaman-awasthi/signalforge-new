@@ -37,6 +37,16 @@ export function HypothesisCard({
   const [showEvidence, setShowEvidence] = useState(false);
   const latest = hypothesis.history[hypothesis.history.length - 1];
   const percent = Math.round(hypothesis.confidence * 100);
+  // The RCA the brain wrote onto the node. Read as unknown and narrowed,
+  // because `detail` is an open record and a missing field is the normal case
+  // for a hypothesis the evidence has not yet made specific.
+  const detail = hypothesis.node.detail ?? {};
+  const rootCause = typeof detail.root_cause === "string" ? detail.root_cause : "";
+  const mechanism =
+    typeof detail.causal_mechanism === "string" ? detail.causal_mechanism : "";
+  const missingEvidence = Array.isArray(detail.missing_evidence)
+    ? detail.missing_evidence.filter((item): item is string => typeof item === "string")
+    : [];
 
   return (
     <article
@@ -97,6 +107,29 @@ export function HypothesisCard({
 
       {/* The deterministic explanation. Always present, model or no model. */}
       <p className="mt-2 text-[11px] text-ink-muted">{hypothesis.explain}</p>
+      {/* The root-cause analysis the brain wrote onto the node: what is broken
+          and how it produces the symptom. Rendered from the node detail rather
+          than re-derived, so the card and the next-best-action panel cannot
+          disagree about the cause they are both reasoning from. */}
+      {rootCause && (
+        <p className="mt-1 text-[11px]">
+          <span className="font-medium">Root cause:</span>{" "}
+          <span className="font-mono">{rootCause.replace(/_/g, " ")}</span>
+          {mechanism && (
+            <>
+              {" "}
+              <span className="text-ink-muted">via</span>{" "}
+              <span className="font-mono">{mechanism.replace(/_/g, " ")}</span>
+            </>
+          )}
+        </p>
+      )}
+      {missingEvidence.length > 0 && (
+        <p className="mt-1 text-[11px] text-ink-muted">
+          <span className="font-medium">Would settle it:</span>{" "}
+          {missingEvidence.join("; ")}
+        </p>
+      )}
       {latest?.narrative && (
         <p className="mt-1 border-l-2 border-line pl-2 text-[11px] italic text-ink-muted">
           {latest.narrative}{" "}

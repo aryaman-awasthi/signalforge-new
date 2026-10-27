@@ -292,6 +292,22 @@ function Primary({
             {Math.round(candidate.hypothesis_confidence * 100)}%)
           </Chip>
         )}
+        {/* The causal verdict, in the platform's own words. "Not causally
+            supported" is the chip an incident commander most needs to see on a
+            rollback that happens to be the most powerful action in the table. */}
+        {candidate.root_cause && candidate.causal_reason && (
+          <Chip
+            tone={candidate.causally_supported === false ? "warn" : "ok"}
+            title={`root cause ${candidate.root_cause}${
+              candidate.causal_mechanism ? ` via ${candidate.causal_mechanism}` : ""
+            }`}
+          >
+            {candidate.causally_supported === false
+              ? "not causally supported"
+              : "causally supported"}
+            : {candidate.causal_reason}
+          </Chip>
+        )}
       </div>
 
       <div className="mt-2.5 space-y-1">

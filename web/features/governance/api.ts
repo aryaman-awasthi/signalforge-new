@@ -154,6 +154,15 @@ export type Candidate = {
   rationale: string;
   /** True when the sentence is the platform's, not a model's. */
   rationale_degraded: boolean;
+  /** The causal check: the leading hypothesis's root cause, how it produces
+   *  the symptom, and whether this action acts on that mechanism. Optional
+   *  because an API built before the check existed does not send them, and a
+   *  candidate without them reads exactly as it did. */
+  root_cause?: string;
+  causal_mechanism?: string;
+  causally_supported?: boolean;
+  causal_fit?: number;
+  causal_reason?: string;
 };
 
 export type PlanItem = {
