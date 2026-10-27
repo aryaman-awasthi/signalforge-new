@@ -62,6 +62,7 @@ from signalforge.contracts.roles import ROLE_PERMISSIONS
 from signalforge.domain.brain.nodes import GraphNode, NodeType
 from signalforge.domain.brain.untrusted import SYSTEM_FLOOR, UntrustedItem, fence
 from signalforge.domain.governance.nba import (
+    ACT_CONFIDENCE_THRESHOLD,
     ActionCandidate,
     Eligibility,
     Recommendation,
@@ -158,10 +159,14 @@ class NextBestActionService:
         `explain=False` is what the plan revision and the tests use: the ranking
         with no model call at all, which is also what a degraded node produces.
         """
-        candidates, policy = await self._candidates(principal, incident_id)
+        candidates, policy, act_threshold = await self._candidates(
+            principal, incident_id
+        )
         if explain and candidates:
             candidates = await self._explain(principal, incident_id, candidates)
-        result = recommend(candidates, at=self._clock.now())
+        result = recommend(
+            candidates, at=self._clock.now(), act_threshold=act_threshold
+        )
         async with self._uow_factory() as uow:
             plan = await uow.response_plans.latest(principal.tenant_id, incident_id)
             history = list(
@@ -201,7 +206,9 @@ class NextBestActionService:
         post-incident review is made of.
         """
         now = self._clock.now()
-        candidates, policy = await self._candidates(principal, incident_id)
+        candidates, policy, act_threshold = await self._candidates(
+            principal, incident_id
+        )
         async with self._uow_factory() as uow:
             incident = await self._require_incident(
                 uow, principal.tenant_id, incident_id
@@ -240,7 +247,7 @@ class NextBestActionService:
                 {"kept": str(len(plan.kept)), "paused": str(len(plan.paused))},
             )
         return NbaView(
-            recommendation=recommend(candidates, at=now),
+            recommendation=recommend(candidates, at=now, act_threshold=act_threshold),
             plan=plan,
             previous_plan=previous,
             policy=policy,
@@ -250,7 +257,11 @@ class NextBestActionService:
 
     async def _candidates(
         self, principal: Principal, incident_id: str
-    ) -> tuple[tuple[ActionCandidate, ...], PolicyDocument]:
+    ) -> tuple[tuple[ActionCandidate, ...], PolicyDocument, float]:
+        """The candidates, the policy in force, and the confidence the
+        application's onboarding policy asks for before a remediation outranks
+        a diagnostic (`confidence_threshold`, which until S10 was stored and
+        read by nothing)."""
         async with self._uow_factory() as uow:
             incident = await self._require_incident(
                 uow, principal.tenant_id, incident_id
@@ -317,7 +328,12 @@ class NextBestActionService:
                     evidence_text=evidence_text,
                 )
             )
-        return tuple(candidates), policy
+        act_threshold = (
+            float(profile.policy.confidence_threshold)
+            if profile is not None and profile.policy is not None
+            else ACT_CONFIDENCE_THRESHOLD
+        )
+        return tuple(candidates), policy, act_threshold
 
     def _candidate(
         self,

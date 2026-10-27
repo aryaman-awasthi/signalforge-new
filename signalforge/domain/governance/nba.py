@@ -560,14 +560,50 @@ def expected_validation_s(verification_checks: int, *, stability_window_s: int) 
     )
 
 
-def rank(candidates: Sequence[ActionCandidate]) -> tuple[ActionCandidate, ...]:
-    """Eligible first, then causally supported, then by score, then by action id.
+ACT_CONFIDENCE_THRESHOLD = 0.7
+"""How sure the platform has to be about a mechanism before fixing it outranks
+measuring it. The application's policy carries its own `confidence_threshold`
+and the service passes that in; this is the domain's default when nothing does,
+and it matches the onboarding profile's."""
+
+
+def acts_on_established_mechanism(
+    candidate: ActionCandidate, threshold: float
+) -> bool:
+    """Would this action *remove* a mechanism the evidence has already settled?
+
+    True for an eligible, causally supported remediation whose hypothesis is at
+    or above the threshold. A diagnostic is never one: reading the system is
+    always defensible, but once the licence is 97% established, reading its
+    configuration again is worth 3% of what it was worth at 50%, and the
+    scoring - where a read-only action carries no risk toll at all - cannot say
+    so on its own. This is the incident-command rule written down: diagnose
+    until you are sure, then act, and do not keep diagnosing instead of acting.
+    """
+    return (
+        candidate.eligible
+        and candidate.causally_supported
+        and candidate.action_class is not ActionClass.DIAGNOSTIC
+        and candidate.hypothesis_confidence >= threshold
+    )
+
+
+def rank(
+    candidates: Sequence[ActionCandidate],
+    *,
+    act_threshold: float = ACT_CONFIDENCE_THRESHOLD,
+) -> tuple[ActionCandidate, ...]:
+    """Eligible first, then causally supported, then what removes an
+    established mechanism, then by score, then by action id.
 
     The causal tier is a tier rather than another term in the arithmetic because
     the requirement is categorical: an action nobody can connect to the
     mechanism must not be the primary recommendation while one that can is
-    available, however powerful the unconnected one is. Inside each tier the
-    score decides, so the four numbers still do the ordering.
+    available, however powerful the unconnected one is. The third tier is
+    categorical for the same reason in the other direction: a remediation that
+    removes a mechanism the evidence has settled must not sit behind a
+    diagnostic whose only merit is that it is free. Inside each tier the score
+    decides, so the four numbers still do the ordering.
 
     The last key is what makes the ranking *stable*: two actions that score
     identically must come back in the same order on every call, or the top
@@ -579,6 +615,7 @@ def rank(candidates: Sequence[ActionCandidate]) -> tuple[ActionCandidate, ...]:
             key=lambda c: (
                 0 if c.eligible else 1,
                 0 if c.causally_supported else 1,
+                0 if acts_on_established_mechanism(c, act_threshold) else 1,
                 -c.value,
                 c.action_id,
             ),
@@ -618,13 +655,36 @@ class Recommendation:
 
 
 def recommend(
-    candidates: Sequence[ActionCandidate], *, at: Optional[datetime] = None
+    candidates: Sequence[ActionCandidate],
+    *,
+    at: Optional[datetime] = None,
+    act_threshold: float = ACT_CONFIDENCE_THRESHOLD,
 ) -> Recommendation:
-    ranked = rank(candidates)
+    ranked = rank(candidates, act_threshold=act_threshold)
     eligible = [c for c in ranked if c.eligible]
     ineligible = tuple(c for c in ranked if not c.eligible)
     primary = eligible[0] if eligible else None
     alternatives = tuple(eligible[1:])
+    if (
+        primary is not None
+        and primary.rationale_degraded
+        and acts_on_established_mechanism(primary, act_threshold)
+        and any(c.value > primary.value for c in alternatives)
+    ):
+        # The tier put it first over something that scores higher. The
+        # deterministic sentence says so, because a card that reads "scores
+        # -0.31" above a card that reads "+0.11" has to explain itself.
+        primary = primary.with_rationale(
+            f"Ranked first because it removes the established mechanism: "
+            f"\"{primary.hypothesis_label}\" stands at "
+            f"{primary.hypothesis_confidence:.0%}, above the "
+            f"{act_threshold:.0%} the policy asks for before acting, and the "
+            f"higher-scoring alternatives only measure it. {primary.rationale}",
+            degraded=True,
+        )
+        alternatives = tuple(
+            c for c in eligible[1:] if c.action_id != primary.action_id
+        )
     fallback = next(
         (
             candidate
