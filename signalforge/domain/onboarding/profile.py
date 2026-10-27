@@ -678,25 +678,30 @@ class SeverityMatrix:
 
 def default_severity_matrix() -> SeverityMatrix:
     """What the wizard offers before anyone edits it, from the detection design:
-    a tier-1 journey failing badly everywhere is a P0, a journey below target in
-    one region is a P1, and no customer impact is a P2."""
+    a tier-1 journey failing badly is a P0, a journey below target is a P1, and
+    no customer impact is a P2.
+
+    Severity rides on how far the success rate falls rather than on how many
+    regions are hit. A region count is a poor proxy for blast radius in a
+    single-region deployment, where the worst possible incident and the mildest
+    one are both "one region", so the threshold that separates them has to be
+    the impact itself.
+    """
     return SeverityMatrix(
         rules=(
             SeverityRule(
                 severity=Severity.P0,
                 max_journey_tier=1,
-                min_regions_affected=2,
                 success_rate_below_pct=80.0,
                 customer_impacting=True,
-                description="tier-1 journey below 80% in every region",
+                description="tier-1 journey below 80%",
             ),
             SeverityRule(
                 severity=Severity.P1,
                 max_journey_tier=2,
-                min_regions_affected=1,
                 success_rate_below_pct=95.0,
                 customer_impacting=True,
-                description="a journey below target in at least one region",
+                description="a journey below target",
             ),
             SeverityRule(
                 severity=Severity.P2,
@@ -705,7 +710,6 @@ def default_severity_matrix() -> SeverityMatrix:
             ),
         )
     )
-
 
 @dataclass(frozen=True)
 class PolicyDefaults:
