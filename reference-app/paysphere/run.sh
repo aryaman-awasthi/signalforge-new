@@ -9,7 +9,10 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 JAR="$HERE/target/paysphere.jar"
 
-export PAYSPHERE_PORT="${PAYSPHERE_PORT:-8080}"
+# PAYSPHERE_PORT is this application's own knob; SIGNALFORGE_HARNESS_PORT is the
+# generic one the platform's launcher sets, since that launcher may not name
+# this application.
+export PAYSPHERE_PORT="${PAYSPHERE_PORT:-${SIGNALFORGE_HARNESS_PORT:-8080}}"
 export PAYSPHERE_DATA_DIR="${PAYSPHERE_DATA_DIR:-$HERE/data}"
 export PAYSPHERE_LOG_DIR="${PAYSPHERE_LOG_DIR:-$HERE/logs}"
 

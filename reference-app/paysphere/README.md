@@ -32,6 +32,9 @@ including one that starts this jar and onboards it end to end.
 bash reference-app/paysphere/run.sh          # builds if stale, then starts on :8080
 ```
 
+On Windows without bash, `reference-app\paysphere\run.cmd` from cmd.exe or
+`.\run.ps1` from PowerShell does the same.
+
 Environment (all optional):
 
 | Variable | Default | Meaning |

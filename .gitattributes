@@ -6,3 +6,5 @@ Makefile text eol=lf
 *.jpg binary
 *.ico binary
 *.woff2 binary
+# cmd.exe batch files want CRLF; everything else stays LF.
+*.cmd text eol=crlf

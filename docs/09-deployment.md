@@ -12,7 +12,7 @@ Postgres-ready and every process boundary below is a real one.
 |---|---|---|---|
 | API + worker | `python -m uvicorn signalforge.api.main:app` | 8000 | everything |
 | Cockpit | `npm run dev` (or `npm run build && npm start`) in `web/` | 3000 | the browser |
-| Reference harness | `bash reference-app/*/run.sh` | 8080 | the demo only |
+| Reference harness | `bash reference-app/*/run.sh` (Windows: `reference-app\*\run.cmd`) | 8080 | the demo only |
 | Prometheus | `observability/bin/prometheus` | 9090 | optional dashboards |
 | Grafana | `observability/bin/grafana` | 3001 | optional dashboards |
 
@@ -40,6 +40,14 @@ bash reset.sh     # deterministic baseline
 bash run.sh       # migrate, start, wait for readiness, print URLs
 ```
 
+On a Windows machine without bash the same two steps are `reset.cmd` and
+`run.cmd` from cmd.exe, or `.\reset.ps1` and `.\run.ps1` from PowerShell
+(Windows PowerShell 5.1 or PowerShell 7). Each `.cmd` runs its `.ps1` twin
+with a process-scoped execution-policy bypass, so a machine whose policy
+refuses unsigned scripts still boots. The twins behave identically to the
+bash scripts: the same `.env` load, the same readiness waits, the same logs
+under `var/run/`, and Ctrl-C stops everything that was started.
+
 `run.sh` waits until each component answers a real request before reporting it
 up, and exits non-zero with a log path if something essential does not start.
 Logs land in `var/run/`.
@@ -48,8 +56,8 @@ Logs land in `var/run/`.
 
 Everything is environment, and nothing is hardcoded. `.env.example` is the
 complete list; copy it to `.env` and fill it in. `run.sh`, `reset.sh`,
-`scripts/demo.sh` and `make llm-smoke` each source `$ROOT/.env` before they do
-anything, so the file the operator writes is the environment the platform reads.
+`scripts/demo.sh` and `make llm-smoke` (and the `.ps1` twins of the three
+scripts) each source `$ROOT/.env` before they do anything, so the file the operator writes is the environment the platform reads.
 A value in `.env` wins over one already exported in the shell; comment it out
 rather than exporting around it. Nothing else loads the file — a process started
 by hand (`uvicorn ...`) sees only what its own shell exports. These are the

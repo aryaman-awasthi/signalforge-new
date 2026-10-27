@@ -27,6 +27,9 @@ bash reset.sh    # back to a clean baseline
 bash run.sh      # migrate, start everything, wait, print the URLs
 ```
 
+On Windows without bash: `reset.cmd` then `run.cmd` from cmd.exe, or
+`.\reset.ps1` then `.\run.ps1` from PowerShell. Same behaviour, same URLs.
+
 The cockpit is at `http://127.0.0.1:3000`, the API at `:8000`, its
 documentation at `:8000/docs`.
 

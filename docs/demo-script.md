@@ -19,6 +19,9 @@ bash run.sh            # waits until each component answers, then prints where i
 bash scripts/demo.sh   # in a second terminal: onboards, drives traffic, injects the fault
 ```
 
+On Windows without bash the same three are `reset.cmd`, `run.cmd` and
+`scripts\demo.cmd` (or the `.ps1` twins from PowerShell).
+
 `run.sh` refuses quietly-broken states: nothing is reported up until it has
 answered a real request, and if something essential does not come up the script
 exits non-zero with the log path.

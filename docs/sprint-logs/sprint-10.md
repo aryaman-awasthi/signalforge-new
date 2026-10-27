@@ -178,6 +178,36 @@ notification binding; and nothing told anyone that a severity had been proposed.
   *Verified:* typecheck, and full-page screenshots as the IC and the Tech Lead on the live
   licence incident.
 
+- **[S10-T25][REQ-000] The platform and the reference harness start from cmd.exe or
+  PowerShell, with no bash.** `run.ps1`, `reset.ps1`, `scripts/demo.ps1` and the harness's
+  own `run.ps1` are twins of the bash launchers: the same `.env` load (`.env` wins over the
+  ambient environment), the same readiness rule (nothing is reported up until it answers a
+  real request; a component that dies is named with its log), the same logs under
+  `var/run/`, the same banner. Each has a `.cmd` wrapper that runs it in Windows PowerShell
+  with a process-scoped execution-policy bypass, so `run.cmd` works on a locked-down client
+  machine and from a double-click; `*.cmd` are CRLF by `.gitattributes`. Three things the
+  bash version does not do, because Windows made them necessary: a port is checked before
+  its component starts and the holder is named (the probe cannot tell this run's process
+  from a stray one already on the port - bash reports it up and never notices its own
+  process died); a stop also sweeps anything still holding a port this run opened and
+  younger than the run (Oracle's `javapath` shim hands off to the real JVM and exits, so a
+  tree kill misses it); and the harness launcher prefers `JAVA_HOME\bin\java.exe` over that
+  shim. The harness's bash launcher now also honours `SIGNALFORGE_HARNESS_PORT`, which the
+  platform's launcher had been describing as mapped but never was.
+  *Verified:* in an isolated copy of the checkout (junctions to `.venv`, the code and the
+  harness; its own `var/` and databases; ports 8090/8010/3010, so the live demo estate on
+  8080/8000 was never stopped): `run.cmd` under Windows PowerShell 5.1 brought the harness,
+  migrations, API and web up and printed the banner; a real Ctrl-C on its console stopped all
+  three, the API logging a clean shutdown, nothing left listening; with the API pointed at the
+  occupied port 8000 it refused, named pid and process, and took the harness it had started
+  down with it; `reset.cmd` on a fake checkout deleted exactly `var/`, the harness `data` and
+  `logs`, `__pycache__` and `.pytest_cache`, and refused outside a checkout. All four `.ps1`
+  parse under PowerShell 5.1 and 7. One side effect of the test, recorded honestly: the first
+  iteration ran its API against the live database for about three minutes (config resolves
+  `var/` through the package path, which a junction follows) and wrote sixteen degraded brain
+  passes to the open incident before it was stopped; the next incident event re-reasons.
+  Known cmd.exe behaviour: after Ctrl-C the wrapper asks "Terminate batch job (Y/N)?" - Y.
+
 ## Not built / deferred
 
 - **T13-T18 (P2).** Severity fallback to the application tier and a services-affected rule;
@@ -223,6 +253,9 @@ notification binding; and nothing told anyone that a severity had been proposed.
 
 - `docs/sprint-logs/sprint-10.md` (this file). `playbook/sprints/sprint-10.md` carries the
   audit, the plan, the run sheet and the morning checklist (gitignored by rule 9).
+- `docs/09-deployment.md`, `docs/22-release-package.md`, `docs/23-user-guide.md`,
+  `docs/24-onboarding-guide.md`, `docs/demo-script.md` and the harness README name the
+  Windows launchers (S10-T25).
 - Not regenerated: 20-RTM, 21-test-report (no suite to run), 11-openapi (`CandidateOut`
   gained five optional fields; regenerate with `make openapi` when convenient).
 

@@ -47,7 +47,7 @@ at the end.
 
 ## Step 0 - Get in
 
-`bash run.sh` prints the URLs. The cockpit is at `http://127.0.0.1:3000` unless
+`bash run.sh` (on Windows without bash, `run.cmd`) prints the URLs. The cockpit is at `http://127.0.0.1:3000` unless
 `SIGNALFORGE_WEB_PORT` says otherwise (if something else already holds 3000 -
 Grafana, for example - run.sh will have been started on another port and printed
 it).

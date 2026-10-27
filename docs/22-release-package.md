@@ -48,6 +48,9 @@ bash reset.sh
 bash run.sh
 ```
 
+On Windows without bash, the last two steps are `reset.cmd` then `run.cmd`
+from cmd.exe, or `.\reset.ps1` then `.\run.ps1` from PowerShell.
+
 Prerequisites, ports, environment variables and the Postgres path are in
 `docs/09-deployment.md`. Config templates are `.env.example` (the platform) and
 the reference config repository (the harness's deploy hooks).
