@@ -630,6 +630,14 @@ def main() -> int:
         help="Set the cockpit up and stop before injecting anything.",
     )
     parser.add_argument(
+        "--scenario",
+        action="append",
+        metavar="SCENARIO_ID",
+        help="Inject this scenario (repeatable) instead of the drill's own chaos "
+        "list, with no parameters. The application must publish it. Works with "
+        "--refault and with a full run.",
+    )
+    parser.add_argument(
         "--refault",
         action="store_true",
         help="Re-inject this drill's faults into a world that is already set up, "
@@ -648,8 +656,22 @@ def main() -> int:
     traffic = drill["traffic"]
     regions = list(drill["mapping"]["regions"])
 
+    # The drill's own faults, unless the operator named others. A demonstration
+    # that wants to show one specific kind of incident - a lapsed license rather
+    # than a lossy fibre - should not have to edit the drill to get it.
+    scenarios = scenarios_of(drill)
+    if args.scenario:
+        scenarios = [
+            {
+                "scenario_id": scenario_id,
+                "params": {},
+                "idempotency_key": f"{drill.get('drill_id', 'drill')}-{scenario_id}",
+            }
+            for scenario_id in args.scenario
+        ]
+
     if args.refault:
-        for scenario in scenarios_of(drill):
+        for scenario in scenarios:
             injection = inject(
                 args.app_base_url, scenario, drill["scope"], drill_credential(drill)
             )
@@ -821,7 +843,7 @@ def main() -> int:
         if args.no_fault:
             log("--no-fault: stopping before the injection")
         else:
-            for scenario in scenarios_of(drill):
+            for scenario in scenarios:
                 log(f"injecting {scenario['scenario_id']} {scenario['params']}")
                 injection = inject(
                     args.app_base_url,
