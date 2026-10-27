@@ -25,17 +25,27 @@ import { BrainState } from "@/features/brain/hooks/useBrain";
  * and refused - a control that only answers 403 teaches people the product is
  * broken - and the panel says who can, so a paged SME knows what to ask for
  * rather than wondering where the button went.
+ *
+ * `compact` is the cockpit (S9): the prototype's four counters - what is known,
+ * what is assumed, what is contradicted, what is measured - over the ranked
+ * hypotheses as rows. No ledger, no agent runs; those are what "Expand the
+ * brain" is for.
  */
 export function BrainPanel({
   incidentId,
   state,
   canRefresh,
   onRefreshed,
+  compact = false,
+  contradictions = 0,
 }: {
   incidentId: string;
   state: BrainState;
   canRefresh: boolean;
   onRefreshed: () => void;
+  compact?: boolean;
+  /** From the guidance route: statements the measurements disagree with. */
+  contradictions?: number;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,6 +74,79 @@ export function BrainPanel({
     }
   }
 
+  const current = (type: string) =>
+    brain.nodes.filter((node) => node.node_type === type && node.status === "current")
+      .length;
+
+  const refresh = canRefresh ? (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={() => void think()}
+      className="border border-line px-2 py-1 text-[11px] hover:border-accent hover:text-accent-strong disabled:opacity-60"
+    >
+      {busy ? "thinking…" : "re-reason now"}
+    </button>
+  ) : (
+    <span className="text-[11px] text-ink-muted">incident command runs the reasoning</span>
+  );
+
+  if (compact) {
+    return (
+      <div className="flex flex-col gap-3">
+        {brain.degraded && (
+          <p role="status" className="border border-warn bg-warn-bg px-2 py-1.5 text-micro text-warn-ink">
+            <strong className="font-semibold">AI degraded.</strong> The evidence,
+            the confidences and the history are still computed; only the written
+            narrative is missing.
+          </p>
+        )}
+
+        {/* The prototype's counter strip. Facts and assumptions are the two
+            columns of the ledger; contradictions are the one number that should
+            be zero; evidence is how much was actually measured. */}
+        <dl className="grid grid-cols-4 divide-x divide-line border-b-2 border-line">
+          <Counter label="Verified facts" value={current("fact")} />
+          <Counter label="Assumptions" value={current("assumption")} />
+          <Counter
+            label="Contradictions"
+            value={contradictions}
+            tone={contradictions > 0 ? "text-accent-strong" : undefined}
+          />
+          <Counter label="Evidence" value={current("evidence")} />
+        </dl>
+
+        {error && <p className="text-[11px] text-danger">{error}</p>}
+
+        {brain.hypotheses.length === 0 ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-small text-ink-muted">
+              No hypothesis has been raised yet.{" "}
+              {canRefresh ? "Press “re-reason now”, or wait" : "Waiting"} for the
+              next event to wake the brain.
+            </p>
+            <span className="ml-auto">{refresh}</span>
+          </div>
+        ) : (
+          <div className="flex flex-col">
+            {brain.hypotheses.map((hypothesis, index) => (
+              <HypothesisCard
+                key={hypothesis.node.id}
+                hypothesis={hypothesis}
+                rank={index + 1}
+                compact
+              />
+            ))}
+            <div className="flex items-center gap-2 border-t border-line pt-2 text-[11px] text-ink-muted">
+              <span>confidence is arithmetic over weighted evidence, never written by a model</span>
+              <span className="ml-auto">{refresh}</span>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3">
       {brain.degraded && (
@@ -88,20 +171,7 @@ export function BrainPanel({
           confidence is computed from weighted evidence, never written by a model
         </span>
         <span className="flex-1" />
-        {canRefresh ? (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void think()}
-            className="rounded-card border border-line px-2 py-1 text-[11px] hover:border-accent hover:text-accent-strong disabled:opacity-60"
-          >
-            {busy ? "thinking…" : "re-reason now"}
-          </button>
-        ) : (
-          <span className="text-[11px] text-ink-muted">
-            incident command runs the reasoning
-          </span>
-        )}
+        {refresh}
       </div>
 
       {error && <p className="text-[11px] text-danger">{error}</p>}
@@ -164,6 +234,25 @@ export function BrainPanel({
           </ul>
         </details>
       )}
+    </div>
+  );
+}
+
+function Counter({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone?: string;
+}) {
+  return (
+    <div className="flex flex-col gap-1 px-3 py-2 first:pl-0">
+      <dd className={`font-display text-h3 font-extrabold leading-none tabular-nums ${tone ?? ""}`}>
+        {value}
+      </dd>
+      <dt className="text-nano uppercase tracking-label text-neutral-600">{label}</dt>
     </div>
   );
 }

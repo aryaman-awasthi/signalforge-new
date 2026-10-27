@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 
 import { BrainTopology, Impact } from "@/features/brain/api";
 import { useBrainTopology } from "@/features/brain/hooks/useBrain";
+import { Badge } from "@/lib/ui/primitives";
 
 /**
  * S13 — Affected Services (REQ-050).
@@ -24,7 +25,15 @@ import { useBrainTopology } from "@/features/brain/hooks/useBrain";
  * than in a cloud that settles differently on every render, and a war room needs
  * the same picture twice.
  */
-export function TopologyPanel({ incidentId }: { incidentId: string }) {
+export function TopologyPanel({
+  incidentId,
+  compact = false,
+}: {
+  incidentId: string;
+  /** The cockpit's list (S9): what is confirmed, what is predicted, no graph.
+   * The map itself is what "Open blast radius" is for. */
+  compact?: boolean;
+}) {
   const [version, setVersion] = useState<string | undefined>(undefined);
   const { state } = useBrainTopology(incidentId, version);
 
@@ -42,6 +51,67 @@ export function TopologyPanel({ incidentId }: { incidentId: string }) {
         {topology.detail.reason ??
           "No dependency map is imported for this application."}
       </p>
+    );
+  }
+
+  if (compact) {
+    const confirmed = topology.impacts.filter((i) => i.confirmation === "confirmed");
+    const predicted = topology.impacts.filter((i) => i.confirmation === "predicted");
+    const regions = Array.from(
+      new Set(topology.impacts.map((i) => i.region).filter(Boolean)),
+    );
+    return (
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-1.5 text-tiny">
+          {regions.map((region) => (
+            <span
+              key={region}
+              className="border border-accent bg-brand-100 px-2 py-0.5 font-bold uppercase tracking-label text-brand-800"
+            >
+              {region} · affected
+            </span>
+          ))}
+          <span className="ml-auto text-ink-muted">
+            {topology.node_count} services · {confirmed.length} confirmed ·{" "}
+            {predicted.length} predicted
+          </span>
+        </div>
+        {topology.impacts.length === 0 ? (
+          <p className="text-small text-ink-muted">
+            Nothing on the map is implicated by the evidence held yet.
+          </p>
+        ) : (
+          <ul className="flex flex-col border-t-2 border-b-2 border-line">
+            {[...confirmed, ...predicted].slice(0, 8).map((impact) => (
+              <li
+                key={impact.service}
+                className="flex items-center gap-2 border-b border-line py-2 last:border-b-0"
+                title={impact.reason}
+              >
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate font-display text-dense font-bold">
+                    {impact.service}
+                  </span>
+                  <span className="text-nano uppercase tracking-label text-neutral-600">
+                    {impact.region || "all regions"}
+                    {impact.hops > 0 ? ` · ${impact.hops} hop${impact.hops === 1 ? "" : "s"} away` : " · measured"}
+                  </span>
+                </span>
+                <span className="ml-auto">
+                  <Badge
+                    label={impact.confirmation === "confirmed" ? "CONFIRMED" : "PREDICTED"}
+                    size="nano"
+                    title={impact.reason}
+                  />
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {topology.impacts.length > 8 && (
+          <p className="text-tiny text-ink-muted">+{topology.impacts.length - 8} more on the map</p>
+        )}
+      </div>
     );
   }
 

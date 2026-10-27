@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { BrainNode, Hypothesis } from "@/features/brain/api";
 import { Sparkline } from "@/features/brain/components/Sparkline";
+import { ConfidenceBar, Delta } from "@/lib/ui/primitives";
 
 /**
  * One hypothesis card in S10 (REQ-053).
@@ -26,15 +27,24 @@ import { Sparkline } from "@/features/brain/components/Sparkline";
  *   deterministic sentence is the explanation and is always shown; the
  *   narrative sits beneath it, labelled, and is absent when the model was not
  *   available.
+ *
+ * `compact` is the cockpit's row (S9): the prototype's one line - ordinal,
+ * title, what it is about, where it ranks, how sure, which way it moved - over
+ * a bar, and everything else one click away. A commander scanning the room
+ * reads three rows and three bars; a commander who wants the evidence opens
+ * the row, or expands the brain, and gets the full card.
  */
 export function HypothesisCard({
   hypothesis,
   rank,
+  compact = false,
 }: {
   hypothesis: Hypothesis;
   rank: number;
+  compact?: boolean;
 }) {
   const [showEvidence, setShowEvidence] = useState(false);
+  const [open, setOpen] = useState(false);
   const latest = hypothesis.history[hypothesis.history.length - 1];
   const percent = Math.round(hypothesis.confidence * 100);
   // The RCA the brain wrote onto the node. Read as unknown and narrowed,
@@ -47,6 +57,89 @@ export function HypothesisCard({
   const missingEvidence = Array.isArray(detail.missing_evidence)
     ? detail.missing_evidence.filter((item): item is string => typeof item === "string")
     : [];
+  const movedBy =
+    latest && latest.previous !== null
+      ? Math.round((latest.current - latest.previous) * 100)
+      : null;
+
+  if (compact) {
+    const subtitle = rootCause
+      ? `${rootCause.replace(/_/g, " ")}${mechanism ? ` · ${mechanism.replace(/_/g, " ")}` : ""}`
+      : clip(hypothesis.explain, 96);
+    const standing =
+      rank === 1
+        ? { label: "leading", className: "bg-brand-100 text-brand-800" }
+        : latest?.direction === "rose"
+          ? { label: "rising", className: "bg-warn-bg text-warn-ink" }
+          : latest?.direction === "fell"
+            ? { label: "falling", className: "bg-neutral-200 text-neutral-700" }
+            : { label: "steady", className: "bg-neutral-200 text-neutral-700" };
+    return (
+      <article
+        aria-label={`Hypothesis ${rank}: ${hypothesis.node.label}`}
+        className={`flex flex-col gap-2 py-2.5 ${rank === 1 ? "" : "border-t-2 border-line"}`}
+      >
+        <button
+          type="button"
+          onClick={() => setOpen((shown) => !shown)}
+          aria-expanded={open}
+          className="grid w-full grid-cols-[24px_1fr_auto_auto] items-start gap-2.5 text-left hover:bg-neutral-100"
+        >
+          <span className="pt-1 font-mono text-micro text-neutral-500">
+            {String(rank).padStart(2, "0")}
+          </span>
+          <span className="min-w-0">
+            <span className="block font-display text-h5 font-extrabold leading-tight">
+              {hypothesis.node.label}
+            </span>
+            <span className="mt-0.5 block text-micro text-neutral-600">{subtitle}</span>
+          </span>
+          <span
+            className={`mt-0.5 px-1.5 py-0.5 text-nano font-bold uppercase tracking-label ${standing.className}`}
+          >
+            {standing.label}
+          </span>
+          <span className="flex items-baseline gap-1.5 whitespace-nowrap">
+            <span
+              className="font-display text-h4 font-extrabold leading-none tabular-nums"
+              title="Computed by SignalForge from weighted evidence, not written by a model"
+            >
+              {percent}%
+            </span>
+            <Delta points={movedBy} />
+            <span className="text-tiny text-neutral-500" aria-hidden>
+              {open ? "▴" : "▾"}
+            </span>
+          </span>
+        </button>
+        <ConfidenceBar value={hypothesis.confidence} leading={rank === 1} />
+        {open && (
+          <div className="flex flex-col gap-2 border-t border-line pt-2">
+            <p className="text-small text-ink-muted">{hypothesis.explain}</p>
+            <Evidence
+              hypothesis={hypothesis}
+              expanded={showEvidence}
+              onToggle={() => setShowEvidence((shown) => !shown)}
+            />
+            {hypothesis.discriminating_test && (
+              <p className="text-small">
+                <span className="text-nano font-bold uppercase tracking-label text-neutral-600">
+                  Discriminating test
+                </span>{" "}
+                {hypothesis.discriminating_test}
+              </p>
+            )}
+            {missingEvidence.length > 0 && (
+              <p className="text-small text-ink-muted">
+                <span className="font-medium">Would settle it:</span>{" "}
+                {missingEvidence.join("; ")}
+              </p>
+            )}
+          </div>
+        )}
+      </article>
+    );
+  }
 
   return (
     <article
@@ -76,11 +169,8 @@ export function HypothesisCard({
         </span>
       </header>
 
-      <div className="mt-1.5 h-2 w-full bg-neutral-200">
-        <div
-          className={`h-2 ${rank === 1 ? "bg-accent" : "bg-neutral-500"}`}
-          style={{ width: `${percent}%` }}
-        />
+      <div className="mt-1.5">
+        <ConfidenceBar value={hypothesis.confidence} leading={rank === 1} />
       </div>
 
       <div className="mt-2 flex flex-wrap items-center gap-3">
@@ -137,39 +227,13 @@ export function HypothesisCard({
         </p>
       )}
 
-      <dl className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
-        <div>
-          <dt className="font-medium text-ok">
-            Evidence for ({hypothesis.evidence_for.length})
-          </dt>
-          <dd>
-            <EvidenceList nodes={hypothesis.evidence_for} expanded={showEvidence} />
-          </dd>
-        </div>
-        <div>
-          <dt className="font-medium text-danger">
-            Evidence against ({hypothesis.evidence_against.length})
-          </dt>
-          <dd>
-            <EvidenceList
-              nodes={hypothesis.evidence_against}
-              expanded={showEvidence}
-              empty="Nothing has been tried that could disprove this."
-            />
-          </dd>
-        </div>
-      </dl>
-
-      {(hypothesis.evidence_for.length > 2 ||
-        hypothesis.evidence_against.length > 2) && (
-        <button
-          type="button"
-          onClick={() => setShowEvidence((shown) => !shown)}
-          className="mt-1 text-[11px] text-ink-muted underline decoration-line hover:text-accent-strong"
-        >
-          {showEvidence ? "show less" : "show all evidence"}
-        </button>
-      )}
+      <div className="mt-2">
+        <Evidence
+          hypothesis={hypothesis}
+          expanded={showEvidence}
+          onToggle={() => setShowEvidence((shown) => !shown)}
+        />
+      </div>
 
       {hypothesis.discriminating_test && (
         <p className="mt-2 border border-line bg-surface-raised px-2 py-1.5 text-[11px]">
@@ -202,6 +266,59 @@ export function HypothesisCard({
         </details>
       )}
     </article>
+  );
+}
+
+function clip(text: string, length: number): string {
+  if (!text) return "";
+  return text.length > length ? `${text.slice(0, length - 1)}…` : text;
+}
+
+/** The two columns, and the one control that widens them. */
+function Evidence({
+  hypothesis,
+  expanded,
+  onToggle,
+}: {
+  hypothesis: Hypothesis;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <>
+      <dl className="grid grid-cols-2 gap-2 text-[11px]">
+        <div>
+          <dt className="border-b border-line pb-1 text-nano font-bold uppercase tracking-label text-neutral-600">
+            Evidence for ({hypothesis.evidence_for.length})
+          </dt>
+          <dd className="pt-1">
+            <EvidenceList nodes={hypothesis.evidence_for} expanded={expanded} />
+          </dd>
+        </div>
+        <div>
+          <dt className="border-b border-line pb-1 text-nano font-bold uppercase tracking-label text-accent-strong">
+            Evidence against ({hypothesis.evidence_against.length})
+          </dt>
+          <dd className="pt-1">
+            <EvidenceList
+              nodes={hypothesis.evidence_against}
+              expanded={expanded}
+              empty="Nothing has been tried that could disprove this."
+            />
+          </dd>
+        </div>
+      </dl>
+      {(hypothesis.evidence_for.length > 2 ||
+        hypothesis.evidence_against.length > 2) && (
+        <button
+          type="button"
+          onClick={onToggle}
+          className="mt-1 self-start text-[11px] text-ink-muted underline decoration-line hover:text-accent-strong"
+        >
+          {expanded ? "show less" : "show all evidence"}
+        </button>
+      )}
+    </>
   );
 }
 

@@ -69,6 +69,7 @@ export function AckBoard({
   currentUserId,
   canEscalate,
   onChanged,
+  names = {},
 }: {
   incidentId: string;
   pages: PageRow[];
@@ -77,6 +78,10 @@ export function AckBoard({
   currentUserId: string | null;
   canEscalate: boolean;
   onChanged: () => void;
+  /** user id -> display name, from the room's members. An escalation hop
+   * carries the recipient's id and no display name; the room already knows
+   * the person, so the board does not print an id. */
+  names?: Record<string, string>;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -133,7 +138,7 @@ export function AckBoard({
               <div className="min-w-48 flex-1">
                 <div className="flex flex-wrap items-center gap-2 text-sm">
                   <span className="font-medium">
-                    {page.recipient_display || page.recipient}
+                    {page.recipient_display || names[page.recipient] || page.recipient}
                   </span>
                   {page.role && (
                     <span className="border border-line px-2 py-0.5 text-[11px] text-ink-muted">

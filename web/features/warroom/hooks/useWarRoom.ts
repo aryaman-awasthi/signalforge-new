@@ -60,11 +60,33 @@ export function useWarRoom(incidentId: string) {
   const reload = useCallback(async () => {
     try {
       const room = await getWarRoom(incidentId);
+      // The room renders the moment it is read. The brief is written by a
+      // model and can take ten seconds or more; a screen that showed "Opening
+      // the war room…" for that long during a P0 was the first thing a
+      // commander saw, and it read as broken. The brief and the bridge land in
+      // place when they arrive, and whatever was there before stays until then.
+      if (live.current) {
+        setState((current) =>
+          current.kind === "ready"
+            ? { ...current, room }
+            : { kind: "ready", room, brief: null, bridge: null },
+        );
+      }
       const [brief, bridge] = await Promise.all([
         getBrief(incidentId).catch(() => null),
         getBridge(incidentId).catch(() => null),
       ]);
-      if (live.current) setState({ kind: "ready", room, brief, bridge });
+      if (live.current) {
+        setState((current) =>
+          current.kind === "ready"
+            ? {
+                ...current,
+                brief: brief ?? current.brief,
+                bridge: bridge ?? current.bridge,
+              }
+            : { kind: "ready", room, brief, bridge },
+        );
+      }
     } catch (error) {
       if (!live.current) return;
       setState({

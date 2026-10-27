@@ -30,10 +30,16 @@ export function BridgePanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!bridge || !bridge.has_bridge) {
+  if (!bridge) {
+    // Not yet read. Distinct from "no bridge": the room renders before the
+    // transcript arrives, and "nobody has a bridge" and "the bridge is still
+    // loading" must not look the same.
+    return <p className="text-xs text-ink-muted">Reading the bridge…</p>;
+  }
+  if (!bridge.has_bridge) {
     return (
       <p className="text-xs text-ink-muted">
-        {bridge?.detail ??
+        {bridge.detail ||
           "No collaboration connector is bound to this application, so this war room has no bridge."}{" "}
         Everything else in the room - paging, the task board, the timeline - works
         without one.
@@ -60,24 +66,29 @@ export function BridgePanel({
 
   return (
     <div className="space-y-2">
-      <ul className="max-h-64 space-y-1.5 overflow-y-auto text-xs">
+      {/* The prototype's transcript row: who and when on one line, what they
+          said on the next. A line that is all on one row reads as a log; a
+          transcript reads as people talking. */}
+      <ul className="flex max-h-72 flex-col gap-2 overflow-y-auto text-small">
         {bridge.messages.length === 0 ? (
           <li className="text-ink-muted">Nothing has been said yet.</li>
         ) : (
           bridge.messages.map((message) => (
-            <li key={message.message_id} className="flex flex-wrap gap-2">
-              <span className="font-mono text-ink-muted">
-                {message.at.slice(11, 16)}
-              </span>
-              <span className="font-medium">
-                {message.author_display || message.author}
-              </span>
-              {message.simulated && (
-                <span className="border border-line px-1.5 py-0.5 text-[10px] uppercase text-ink-muted">
-                  simulated
+            <li key={message.message_id}>
+              <div className="flex flex-wrap items-baseline gap-1.5">
+                <span className="font-semibold">
+                  {message.author_display || message.author}
                 </span>
-              )}
-              <span className="min-w-32 flex-1">{message.text}</span>
+                <span className="font-mono text-tiny text-ink-muted">
+                  {message.at.slice(11, 16)}
+                </span>
+                {message.simulated && (
+                  <span className="border border-neutral-600 px-1 text-nano uppercase tracking-label text-neutral-700">
+                    simulated
+                  </span>
+                )}
+              </div>
+              <p className="text-dense">{message.text}</p>
             </li>
           ))
         )}

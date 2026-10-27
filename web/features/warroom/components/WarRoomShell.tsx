@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { ApiError } from "@/lib/api/client";
 import { fetchMe } from "@/features/auth/api";
@@ -27,6 +27,7 @@ import {
 } from "@/features/warroom/components/IncidentShell";
 import { Panel } from "@/features/warroom/components/Panel";
 import { TaskBoard } from "@/features/warroom/components/TaskBoard";
+import { TelemetryPanel } from "@/features/warroom/components/TelemetryPanel";
 import { joinWarRoom } from "@/features/warroom/api";
 import { ROOM_POLL_MS, useWarRoom } from "@/features/warroom/hooks/useWarRoom";
 import { getIncident, IncidentDetail } from "@/features/incidents/api";
@@ -36,7 +37,7 @@ import {
   ROLE_VIEWS,
   type PanelKey,
 } from "@/features/warroom/roleLayouts";
-import { Avatar, Badge, EmptyState, StatePill } from "@/lib/ui/primitives";
+import { Avatar, Badge, EmptyState } from "@/lib/ui/primitives";
 import { Button } from "@/lib/ui/patterns";
 
 /**
@@ -48,9 +49,13 @@ import { Button } from "@/lib/ui/patterns";
  * Health Score and Metrics, Affected Services - plus Who is in the room.
  *
  * S8-T05 replaced the vertical stack this was built as with the prototype's
- * three-column grid. Nothing about what a panel contains changed; where it sits
- * did. The columns are testimony, decision and measurement, in that order,
- * because that is the order a commander walking in needs them.
+ * three-column grid. S10 made the grid *read* like the prototype: every panel
+ * in the cockpit is its compact form - the brain's counters and ranked rows,
+ * the one action with its safety verdict, the live telemetry strip, the
+ * affected-services list - and the full form of each is one click away as a
+ * deep view. A commander walking in sees one screen; a commander who wants the
+ * evidence opens it. Nothing about what a panel contains changed; how much of
+ * it is open at once did.
  *
  * The deep screens - the brain, the approval, the ledger, the blast radius,
  * guidance, communications, the layered verdict, the copilot - are not separate
@@ -141,6 +146,19 @@ export function WarRoomShell({
       .catch(() => setIncident(null));
   }, [incidentId, state]);
 
+  /* user id -> display name, from the members the room already lists. The
+     ledger and the approvals carry ids, and "requested by 4f1c8a2b" is a
+     sentence nobody can act on. */
+  const names = useMemo(() => {
+    const out: Record<string, string> = {};
+    if (state.kind === "ready") {
+      for (const member of state.room.members) {
+        if (member.display_name) out[member.user_id] = member.display_name;
+      }
+    }
+    return out;
+  }, [state]);
+
   if (state.kind === "loading") {
     return <p className="text-ink-muted">Opening the war room…</p>;
   }
@@ -166,12 +184,15 @@ export function WarRoomShell({
     !layout.readOnly && Boolean(me?.permissions.includes("approve_high_risk"));
   const canAudit = Boolean(me?.permissions.includes("read_audit"));
   const governance = governanceState.kind === "ready" ? governanceState : null;
-  // Approvals waiting for somebody. Rendered above the grid rather than inside
-  // the Next Best Action panel: an unanswered high-risk approval is the most
-  // time-critical thing on this screen, and it must not be a scroll away.
+  const guidance = brainState.kind === "ready" ? brainState.guidance : null;
+  // Approvals waiting for somebody, and approvals granted but not yet sent.
+  // Rendered above the grid rather than inside the Next Best Action panel: an
+  // unanswered high-risk approval is the most time-critical thing on this
+  // screen, and a granted one that nobody sends is one that expires.
   const awaitingApproval =
     governance?.ledger.executions.filter(
-      (execution) => execution.state === "approval_required",
+      (execution) =>
+        execution.state === "approval_required" || execution.state === "approved",
     ) ?? [];
   const radius = room.blast_radius;
   const commander = room.members.find(
@@ -179,6 +200,10 @@ export function WarRoomShell({
   );
   const modelDegraded = brief?.source === "degraded";
   const closed = room.state === "closed" || Boolean(room.closed_at);
+  const refreshAll = () => {
+    reloadGovernance();
+    reload();
+  };
 
   async function join() {
     setJoining(true);
@@ -299,7 +324,9 @@ export function WarRoomShell({
               ) ?? null
             }
             canApprove={canApprove && execution.requested_by !== me?.user_id}
-            onChanged={reloadGovernance}
+            canCommand={canCommand}
+            names={names}
+            onChanged={refreshAll}
           />
         ))}
       </section>
@@ -320,7 +347,10 @@ export function WarRoomShell({
       ))}
 
       {show("chat", (
-        <Panel title="Team Chat" pending="Not built, and not scheduled. Room chat separate from the bridge transcript was reserved here in Sprint 4 and Sprint 6 did not fill it: the bridge is the record of what was said, and a second channel that is not part of that record is a place decisions go missing. It stays visible rather than removed so the layout an incident commander learned does not move." />
+        <Panel
+          title="Team Chat"
+          pending="Not built. The bridge above is the record of what was said; a second channel that is not part of that record is where decisions go missing."
+        />
       ))}
 
       {show("room", (
@@ -377,11 +407,7 @@ export function WarRoomShell({
       {show("brain", (
         <Panel
           title="AI Incident Brain"
-          subtitle={
-            brainState.kind === "ready"
-              ? `${brainState.brain.hypotheses.length} hypotheses`
-              : undefined
-          }
+          subtitle="situation model · versioned"
           elevated
         >
           <BrainPanel
@@ -392,33 +418,38 @@ export function WarRoomShell({
               reloadBrain();
               reload();
             }}
+            compact
+            contradictions={guidance?.contradictions.length ?? 0}
           />
           {brief && (
-            <div className="mt-3 border-t border-line pt-2">
-              <div className="flex items-baseline gap-2">
-                <h3 className="text-h6 text-ink-muted">Join brief</h3>
-                <span className="text-nano uppercase tracking-label text-neutral-600">
+            <details className="mt-3 border-t border-line pt-2">
+              <summary className="cursor-pointer text-small">
+                <span className="font-semibold">Join brief</span>
+                <span className="text-ink-muted"> · {brief.headline}</span>
+                <span className="ml-1 text-nano uppercase tracking-label text-neutral-600">
                   written by {brief.source}
                 </span>
-              </div>
-              <p className="mt-1 text-small font-semibold">{brief.headline}</p>
-              {brief.what_we_know.slice(0, 4).map((line) => (
-                <p key={line} className="text-micro text-ink-muted">
-                  {line}
-                </p>
-              ))}
-              {/* The caveats are rendered, not buried behind a toggle. A brief
-                  that reads confidently from thin evidence is the failure mode
-                  this section exists to prevent - and the model writer is
-                  required to keep every one of them. */}
-              <ul className="mt-1 flex flex-col gap-0.5 text-micro text-warn-ink">
-                {brief.caveats.map((caveat) => (
-                  <li key={caveat}>{caveat}</li>
+              </summary>
+              <div className="mt-1 flex flex-col gap-0.5">
+                {brief.what_we_know.slice(0, 4).map((line) => (
+                  <p key={line} className="text-micro text-ink-muted">
+                    {line}
+                  </p>
                 ))}
-              </ul>
-            </div>
+                {/* The caveats are rendered, not buried behind a toggle. A brief
+                    that reads confidently from thin evidence is the failure
+                    mode this section exists to prevent. */}
+                <ul className="mt-1 flex flex-col gap-0.5 text-micro text-warn-ink">
+                  {brief.caveats.map((caveat) => (
+                    <li key={caveat}>{caveat}</li>
+                  ))}
+                </ul>
+              </div>
+            </details>
           )}
-          <ExpandLink onClick={() => setDeep("brain")}>Expand the brain</ExpandLink>
+          <div className="mt-2">
+            <ExpandLink onClick={() => setDeep("brain")}>Expand the brain</ExpandLink>
+          </div>
         </Panel>
       ))}
 
@@ -441,14 +472,16 @@ export function WarRoomShell({
             incidentId={incidentId}
             nba={governance?.nba ?? null}
             canCommand={canCommand}
-            onChanged={() => {
-              reloadGovernance();
-              reload();
-            }}
+            onChanged={refreshAll}
+            compact
+            ledger={governance?.ledger ?? null}
+            names={names}
           />
-          <ExpandLink onClick={() => setDeep("action")}>
-            Plan, risk and approval
-          </ExpandLink>
+          <div className="mt-2">
+            <ExpandLink onClick={() => setDeep("action")}>
+              Plan, risk and approval
+            </ExpandLink>
+          </div>
         </Panel>
       ))}
 
@@ -471,7 +504,10 @@ export function WarRoomShell({
                     {move.kind === "severity"
                       ? `severity ${move.severity_before ?? "?"} → ${move.severity_after ?? "?"}`
                       : `${move.from_state} → ${move.to_state}`}
-                    <span className="text-ink-muted"> by {move.actor_id}</span>
+                    <span className="text-ink-muted">
+                      {" "}
+                      by {names[move.actor_id] ?? move.actor_id}
+                    </span>
                     {move.reason && (
                       <span className="text-ink-muted"> — {move.reason}</span>
                     )}
@@ -491,6 +527,15 @@ export function WarRoomShell({
 
   const right = (
     <>
+      {show("health", (
+        <Panel title="Health Score and Metrics" subtitle="live, from the detector" accent="accent">
+          <TelemetryPanel
+            appId={room.app_id}
+            declaredScore={incident?.proposal?.health_score ?? null}
+          />
+        </Panel>
+      ))}
+
       {show("overview", (
         <Panel title="Incident Overview" subtitle={`opened ${room.opened_at.slice(11, 16)}`}>
           <p className="text-dense font-semibold">{room.title}</p>
@@ -500,14 +545,14 @@ export function WarRoomShell({
               <dd className="inline">{radius.summary}</dd>
             </div>
             <div>
-              <dt className="inline font-semibold">Evidence: </dt>
+              <dt className="inline font-semibold">Declared on: </dt>
               <dd className="inline">
                 {radius.source === "proposal"
-                  ? "a detection verdict at declare time"
-                  : "the severity a person typed; the detector had nothing to say"}
+                  ? "the detector's verdict at the time"
+                  : "a severity a person chose; the detector had nothing to say"}
               </dd>
             </div>
-            {incident?.ticket && (
+            {incident?.ticket && incident.ticket.state !== "not_configured" && (
               <div>
                 <dt className="inline font-semibold">ITSM: </dt>
                 <dd className="inline">
@@ -531,77 +576,36 @@ export function WarRoomShell({
         </Panel>
       ))}
 
-      {show("health", (
-        <Panel
-          title="Health Score and Metrics"
-          subtitle="as declared"
-          actions={
-            <Link
-              href={`/apps/${encodeURIComponent(room.app_id)}`}
-              className="text-small text-accent hover:underline"
-            >
-              live view
-            </Link>
-          }
-        >
-          {incident?.proposal ? (
-            <div className="flex flex-col gap-1 text-small">
-              <p className="flex items-baseline gap-2">
-                <span className="font-display text-hero font-extrabold leading-none">
-                  {incident.proposal.health_score === null
-                    ? "--"
-                    : incident.proposal.health_score.toFixed(0)}
-                </span>
-                <StatePill state={incident.proposal.health_band || "unknown"} />
-              </p>
-              {/* A snapshot, and it says so: the live number has moved since. */}
-              <p className="text-ink-muted">
-                What the detector was reporting at the moment Declare was pressed.
-                It has not been recomputed since.
-              </p>
-              {incident.proposal.success_rate_pct !== null && (
-                <p className="font-mono text-ink-muted">
-                  success {incident.proposal.success_rate_pct.toFixed(1)}% ·{" "}
-                  {incident.proposal.regions_affected} of{" "}
-                  {incident.proposal.regions_total} regions
-                </p>
-              )}
-            </div>
-          ) : (
-            <EmptyState>
-              No detection verdict was attached to this declaration.
-            </EmptyState>
-          )}
-        </Panel>
-      ))}
-
       {show("radius", (
         <Panel
           title="Affected Services"
           subtitle={radius.customer_facing ? "customers are feeling this" : undefined}
         >
           {/* S13. The blast radius the room was assembled from is the header's
-              summary above; this panel is the map it came from, with CONFIRMED
-              kept apart from PREDICTED. */}
-          <TopologyPanel incidentId={incidentId} />
-          {radius.regions.length > 0 && (
+              summary above; this panel is the list it came from, with CONFIRMED
+              kept apart from PREDICTED. The map is the deep view. */}
+          <TopologyPanel incidentId={incidentId} compact />
+          {radius.journeys.length > 0 && (
             <p className="mt-2 text-small text-ink-muted">
-              Regions declared: {radius.regions.join(", ")}
+              Journeys: {radius.journeys.join(", ")}
+              {radius.regions.length > 0 && ` · regions ${radius.regions.join(", ")}`}
               {radius.regions_total ? ` of ${radius.regions_total}` : ""}
             </p>
           )}
-          <ExpandLink onClick={() => setDeep("radius")}>Open blast radius</ExpandLink>
+          <div className="mt-2">
+            <ExpandLink onClick={() => setDeep("radius")}>Open blast radius</ExpandLink>
+          </div>
         </Panel>
       ))}
 
       {show("guidance", (
         <Panel title="Warning and Guidance" subtitle="advisory, not measured">
-          <GuidancePanel
-            guidance={brainState.kind === "ready" ? brainState.guidance : null}
-          />
-          <ExpandLink onClick={() => setDeep("guidance")}>
-            History and relevance
-          </ExpandLink>
+          <GuidancePanel guidance={guidance} compact />
+          <div className="mt-2">
+            <ExpandLink onClick={() => setDeep("guidance")}>
+              History and relevance
+            </ExpandLink>
+          </div>
         </Panel>
       ))}
     </>
@@ -611,6 +615,20 @@ export function WarRoomShell({
 
   const below = (
     <div className="flex flex-col gap-4">
+      {show("paging", (
+        <section aria-label="Acknowledgement board" className="flex flex-col gap-2">
+          <h2 className="text-h6 text-ink-muted">Paging</h2>
+          <AckBoard
+            incidentId={incidentId}
+            pages={room.pages}
+            currentUserId={me?.user_id ?? null}
+            canEscalate={canCommand}
+            onChanged={reload}
+            names={names}
+          />
+        </section>
+      ))}
+
       <div className="grid gap-4 lg:grid-cols-2">
         {show("ledger", (
           <Panel
@@ -625,12 +643,11 @@ export function WarRoomShell({
               incidentId={incidentId}
               ledger={governance?.ledger ?? { executions: [], approvals: [] }}
               canCommand={canCommand}
-              onChanged={() => {
-                reloadGovernance();
-                reload();
-              }}
+              onChanged={refreshAll}
             />
-            <ExpandLink onClick={() => setDeep("ledger")}>Open the ledger</ExpandLink>
+            <div className="mt-2">
+              <ExpandLink onClick={() => setDeep("ledger")}>Open the ledger</ExpandLink>
+            </div>
           </Panel>
         ))}
 
@@ -648,14 +665,15 @@ export function WarRoomShell({
               validation={governance?.validation ?? null}
               canCommand={canCommand}
               onChanged={() => {
-                reloadGovernance();
-                reload();
+                refreshAll();
                 reloadBrain();
               }}
             />
-            <ExpandLink onClick={() => setDeep("verdict")}>
-              Layered verdict
-            </ExpandLink>
+            <div className="mt-2">
+              <ExpandLink onClick={() => setDeep("verdict")}>
+                Layered verdict
+              </ExpandLink>
+            </div>
           </Panel>
         ))}
       </div>
@@ -665,15 +683,24 @@ export function WarRoomShell({
           <Panel
             title="Response Plan"
             subtitle={
-              governance?.nba?.plan ? `version ${governance.nba.plan.version}` : undefined
+              governance?.nba?.plan ? `version ${governance.nba.plan.version}` : "not written"
             }
           >
-            <PlanDiff
-              incidentId={incidentId}
-              nba={governance?.nba ?? null}
-              canCommand={canCommand}
-              onChanged={reloadGovernance}
-            />
+            <details>
+              <summary className="cursor-pointer text-small text-ink-muted">
+                {governance?.nba?.plan
+                  ? `${governance.nba.plan.kept.length} kept · ${governance.nba.plan.paused.length} paused · ${governance.nba.plan.added.length} added - show the plan`
+                  : "No plan has been written yet - open to write one"}
+              </summary>
+              <div className="mt-2">
+                <PlanDiff
+                  incidentId={incidentId}
+                  nba={governance?.nba ?? null}
+                  canCommand={canCommand}
+                  onChanged={reloadGovernance}
+                />
+              </div>
+            </details>
           </Panel>
         ))}
 
@@ -686,31 +713,29 @@ export function WarRoomShell({
                 : "nothing sends itself"
             }
           >
-            <CommsPanel
-              incidentId={incidentId}
-              comms={governance?.comms ?? null}
-              permissions={me?.permissions ?? []}
-              onChanged={reloadGovernance}
-            />
-            <ExpandLink onClick={() => setDeep("comms")}>
-              Audiences and redlines
-            </ExpandLink>
+            <details open={Boolean(governance?.comms && governance.comms.contradicted.length > 0)}>
+              <summary className="cursor-pointer text-small text-ink-muted">
+                {governance?.comms?.communications.length
+                  ? `${governance.comms.communications.length} statement${governance.comms.communications.length === 1 ? "" : "s"} - show the board`
+                  : "Nothing drafted yet - open to draft from the record"}
+              </summary>
+              <div className="mt-2">
+                <CommsPanel
+                  incidentId={incidentId}
+                  comms={governance?.comms ?? null}
+                  permissions={me?.permissions ?? []}
+                  onChanged={reloadGovernance}
+                />
+              </div>
+            </details>
+            <div className="mt-2">
+              <ExpandLink onClick={() => setDeep("comms")}>
+                Audiences and redlines
+              </ExpandLink>
+            </div>
           </Panel>
         ))}
       </div>
-
-      {show("paging", (
-        <section aria-label="Acknowledgement board" className="flex flex-col gap-2">
-          <h2 className="text-h6 text-ink-muted">Paging</h2>
-          <AckBoard
-            incidentId={incidentId}
-            pages={room.pages}
-            currentUserId={me?.user_id ?? null}
-            canEscalate={canCommand}
-            onChanged={reload}
-          />
-        </section>
-      ))}
 
       {show("tasks", (
         <TaskBoard
@@ -759,10 +784,9 @@ export function WarRoomShell({
               incidentId={incidentId}
               nba={governance?.nba ?? null}
               canCommand={canCommand}
-              onChanged={() => {
-                reloadGovernance();
-                reload();
-              }}
+              onChanged={refreshAll}
+              ledger={governance?.ledger ?? null}
+              names={names}
             />
             <PlanDiff
               incidentId={incidentId}
@@ -784,10 +808,7 @@ export function WarRoomShell({
             incidentId={incidentId}
             ledger={governance?.ledger ?? { executions: [], approvals: [] }}
             canCommand={canCommand}
-            onChanged={() => {
-              reloadGovernance();
-              reload();
-            }}
+            onChanged={refreshAll}
           />
         </>
       )}
@@ -808,9 +829,7 @@ export function WarRoomShell({
             title="What went wrong last time, and how relevant it is now"
             onClose={close}
           />
-          <GuidancePanel
-            guidance={brainState.kind === "ready" ? brainState.guidance : null}
-          />
+          <GuidancePanel guidance={guidance} />
         </>
       )}
       {deep === "comms" && (
@@ -840,8 +859,7 @@ export function WarRoomShell({
             validation={governance?.validation ?? null}
             canCommand={canCommand}
             onChanged={() => {
-              reloadGovernance();
-              reload();
+              refreshAll();
               reloadBrain();
             }}
           />

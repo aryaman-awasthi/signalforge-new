@@ -117,6 +117,67 @@ notification binding; and nothing told anyone that a severity had been proposed.
   (`budget_exhausted` at 199,693), after which every AI surface degraded by design. The budget
   is an in-process ledger, so an API restart also resets it.
 
+- **[S10-T21][REQ-010, REQ-012] An invited person can open the applications they were
+  invited for.** Found on the invite walkthrough: `GET /apps` and `GET /apps/{id}` carried
+  `manage_apps`, which only the Org Owner holds, so an Incident Commander who signed in from
+  an invite got 403 on the only list of applications there is - and the sign-in form landed
+  everybody on `/setup`, which the middleware reserves for the owner, so the first thing they
+  saw was "denied" and a sign-up form. The two reads are now tenant-scoped and filtered by
+  binding (`RBACDecisionService.visible_apps`: org-wide sees all, app-scoped sees its own);
+  every write still carries the permission. Sign-in and invite acceptance land on `/apps`;
+  the navigation shows owner pages only to a holder of `manage_org`/`manage_apps` and gains
+  Incidents and Your pages; a refused owner page sends the person to `/apps?denied=` with a
+  sentence rather than to the landing page. The access cookie lives fifteen minutes and a
+  page opened after that bounced to sign-in: the middleware now sends a session with a
+  refresh cookie through `/api/auth/refresh` and back (the refresh cookie's path is `/` so
+  the middleware can see it; still httpOnly). *Verified live:* IC and Tech Lead read `/apps`
+  and `/apps/payments` (200), `PUT .../mapping` still 403; screenshots of `/apps` and the
+  denied notice as the IC.
+
+- **[S10-T22][REQ-061, REQ-062] A settled attempt no longer blocks the same action being
+  asked for again.** The idempotency key is derived from incident, action, arguments and
+  attempt; `_claim_key` treated every earlier attempt that reached the target - including a
+  *succeeded* one - as the row a new request duplicates, so the second renewal of a lapsed
+  licence in one incident returned the first execution with `duplicate=True` and sent
+  nothing, while the application kept refusing payments. `LedgerState.settled` (every
+  terminal state) is stepped over; only an open attempt - pending, awaiting approval,
+  running, uncertain, reconciling, partial, compensating - is a duplicate, which is the
+  double-click, the retried call and the redelivered event the key exists for. The cockpit
+  now says when a request was a duplicate instead of doing nothing. *Verified live:* inject
+  -> renew (attempt 1 succeeded) -> inject again -> renew (attempt 2, its own key,
+  succeeded); harness health reports the licence up after each.
+
+- **[S10-T23][REQ-063] A remediation that removes an established mechanism outranks a
+  diagnostic.** Known issue 3 of this log: the read-only diagnostic led the ranking on the
+  licence incident because it carries no risk toll. `rank()` gains a third categorical tier
+  between "causally supported" and the score: an eligible, causally supported non-diagnostic
+  whose hypothesis is at or above the application's `confidence_threshold` (the profile
+  field that was stored and read by nothing until now; 0.7 by default) ranks above anything
+  that only measures the mechanism. The deterministic rationale says why when the tier
+  promoted something over a higher score. *Verified live:* `renew-license-key` primary at
+  97% with the sentence; `read-config` is the lower-risk fallback.
+
+- **[S10-T24][REQ-045, REQ-053, REQ-063] The war room reads like the prototype.** The
+  cockpit was the three-column grid with every panel fully open - evidence lists, the
+  ledger, agent runs, four score bars, a form per alternative - and ran to four screens.
+  Every panel in the grid is now its compact form and the full form is the deep view:
+  the brain shows the counter strip (facts, assumptions, contradictions, evidence) over
+  ranked hypothesis rows that open on click; Next Best Action is one headline, the
+  rationale, the safety verdict, the state of the latest attempt (requested, waiting for
+  whom, approved with **Send it now**, done, refused) and one button, with the arithmetic
+  behind "Plan and risk detail" and the rest behind "Other options"; Health Score and
+  Metrics is live from the detector - score, delta since declare, one row per golden-signal
+  family with a sparkline of the readings this screen has watched (`useDetectionSeries`;
+  the rollups route needs `manage_apps`, so the line is honestly "since you opened this");
+  Affected Services is the CONFIRMED/PREDICTED list with the map in the deep view; Warning
+  and Guidance is its three most relevant rows; the approval sheet is one strip whose
+  decision form opens on request and which offers Send it once granted; plan and
+  communications collapse when empty. The room renders the moment it is read instead of
+  after the model-written brief (12-13 s), the bridge says "reading" rather than "no bridge"
+  while it loads, and escalation hops on the paging board show names (known issue 1).
+  *Verified:* typecheck, and full-page screenshots as the IC and the Tech Lead on the live
+  licence incident.
+
 ## Not built / deferred
 
 - **T13-T18 (P2).** Severity fallback to the application tier and a services-affected rule;
@@ -178,13 +239,19 @@ notification binding; and nothing told anyone that a severity had been proposed.
 
 ## Known issues and technical debt
 
-1. Escalated pages on the ack board show the recipient's user id where no display name was
-   resolved for a hop (cosmetic; visible in the war room screenshot).
+1. ~~Escalated pages on the ack board show the recipient's user id where no display name was
+   resolved for a hop.~~ Resolved from the room's member list in S10-T24; the API row still
+   carries no display name for a hop.
 2. `.venv-broken-py312/` and three `*.pya` backups remain in the tree; delete them by hand.
-3. The NBA's arithmetic puts the diagnostic first on this incident (+0.11) and the renewal
-   second (-0.31) because a high-risk action's risk term outweighs its impact; the causal
-   chips make the point, but a client may ask why "read config" leads.
+3. ~~The NBA's arithmetic puts the diagnostic first on this incident.~~ S10-T23: the
+   established-mechanism tier. The arithmetic itself is unchanged, so a remediation on a
+   hypothesis *below* the threshold still ranks under a free diagnostic, by design.
 4. The P2 list above.
+5. The model-written join brief takes 12-13 s on the Claude endpoint; the room no longer
+   waits for it, but the brief panel is empty for that long on first open.
+6. The war room sparklines are per browser session: the detection route carries no history
+   and the rollups route needs `manage_apps`. A tenant-readable rollup history would make
+   them survive a reload.
 
 ## Demoable checkpoint
 

@@ -19,8 +19,18 @@ import { BrainNode, Guidance } from "@/features/brain/api";
  * Relevance movement is shown where the server computed one. An incident
  * becoming *more* relevant as evidence arrives is the interesting event, and a
  * static percentage would hide it.
+ *
+ * `compact` is the cockpit (S9): the three rows most worth a glance -
+ * contradictions first, then pinned warnings, then the closest prior incident -
+ * and the caveat as one line under them.
  */
-export function GuidancePanel({ guidance }: { guidance: Guidance | null }) {
+export function GuidancePanel({
+  guidance,
+  compact = false,
+}: {
+  guidance: Guidance | null;
+  compact?: boolean;
+}) {
   if (!guidance) {
     return (
       <p className="text-xs text-ink-muted">Guidance could not be read.</p>
@@ -32,6 +42,46 @@ export function GuidancePanel({ guidance }: { guidance: Guidance | null }) {
     guidance.warnings.length === 0 &&
     guidance.contradictions.length === 0 &&
     guidance.injections.length === 0;
+
+  if (compact) {
+    const rows: { node: BrainNode; kind: string; tone: string }[] = [
+      ...guidance.contradictions.map((node) => ({ node, kind: "contradiction", tone: "text-conflict-ink" })),
+      ...guidance.warnings.map((node) => ({ node, kind: "warning", tone: "text-warn-ink" })),
+      ...guidance.similar.map((node) => ({ node, kind: "similar", tone: "text-ink-muted" })),
+    ].slice(0, 3);
+    return (
+      <div className="flex flex-col gap-2">
+        {rows.length === 0 ? (
+          <p className="text-small text-ink-muted">
+            Nothing yet: no prior incident is above the relevance floor, and
+            nothing said on the bridge contradicts what is measured.
+          </p>
+        ) : (
+          <ul className="flex flex-col">
+            {rows.map(({ node, kind, tone }) => {
+              const source = String(node.detail.source_reference ?? "");
+              const relevance = Number(node.detail.relevance ?? 0);
+              return (
+                <li key={node.id} className="border-b border-line py-2 text-small last:border-b-0">
+                  <span className={`text-nano font-bold uppercase tracking-label ${tone}`}>
+                    {kind}
+                  </span>
+                  {source && <span className="ml-1.5 font-mono text-tiny text-ink-muted">{source}</span>}
+                  {relevance > 0 && (
+                    <span className="ml-1.5 text-tiny text-ink-muted">
+                      {Math.round(relevance * 100)}% relevance
+                    </span>
+                  )}
+                  <p className="mt-0.5">{node.label}</p>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        <p className="text-tiny text-ink-muted">{guidance.caveat}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-2">
