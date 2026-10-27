@@ -117,15 +117,19 @@ class GenAiLabGateway:
         model: str,
         messages: Sequence[dict[str, str]],
         max_tokens: int,
-        temperature: float,
+        temperature: Optional[float],
         response_format: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
         body: dict[str, Any] = {
             "model": model,
             "messages": list(messages),
             "max_tokens": max_tokens,
-            "temperature": temperature,
         }
+        # None means "send no temperature at all", which is different from
+        # sending the model's default: some models refuse any value below
+        # their own and accept only the field's absence.
+        if temperature is not None:
+            body["temperature"] = temperature
         if response_format is not None:
             body["response_format"] = response_format
         return await self._post(CHAT_PATH, body)

@@ -22,7 +22,11 @@ from signalforge.domain.detection.rollups import ROLLUP_INTERVAL_S, ROLLUP_RETEN
 from signalforge.domain.events.retention import SIGNAL_RETENTION_DEFAULT_DAYS
 from signalforge.domain.llm.budget import DEFAULT_INCIDENT_TOKEN_BUDGET
 from signalforge.domain.llm.entities import ModelClass
-from signalforge.infrastructure.llm.hosts import describe_endpoint, endpoint_is_approved
+from signalforge.infrastructure.llm.hosts import (
+    describe_endpoint,
+    endpoint_is_approved,
+    provider_name,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 KEYS_DIR = ROOT / "var" / "keys"
@@ -178,10 +182,15 @@ def load_llm_settings(env: Optional[Mapping[str, str]] = None) -> LlmSettings:
         key = (env.get("OPENAI_API_KEY") or "").strip()
         key_source = "OPENAI_API_KEY" if key else ""
 
+    base_url = normalize_gateway_url(env.get("GENAILAB_BASE_URL", ""))
     return LlmSettings(
-        base_url=normalize_gateway_url(env.get("GENAILAB_BASE_URL", "")),
+        base_url=base_url,
         api_key=key,
         key_source=key_source,
+        # The label rides on the host, not on a variable name: it is part of
+        # every cache key, so an answer from one endpoint is never served as an
+        # answer from the other.
+        provider=provider_name(base_url, PROVIDER_NAME),
         models={
             ModelClass.GENERAL: env.get("LLM_MODEL_GENERAL") or DEFAULT_MODEL_GENERAL,
             ModelClass.REASONING: env.get("LLM_MODEL_REASONING") or DEFAULT_MODEL_REASONING,

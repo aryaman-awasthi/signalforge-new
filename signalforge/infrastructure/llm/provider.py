@@ -216,28 +216,44 @@ class GatewayLlmProvider(LlmProvider):
         the guarantee the caller gets does not depend on which mode succeeded.
         """
         messages = _wire_messages(request)
-        try:
-            return await self._gateway.chat(
-                model=model,
-                messages=messages,
-                max_tokens=request.max_tokens,
-                temperature=request.temperature,
-                response_format=_json_schema_format(request.schema),
-            )
-        except GatewayFailure as failure:
-            if request.schema is None or failure.status_code not in SCHEMA_RETRY_STATUS:
+        temperature: Optional[float] = request.temperature
+        response_format = _json_schema_format(request.schema)
+        # At most three calls: the request as asked, then one retry per
+        # parameter a gateway can refuse by name. Each retry drops exactly one
+        # thing, so a 400 that survives all of them is a real 400.
+        for _ in range(3):
+            try:
+                return await self._gateway.chat(
+                    model=model,
+                    messages=messages,
+                    max_tokens=request.max_tokens,
+                    temperature=temperature,
+                    response_format=response_format,
+                )
+            except GatewayFailure as failure:
+                if failure.status_code not in SCHEMA_RETRY_STATUS:
+                    raise
+                if temperature is not None and _refuses_temperature(failure):
+                    # Claude 4.7 and later accept no temperature below their
+                    # own and refuse the field outright. Determinism is then
+                    # the cache's job - the same input hash is the same answer
+                    # for as long as the entry lives - rather than the
+                    # sampler's.
+                    logger.info(
+                        "gateway refused the temperature; retrying without one",
+                        extra={"purpose": request.purpose, "model": model},
+                    )
+                    temperature = None
+                    continue
+                if response_format is not None and response_format.get("type") == "json_schema":
+                    logger.info(
+                        "gateway refused json_schema output; retrying as a json object",
+                        extra={"purpose": request.purpose, "model": model},
+                    )
+                    response_format = {"type": "json_object"}
+                    continue
                 raise
-            logger.info(
-                "gateway refused json_schema output; retrying as a json object",
-                extra={"purpose": request.purpose, "model": model},
-            )
-            return await self._gateway.chat(
-                model=model,
-                messages=messages,
-                max_tokens=request.max_tokens,
-                temperature=request.temperature,
-                response_format={"type": "json_object"},
-            )
+        raise AssertionError("unreachable: the retry loop returns or raises")
 
     def _parse_structured(self, request: CompletionRequest, text: str) -> Optional[Any]:
         """Unstructured calls pass through; structured ones are validated.
@@ -525,6 +541,16 @@ def _wire_messages(request: CompletionRequest) -> list[dict[str, str]]:
             }
         )
     return messages
+
+
+def _refuses_temperature(failure: GatewayFailure) -> bool:
+    """Whether a 400 is the gateway refusing the `temperature` field itself.
+
+    Read from the error text the gateway returned, which `_error_text` has
+    already reduced to the structured message - a refusal names the parameter.
+    """
+    detail = getattr(failure, "detail", None) or str(failure)
+    return "temperature" in str(detail).lower()
 
 
 def _json_schema_format(schema: Optional[dict]) -> Optional[dict]:
