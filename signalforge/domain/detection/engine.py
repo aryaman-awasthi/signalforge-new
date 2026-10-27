@@ -521,7 +521,11 @@ def summarize(
         burns=tuple(burns),
         journeys=journeys,
         corroboration=corroboration,
-        severity=severity if stance is not DetectionStance.STEADY else None,
+        # A severity rides only on a proposal. Watch means something is being
+        # observed and nothing has been decided; attaching a P1 to it put a
+        # "Declare P1 as proposed" button on a single failed probe, which is the
+        # opposite of what the corroboration rule exists to prevent.
+        severity=severity if stance is DetectionStance.PROPOSED else None,
         storm=storm,
         reasons=tuple(reasons),
     )
