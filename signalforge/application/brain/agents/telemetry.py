@@ -239,20 +239,71 @@ class TelemetryAgent(Agent):
                 )
             )
 
-        journeys = [j for j in verdict.journeys if getattr(j, "customer_facing", False)]
-        if journeys:
+        # A failing synthetic probe is the one first-hand observation in the
+        # verdict - SignalForge made the request itself - and its detail carries
+        # what the application answered. One EVIDENCE node per failing journey,
+        # with that answer as the content, so a hypothesis can be named from the
+        # application's own words ("LICENSE_EXPIRED") rather than from the shape
+        # of a metric.
+        failing = [row for row in verdict.journeys if row.failing]
+        for row in failing[:MAX_SIGNAL_FACTS]:
+            journey = row.journey_id or "front-door"
+            nodes.append(
+                NodeProposal(
+                    node_type=NodeType.EVIDENCE,
+                    derived_key=derived_key(
+                        NodeType.EVIDENCE, "probe", journey, row.region or "all"
+                    ),
+                    label=(
+                        f"Journey {journey} failing its probe"
+                        + (f" [{row.region}]" if row.region else "")
+                    ),
+                    content=(
+                        f"{row.failed} of {row.measured} probe run(s) failed"
+                        + (f": {row.last_detail}" if row.last_detail else "")
+                    ),
+                    provenance=observed(
+                        "detection", result_ref=f"journey:{journey}/{row.region or '-'}"
+                    ),
+                    confirmation=ConfirmationState.CONFIRMED,
+                    detail={
+                        "evidence_kind": "probe_failure",
+                        # Every run failing is a louder fact than one in ten.
+                        "strength": round(
+                            min(2.0, 0.6 + 1.4 * (row.failed / max(1, row.measured))), 3
+                        ),
+                        "subject": journey,
+                        "region": row.region,
+                        "journey_id": row.journey_id,
+                        "tier": row.tier,
+                        "failed": row.failed,
+                        "measured": row.measured,
+                        "last_detail": row.last_detail,
+                    },
+                )
+            )
+
+        # `JourneyHealth` has no customer_facing flag; a probe is customer-facing
+        # by construction (corroboration already counts it as the availability
+        # family). The impact node therefore reads the failing rows directly -
+        # the previous attribute lookup matched nothing and the node was never
+        # written.
+        if failing:
+            names = sorted({row.journey_id or "front-door" for row in failing})
             nodes.append(
                 NodeProposal(
                     node_type=NodeType.IMPACT,
                     derived_key=derived_key(NodeType.IMPACT, "journeys"),
-                    label=f"{len(journeys)} customer journey(s) measured as degraded",
-                    content=", ".join(
-                        getattr(journey, "journey_id", "") or "" for journey in journeys
-                    )[:400],
+                    label=f"{len(names)} customer journey(s) measured as failing",
+                    content=", ".join(names)[:400],
                     provenance=observed("detection", result_ref=f"journeys:{context.app_id}"),
                     # Measured, so confirmed. Anything the topology agent adds
                     # downstream of this is predicted, and says so.
                     confirmation=ConfirmationState.CONFIRMED,
+                    detail={
+                        "journeys": names,
+                        "regions": sorted({row.region for row in failing if row.region}),
+                    },
                 )
             )
 
