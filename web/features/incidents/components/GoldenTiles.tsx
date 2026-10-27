@@ -32,24 +32,31 @@ const FAMILIES = [
   "business",
 ] as const;
 
-/** Only the reading is coloured. The tile itself never shouts. */
+/** Only the reading is coloured. The tile itself never shouts.
+ *
+ * Keys are the detector's own `SignalStatus` values (`healthy`, `stale`,
+ * `breaching`, `anomalous`, `unknown`). `stale` is a reading the poller has not
+ * refreshed for a minute: not a breach, but not evidence of health either, so it
+ * is muted rather than green. */
 const STATUS_INK: Record<string, string> = {
-  ok: "text-ink",
+  healthy: "text-ink",
+  stale: "text-neutral-500",
   breaching: "text-warn-ink",
   anomalous: "text-accent-strong",
   unknown: "text-neutral-500",
 };
 
 const STATUS_RULE: Record<string, string> = {
-  ok: "",
+  healthy: "",
+  stale: "",
   breaching: "border-t-4 border-t-warn",
   anomalous: "border-t-4 border-t-accent",
   unknown: "",
 };
 
 /** The worst state among a family's regions. Ordered by how much it should
- * worry somebody, with `unknown` deliberately above `ok`. */
-const SEVERITY_ORDER = ["ok", "unknown", "breaching", "anomalous"];
+ * worry somebody, with `unknown` and `stale` deliberately above `healthy`. */
+const SEVERITY_ORDER = ["healthy", "unknown", "stale", "breaching", "anomalous"];
 
 function worst(states: SignalState[]): SignalState | null {
   if (states.length === 0) return null;

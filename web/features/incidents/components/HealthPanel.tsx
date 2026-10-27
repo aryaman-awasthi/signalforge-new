@@ -24,10 +24,12 @@ import { Detection } from "@/features/incidents/api";
 const GRAFANA_BASE =
   process.env.NEXT_PUBLIC_GRAFANA_URL ?? "http://localhost:3000";
 
+// Keys are the domain's `HealthBand` values; `unhealthy` is the worst band the
+// scorer emits, there is no `critical`.
 const BAND_TONE: Record<string, string> = {
   healthy: "text-ok",
   degraded: "text-warn",
-  critical: "text-danger",
+  unhealthy: "text-danger",
   unknown: "text-ink-muted",
 };
 
