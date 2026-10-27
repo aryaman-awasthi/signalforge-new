@@ -1,15 +1,14 @@
-# SignalForge build interface. Targets: run, test, rtm, report, evidence, clean-check.
+# SignalForge build interface. Targets: run, rtm, report, evidence, clean-check.
 # Recipes are thin delegations so every target is also runnable by hand in bash.
 
 SHELL := bash
 PY := $(shell [ -x .venv/Scripts/python.exe ] && echo .venv/Scripts/python.exe || { [ -x .venv/bin/python ] && echo .venv/bin/python || echo python; })
 
-.PHONY: run test rtm report erd openapi nfr evidence llm-smoke clean-check help
+.PHONY: run rtm report erd openapi nfr evidence llm-smoke clean-check help
 
 help:
 	@echo "SignalForge targets:"
 	@echo "  make run          boot api + web (run.sh)"
-	@echo "  make test         run the pytest suite"
 	@echo "  make rtm          generate docs/20-RTM.md from specs + test results"
 	@echo "  make report       generate docs/21-test-report.md"
 	@echo "  make erd          generate docs/10-data-design.md from the models"
@@ -21,9 +20,6 @@ help:
 
 run:
 	@bash run.sh
-
-test:
-	@$(PY) -m pytest
 
 rtm:
 	@if [ -f scripts/gen_rtm.py ]; then $(PY) scripts/gen_rtm.py; \

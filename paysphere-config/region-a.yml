@@ -1,6 +1,0 @@
-# region-a: the reference region. Its route does not cross the shared fibre span,
-# so it is the control against which a region-b incident is judged.
-region: region-a
-settings:
-  timeout_ms: 2000
-  pool_size: 16

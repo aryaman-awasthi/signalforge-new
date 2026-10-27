@@ -7,8 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit",
-    "e2e": "playwright test"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "next": "14.2.35",
