@@ -97,14 +97,29 @@ export function AckBoard({
   if (pages.length === 0) {
     return (
       <p className="text-xs text-ink-muted">
-        Nobody has been paged. The blast radius called for no paged role, or no
-        notification connector is bound to this application.
+        Nobody has been paged: the blast radius called for no paged role, or
+        nobody holds the roles it called for.
       </p>
     );
   }
 
+  // A page with no channel to carry it lands FAILED and stays there - nothing
+  // escalates a page that reached nobody. When that is every page in the room,
+  // the board has to say so above the rows rather than let a column of "failed"
+  // read like a column of people who did not answer.
+  const allFailed = pages.every((page) => page.state === "failed");
+
   return (
     <div className="space-y-2">
+      {allFailed && (
+        <p className="rounded-card border border-danger/40 bg-danger/10 px-2.5 py-1.5 text-xs text-danger">
+          Every page failed: no notification connector bound to this application
+          could carry one, so nobody was reached. Bind{" "}
+          <span className="font-mono">notify-in-app</span> or{" "}
+          <span className="font-mono">page-sim</span> on the application&apos;s
+          Connect step, then page again.
+        </p>
+      )}
       {error && (
         <p className="rounded-card border border-danger/40 bg-danger/10 px-2.5 py-1.5 text-sm text-danger">
           {error}

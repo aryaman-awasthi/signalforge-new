@@ -127,8 +127,30 @@ export function ConnectStep({
     }
   };
 
+  // Paging goes only through notification connectors bound to *this*
+  // application. An application with none can be detected on and declared
+  // against, and then every page it raises lands FAILED with nobody reached -
+  // which is the one thing a person onboarding it cannot be expected to know
+  // from the readiness score, so this step says it.
+  const notificationsBound = data.adapters.some(
+    (adapter) => adapter.kind === "notifications" && bindings.has(adapter.id),
+  );
+
   return (
     <div className="space-y-6">
+      {!notificationsBound && (
+        <p
+          role="status"
+          className="rounded-card border border-warn bg-warn-bg px-3 py-2 text-xs text-warn-ink"
+        >
+          <strong className="font-semibold">No notification connector is bound.</strong>{" "}
+          An incident declared on this application would page nobody: pages go
+          only through the notification connectors bound here. Bind{" "}
+          <span className="font-mono">notify-in-app</span> (and{" "}
+          <span className="font-mono">page-sim</span> for SMS and voice) below
+          before relying on paging.
+        </p>
+      )}
       <section className="space-y-3">
         <div className="flex flex-wrap items-center gap-3">
           <h2 className="text-lg font-medium">Auto-discovery</h2>
