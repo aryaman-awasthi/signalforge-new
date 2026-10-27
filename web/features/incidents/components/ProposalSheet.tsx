@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { ApiError } from "@/lib/api/client";
+import { Me, fetchMe } from "@/features/auth/api";
 import {
   Detection,
   Lifecycle,
@@ -98,13 +99,54 @@ export function ProposalSheet({
   const [error, setError] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [chosen, setChosen] = useState<Severity | "">("");
+  const [manual, setManual] = useState(false);
+  const [me, setMe] = useState<Me | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    fetchMe()
+      .then((who) => {
+        if (live) setMe(who);
+      })
+      .catch(() => {
+        if (live) setMe(null);
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
 
   // The sheet is for a stance, never for an incident. Once somebody has
   // declared, the war room is the screen - a second Declare button beside a
   // live incident is how a duplicate gets pressed.
   if (lifecycle.source === "incident") return null;
 
-  const proposal = detection?.severity ?? null;
+  // And it is for a *proposal*. Steady and Watch are stances in which the
+  // platform has decided nothing, and a row of P0-P3 buttons on a healthy
+  // application is an invitation to declare one. A person who holds the
+  // permission can still open the sheet by hand - the human override is the
+  // product's central rule - but that is a deliberate act behind a link, not
+  // the default face of every application page.
+  const canDeclare = Boolean(me?.permissions.includes("declare_incident"));
+  const proposed = lifecycle.state === "proposed";
+  if (!proposed) {
+    if (!canDeclare) return null;
+    if (!manual) {
+      return (
+        <p className="text-right">
+          <button
+            type="button"
+            onClick={() => setManual(true)}
+            className="text-xs text-ink-muted hover:text-ink hover:underline"
+          >
+            Declare an incident manually…
+          </button>
+        </p>
+      );
+    }
+  }
+
+  const proposal = proposed ? detection?.severity ?? null : null;
 
   async function declare(severity?: Severity) {
     setBusy(true);
@@ -216,37 +258,71 @@ export function ProposalSheet({
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        {proposal && (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void declare()}
-            className="rounded-card bg-accent px-3 py-1.5 text-sm font-medium text-surface-raised hover:bg-accent-strong disabled:opacity-60"
-          >
-            Declare {proposal.severity} as proposed
-          </button>
+        {me === null ? null : !canDeclare ? (
+          <span className="text-xs text-ink-muted">
+            Only an Incident Commander or Tech Lead can declare. The proposal
+            stays here until one of them does.
+          </span>
+        ) : (
+          <>
+            {proposal && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void declare()}
+                className="rounded-card bg-accent px-3 py-1.5 text-sm font-medium text-surface-raised hover:bg-accent-strong disabled:opacity-60"
+              >
+                Declare {proposal.severity} as proposed
+              </button>
+            )}
+            <span className="text-xs text-ink-muted">
+              {proposal ? "or declare at a different severity:" : "declare at:"}
+            </span>
+            {/* Picking a severity arms it; a second, differently worded button
+                declares. Declaring at the proposed severity is one press because
+                that is the act the sheet exists for; declaring at a severity the
+                platform did not propose - or with no proposal at all - is a
+                heavier act and gets a confirm. */}
+            {SEVERITIES.map((severity) => (
+              <button
+                key={severity}
+                type="button"
+                disabled={busy}
+                onClick={() => setChosen(chosen === severity ? "" : severity)}
+                className={`rounded-card border px-2.5 py-1.5 font-mono text-sm disabled:opacity-60 ${
+                  chosen === severity
+                    ? "border-accent text-accent-strong"
+                    : "border-line hover:border-accent hover:text-accent-strong"
+                }`}
+              >
+                {severity}
+              </button>
+            ))}
+            {chosen && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void declare(chosen)}
+                className="rounded-card border border-danger px-3 py-1.5 text-sm font-medium text-danger hover:bg-danger/10 disabled:opacity-60"
+              >
+                Confirm: declare {chosen}
+                {proposal ? " (override)" : ""}
+              </button>
+            )}
+            {manual && (
+              <button
+                type="button"
+                onClick={() => {
+                  setManual(false);
+                  setChosen("");
+                }}
+                className="text-xs text-ink-muted hover:underline"
+              >
+                Cancel
+              </button>
+            )}
+          </>
         )}
-        <span className="text-xs text-ink-muted">
-          {proposal ? "or declare at a different severity:" : "declare at:"}
-        </span>
-        {SEVERITIES.map((severity) => (
-          <button
-            key={severity}
-            type="button"
-            disabled={busy}
-            onClick={() => {
-              setChosen(severity);
-              void declare(severity);
-            }}
-            className={`rounded-card border px-2.5 py-1.5 font-mono text-sm disabled:opacity-60 ${
-              chosen === severity
-                ? "border-accent text-accent-strong"
-                : "border-line hover:border-accent hover:text-accent-strong"
-            }`}
-          >
-            {severity}
-          </button>
-        ))}
       </div>
       {proposal && (
         <p className="text-xs text-ink-muted">
