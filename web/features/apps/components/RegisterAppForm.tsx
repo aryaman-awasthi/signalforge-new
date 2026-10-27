@@ -6,7 +6,7 @@ import { useState } from "react";
 import { ApiError } from "@/lib/api/client";
 import { AppTier, Environment, registerApp } from "@/features/apps/api";
 
-const TIERS: AppTier[] = ["tier_0", "tier_1", "tier_2", "tier_3"];
+const TIERS: AppTier[] = ["tier_1", "tier_2", "tier_3"];
 const ENVIRONMENTS: Environment[] = ["production", "staging", "development"];
 
 /**

@@ -141,6 +141,17 @@ export function OnboardWizard({ appId, step }: { appId: string; step: number }) 
             {WIZARD_STEPS[step].title} →
           </Link>
         )}
+        {/* The last step used to dead-end on Integration health. The thing
+            onboarding was for is the application page, so that is where the
+            wizard lets go. */}
+        {step === WIZARD_STEPS.length && (
+          <Link
+            href={`/apps/${encodeURIComponent(appId)}`}
+            className="rounded-card bg-accent px-3 py-1.5 font-medium text-surface-raised hover:bg-accent-strong"
+          >
+            Open the application →
+          </Link>
+        )}
         <Link
           href="/integration-health"
           className="rounded-card border border-line px-3 py-1.5 text-xs hover:border-accent hover:text-accent-strong"

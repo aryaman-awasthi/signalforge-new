@@ -7,7 +7,9 @@ import { Action, importActions, patchAction } from "@/features/apps/api";
 import { rolesMatrix } from "@/features/org-setup/api";
 import { relativeTime } from "@/lib/format";
 
-const RISKS = ["low", "medium", "high", "critical"] as const;
+// The contract's `RiskLevel` is low/medium/high. There is no `critical`; the
+// floor already treats every high-risk class as the top of the scale.
+const RISKS = ["low", "medium", "high"] as const;
 const MODES = ["manual", "approval", "auto"] as const;
 
 const APPROVE_HIGH_RISK = "approve_high_risk";

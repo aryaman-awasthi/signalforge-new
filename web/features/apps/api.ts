@@ -11,7 +11,9 @@
 
 import { proxyApi } from "@/lib/api/client";
 
-export type AppTier = "tier_0" | "tier_1" | "tier_2" | "tier_3";
+// The domain's `AppTier` is tier_1..tier_3; a `tier_0` was offered here once and
+// every registration that picked it came back 422.
+export type AppTier = "tier_1" | "tier_2" | "tier_3";
 export type Environment = "production" | "staging" | "development";
 
 export type Application = {
