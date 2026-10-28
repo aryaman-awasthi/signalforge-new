@@ -41,6 +41,7 @@ from enum import Enum
 from typing import Mapping, Optional
 
 from signalforge.contracts.envelope import ActorType
+from signalforge.domain.shared.errors import DomainValidationError
 from signalforge.domain.incidents.errors import (
     HumanOnlyTransitionError,
     IllegalTransitionError,
@@ -219,7 +220,9 @@ def parse_state(raw: str, *, allowed: Optional[tuple[LifecycleState, ...]] = Non
     try:
         state = LifecycleState(str(raw).strip().lower())
     except ValueError as exc:
-        raise IllegalTransitionError(
+        # A word that is not a state at all is malformed input (422), not a
+        # move the lifecycle refuses (409): the request never named a move.
+        raise DomainValidationError(
             f"{raw!r} is not a lifecycle state; one of "
             f"{[s.value for s in LifecycleState]}"
         ) from exc
