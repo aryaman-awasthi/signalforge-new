@@ -190,20 +190,21 @@ async def test_a_deleted_audit_record_breaks_the_chain_at_its_successor(governed
 
 @pytest.mark.req("REQ-072", "REQ-013")
 async def test_another_tenants_incident_replays_as_nothing(governed):
-    """Not a 403 that confirms it exists. Nothing."""
+    """Not a 403 that confirms it exists. The same answer an id that was never
+    issued gets: the replay route resolves the incident inside the caller's own
+    tenant before it decides anything (S11), so another tenant's incident and a
+    made-up one are indistinguishable from outside."""
     incident_id = await _an_incident_with_a_history(governed)
 
     intruder = governed.api.signup(
         org="Rival Ltd", email="owner@rival.test", display_name="Rival Owner"
     )
-    document = _replay(
-        governed.api, intruder["tokens"]["access_token"], incident_id
-    )
-    assert document["count"] == 0
-    assert document["entries"] == []
-    assert document["chain"]["valid"] is True, (
-        "the intruder's own chain is intact; they simply have no such incident"
-    )
+    headers = governed.api.auth_header(intruder["tokens"]["access_token"])
+    foreign = governed.api.client.get(f"/incidents/{incident_id}/replay", headers=headers)
+    unknown = governed.api.client.get("/incidents/no-such-incident/replay", headers=headers)
+    assert foreign.status_code == unknown.status_code == 404
+    assert foreign.json()["detail"].endswith("not found")
+    assert unknown.json()["detail"].endswith("not found")
 
 
 @pytest.mark.req("REQ-072", "REQ-012")

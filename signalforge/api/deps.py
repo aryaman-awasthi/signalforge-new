@@ -885,9 +885,21 @@ def require_ingest(stream: IngestStream):
     return dependency
 
 
-def require(permission: Permission):
-    """RBAC dependency factory. app_id comes from the query string so per-app
-    bindings apply; the denied path writes the audit event before raising.
+def require(permission: Permission, *, app_id_from_query: bool = False):
+    """RBAC dependency factory for routes that do not name an application in
+    their path. The denied path writes the audit event before raising.
+
+    The decision is **org-wide** unless the route says otherwise: the resource
+    behind `/users/{id}/roles`, `/invites`, `/connectors/{binding_id}`,
+    `/ingest-keys/{key_id}`, `/events` or `/platform/*` belongs to the tenant,
+    and the handler never compares it to an application. Reading `?app_id=`
+    here and letting a per-application binding satisfy the check would let a
+    role bound to one application exercise it on every other - an `org_owner`
+    scoped to `payments` could write itself an org-wide binding by naming
+    `payments` in the query string. So a per-application binding counts only
+    where the handler acts on the very `app_id` the guard read:
+    `app_id_from_query=True` is for those routes (declaring an incident, listing
+    the connectors or keys of one application), and nothing else.
 
     The permission and where the application is named are attached to the
     dependency as well as closed over, so the published API document can state
@@ -895,19 +907,33 @@ def require(permission: Permission):
     hand-kept list (S3-T07, signalforge/api/openapi.py).
     """
 
-    async def dependency(
-        request: Request,
-        principal: Principal = Depends(get_principal),
-        container: Container = Depends(get_container),
-        app_id: Optional[str] = Query(default=None),
-    ) -> Principal:
-        await container.auth.authorize(
-            principal, permission, app_id, resource=request.url.path
-        )
-        return principal
+    if app_id_from_query:
+
+        async def dependency(
+            request: Request,
+            principal: Principal = Depends(get_principal),
+            container: Container = Depends(get_container),
+            app_id: Optional[str] = Query(default=None),
+        ) -> Principal:
+            await container.auth.authorize(
+                principal, permission, app_id, resource=request.url.path
+            )
+            return principal
+
+    else:
+
+        async def dependency(  # type: ignore[misc]
+            request: Request,
+            principal: Principal = Depends(get_principal),
+            container: Container = Depends(get_container),
+        ) -> Principal:
+            await container.auth.authorize(
+                principal, permission, None, resource=request.url.path
+            )
+            return principal
 
     dependency.required_permission = permission
-    dependency.app_id_source = "query"
+    dependency.app_id_source = "query" if app_id_from_query else None
     return dependency
 
 

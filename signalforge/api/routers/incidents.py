@@ -67,7 +67,9 @@ apps_router = APIRouter(prefix="/apps", tags=["incidents"])
 async def declare_incident(
     body: DeclareIn,
     app_id: str = Query(description="The application this incident is about"),
-    principal: Principal = Depends(deps.require(Permission.DECLARE_INCIDENT)),
+    principal: Principal = Depends(
+        deps.require(Permission.DECLARE_INCIDENT, app_id_from_query=True)
+    ),
     container: deps.Container = Depends(deps.get_container),
 ):
     """Declare an incident. The only way one comes into existence.

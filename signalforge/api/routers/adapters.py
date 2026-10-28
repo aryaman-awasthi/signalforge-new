@@ -82,7 +82,9 @@ async def list_connectors(
     app_id: Optional[str] = Query(default=None),
     adapter_id: Optional[str] = Query(default=None),
     enabled_only: bool = Query(default=False),
-    principal: Principal = Depends(deps.require(Permission.MANAGE_APPS)),
+    principal: Principal = Depends(
+        deps.require(Permission.MANAGE_APPS, app_id_from_query=True)
+    ),
     container: deps.Container = Depends(deps.get_container),
 ):
     views = await container.connectors.list(
@@ -94,7 +96,9 @@ async def list_connectors(
 @router.get("/connectors/health", response_model=list[ConnectorHealthOut])
 async def connector_health(
     app_id: Optional[str] = Query(default=None),
-    principal: Principal = Depends(deps.require(Permission.MANAGE_APPS)),
+    principal: Principal = Depends(
+        deps.require(Permission.MANAGE_APPS, app_id_from_query=True)
+    ),
     container: deps.Container = Depends(deps.get_container),
 ):
     """What the S23 integration health screen reads: direction, last pull, last

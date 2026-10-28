@@ -132,7 +132,7 @@ The calling session's own tenant.
 | Method | Path | Credential | Permission | Purpose |
 |---|---|---|---|---|
 | GET | `/orgs/current` | session | (session only) | Current org |
-| PATCH | `/orgs/current` | session | `manage_org` (`?app_id=`) | Rename org |
+| PATCH | `/orgs/current` | session | `manage_org` | Rename org |
 
 ### `users`
 
@@ -141,7 +141,7 @@ Members of the tenant and their role bindings, org-wide or per application.
 | Method | Path | Credential | Permission | Purpose |
 |---|---|---|---|---|
 | GET | `/users` | session | (session only) | List users |
-| PUT | `/users/{user_id}/roles` | session | `manage_org` (`?app_id=`) | Set user roles |
+| PUT | `/users/{user_id}/roles` | session | `manage_org` | Set user roles |
 
 ### `invites`
 
@@ -149,9 +149,9 @@ Invitations into the tenant. The invite token is in the 201 and nowhere else; re
 
 | Method | Path | Credential | Permission | Purpose |
 |---|---|---|---|---|
-| GET | `/invites` | session | `manage_org` (`?app_id=`) | List invites |
-| POST | `/invites` | session | `manage_org` (`?app_id=`) | Create invite |
-| DELETE | `/invites/{invite_id}` | session | `manage_org` (`?app_id=`) | Revoke invite |
+| GET | `/invites` | session | `manage_org` | List invites |
+| POST | `/invites` | session | `manage_org` | Create invite |
+| DELETE | `/invites/{invite_id}` | session | `manage_org` | Revoke invite |
 
 ### `roles`
 
@@ -168,9 +168,9 @@ Rotations that escalation policies page.
 | Method | Path | Credential | Permission | Purpose |
 |---|---|---|---|---|
 | GET | `/oncall/rotations` | session | (session only) | List rotations |
-| POST | `/oncall/rotations` | session | `manage_org` (`?app_id=`) | Create rotation |
-| DELETE | `/oncall/rotations/{rotation_id}` | session | `manage_org` (`?app_id=`) | Delete rotation |
-| PUT | `/oncall/rotations/{rotation_id}` | session | `manage_org` (`?app_id=`) | Update rotation |
+| POST | `/oncall/rotations` | session | `manage_org` | Create rotation |
+| DELETE | `/oncall/rotations/{rotation_id}` | session | `manage_org` | Delete rotation |
+| PUT | `/oncall/rotations/{rotation_id}` | session | `manage_org` | Update rotation |
 
 ### `escalation`
 
@@ -179,10 +179,10 @@ Escalation policies, their ordered steps and a test fire that pages nobody.
 | Method | Path | Credential | Permission | Purpose |
 |---|---|---|---|---|
 | GET | `/escalation/policies` | session | (session only) | List policies |
-| POST | `/escalation/policies` | session | `manage_org` (`?app_id=`) | Create policy |
-| DELETE | `/escalation/policies/{policy_id}` | session | `manage_org` (`?app_id=`) | Delete policy |
-| PUT | `/escalation/policies/{policy_id}` | session | `manage_org` (`?app_id=`) | Update policy |
-| POST | `/escalation/policies/{policy_id}/test` | session | `run_drills` (`?app_id=`) | Test fire policy |
+| POST | `/escalation/policies` | session | `manage_org` | Create policy |
+| DELETE | `/escalation/policies/{policy_id}` | session | `manage_org` | Delete policy |
+| PUT | `/escalation/policies/{policy_id}` | session | `manage_org` | Update policy |
+| POST | `/escalation/policies/{policy_id}/test` | session | `run_drills` | Test fire policy |
 
 ### `events`
 
@@ -190,12 +190,12 @@ Replay of the event log, the causal chain of one event, and the seals that make 
 
 | Method | Path | Credential | Permission | Purpose |
 |---|---|---|---|---|
-| GET | `/events` | session | `read_audit` (`?app_id=`) | Replay |
-| GET | `/events/seals` | session | `read_audit` (`?app_id=`) | List seals |
-| POST | `/events/seals` | session | `close_incident` (`?app_id=`) | Create seal |
-| POST | `/events/seals/{seal_id}/verify` | session | `read_audit` (`?app_id=`) | Verify seal |
-| GET | `/events/{event_id}` | session | `read_audit` (`?app_id=`) | Get event |
-| GET | `/events/{event_id}/chain` | session | `read_audit` (`?app_id=`) | Causal chain |
+| GET | `/events` | session | `read_audit` | Replay |
+| GET | `/events/seals` | session | `read_audit` | List seals |
+| POST | `/events/seals` | session | `close_incident` | Create seal |
+| POST | `/events/seals/{seal_id}/verify` | session | `read_audit` | Verify seal |
+| GET | `/events/{event_id}` | session | `read_audit` | Get event |
+| GET | `/events/{event_id}/chain` | session | `read_audit` | Causal chain |
 
 ### `adapters`
 
@@ -203,15 +203,15 @@ The adapter registry read off the manifests on disk, the capability matrix, and 
 
 | Method | Path | Credential | Permission | Purpose |
 |---|---|---|---|---|
-| GET | `/adapters` | session | `manage_apps` (`?app_id=`) | List adapters |
-| GET | `/adapters/capability-matrix` | session | `manage_apps` (`?app_id=`) | Capability matrix |
-| GET | `/adapters/{adapter_id}` | session | `manage_apps` (`?app_id=`) | Get adapter |
+| GET | `/adapters` | session | `manage_apps` | List adapters |
+| GET | `/adapters/capability-matrix` | session | `manage_apps` | Capability matrix |
+| GET | `/adapters/{adapter_id}` | session | `manage_apps` | Get adapter |
 | GET | `/connectors` | session | `manage_apps` (`?app_id=`) | List connectors |
-| POST | `/connectors` | session | `manage_apps` (`?app_id=`) | Create connector |
+| POST | `/connectors` | session | `manage_apps` | Create connector |
 | GET | `/connectors/health` | session | `manage_apps` (`?app_id=`) | What the S23 integration health screen reads: direction, last pull, last push, freshness, errors and the SIMULATED flag - the bindings the health... |
-| DELETE | `/connectors/{binding_id}` | session | `manage_apps` (`?app_id=`) | Delete connector |
-| GET | `/connectors/{binding_id}` | session | `manage_apps` (`?app_id=`) | Get connector |
-| PATCH | `/connectors/{binding_id}` | session | `manage_apps` (`?app_id=`) | Update connector |
+| DELETE | `/connectors/{binding_id}` | session | `manage_apps` | Delete connector |
+| GET | `/connectors/{binding_id}` | session | `manage_apps` | Get connector |
+| PATCH | `/connectors/{binding_id}` | session | `manage_apps` | Update connector |
 
 ### `onboarding`
 
@@ -220,7 +220,7 @@ The seven wizard steps: basics, connect and discover, map, topology, SLOs and po
 | Method | Path | Credential | Permission | Purpose |
 |---|---|---|---|---|
 | GET | `/apps` | session | (session only) | The applications this person's bindings cover. |
-| POST | `/apps` | session | `manage_apps` (`?app_id=`) | Register application |
+| POST | `/apps` | session | `manage_apps` | Register application |
 | DELETE | `/apps/{app_id}` | session | `manage_apps` (path) | Remove application |
 | GET | `/apps/{app_id}` | session | (session only) | One application, readable by anybody whose binding names it. |
 | PATCH | `/apps/{app_id}` | session | `manage_apps` (path) | Update application |
@@ -268,9 +268,9 @@ Reconstructing a closed incident from the hash-chained record, and the post-inci
 
 | Method | Path | Credential | Permission | Purpose |
 |---|---|---|---|---|
-| GET | `/incidents/{incident_id}/pir` | session | `read_audit` (`?app_id=`) | The same document, regenerated. |
-| POST | `/incidents/{incident_id}/pir` | session | `read_audit` (`?app_id=`) | Generate the post-incident review from the incident's own records. |
-| GET | `/incidents/{incident_id}/replay` | session | `read_audit` (`?app_id=`) | Reconstruct the incident from the hash-chained audit log. |
+| GET | `/incidents/{incident_id}/pir` | session | `read_audit` | The same document, regenerated. |
+| POST | `/incidents/{incident_id}/pir` | session | `read_audit` | Generate the post-incident review from the incident's own records. |
+| GET | `/incidents/{incident_id}/replay` | session | `read_audit` | Reconstruct the incident from the hash-chained audit log. |
 
 ### `ingest`
 
@@ -284,10 +284,10 @@ Ingest keys, and the five frozen push endpoints a sending application posts to.
 | POST | `/api/v1/ingest/tickets` | ingest key + HMAC | - | Accept a batch of ITSM tickets |
 | POST | `/api/v1/ingest/topology` | ingest key + HMAC | - | Accept a topology snapshot |
 | GET | `/ingest-keys` | session | `manage_apps` (`?app_id=`) | List ingest keys |
-| POST | `/ingest-keys` | session | `manage_apps` (`?app_id=`) | Issue ingest key |
-| DELETE | `/ingest-keys/{key_id}` | session | `manage_apps` (`?app_id=`) | Revoke ingest key |
-| GET | `/ingest-keys/{key_id}` | session | `manage_apps` (`?app_id=`) | Get ingest key |
-| POST | `/ingest-keys/{key_id}/rotate` | session | `manage_apps` (`?app_id=`) | Issue a successor. |
+| POST | `/ingest-keys` | session | `manage_apps` | Issue ingest key |
+| DELETE | `/ingest-keys/{key_id}` | session | `manage_apps` | Revoke ingest key |
+| GET | `/ingest-keys/{key_id}` | session | `manage_apps` | Get ingest key |
+| POST | `/ingest-keys/{key_id}/rotate` | session | `manage_apps` | Issue a successor. |
 
 ### `war-room`
 
@@ -364,11 +364,11 @@ Liveness, the Prometheus scrape, platform status, the dead-letter queue and agen
 |---|---|---|---|---|
 | GET | `/health` | **none** | - | Health |
 | GET | `/metrics` | **none** | - | Metrics |
-| GET | `/platform/agent-runs` | session | `read_audit` (`?app_id=`) | List agent runs |
-| GET | `/platform/agent-runs/{run_id}` | session | `read_audit` (`?app_id=`) | Get agent run |
-| GET | `/platform/dead-letters` | session | `manage_apps` (`?app_id=`) | List dead letters |
-| POST | `/platform/dead-letters/{dead_letter_id}/requeue` | session | `manage_apps` (`?app_id=`) | Requeue dead letter |
-| GET | `/platform/status` | session | `manage_apps` (`?app_id=`) | Platform status |
+| GET | `/platform/agent-runs` | session | `read_audit` | List agent runs |
+| GET | `/platform/agent-runs/{run_id}` | session | `read_audit` | Get agent run |
+| GET | `/platform/dead-letters` | session | `manage_apps` | List dead letters |
+| POST | `/platform/dead-letters/{dead_letter_id}/requeue` | session | `manage_apps` | Requeue dead letter |
+| GET | `/platform/status` | session | `manage_apps` | Platform status |
 | WS | `/ws` | session | (session only) | Notification socket |
 
 <!-- END GENERATED ROUTE CATALOGUE -->

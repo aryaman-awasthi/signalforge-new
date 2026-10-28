@@ -37,7 +37,9 @@ async def list_ingest_keys(
     app_id: Optional[str] = Query(default=None),
     stream: Optional[IngestStream] = Query(default=None),
     include_revoked: bool = Query(default=False),
-    principal: Principal = Depends(deps.require(Permission.MANAGE_APPS)),
+    principal: Principal = Depends(
+        deps.require(Permission.MANAGE_APPS, app_id_from_query=True)
+    ),
     container: deps.Container = Depends(deps.get_container),
 ):
     now = container.clock.now()

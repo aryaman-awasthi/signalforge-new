@@ -9571,6 +9571,18 @@
         "title": "RuleHitOut",
         "type": "object"
       },
+      "RunIn": {
+        "properties": {
+          "args": {
+            "additionalProperties": true,
+            "description": "Normally empty: an approved execution runs with the arguments it was authorised for, read back off the ledger. Needed only when a value was redacted on the way in - then the caller sends the arguments again and they are checked against the recorded fingerprint.",
+            "title": "Args",
+            "type": "object"
+          }
+        },
+        "title": "RunIn",
+        "type": "object"
+      },
       "SealIn": {
         "properties": {
           "incident_id": {
@@ -12912,22 +12924,6 @@
               ],
               "title": "Simulated"
             }
-          },
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
-            }
           }
         ],
         "responses": {
@@ -12961,7 +12957,6 @@
         "tags": [
           "adapters"
         ],
-        "x-signalforge-app-scope": "query",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "manage_apps"
       }
@@ -12969,24 +12964,6 @@
     "/adapters/capability-matrix": {
       "get": {
         "operationId": "capability_matrix_adapters_capability_matrix_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "content": {
@@ -12997,16 +12974,6 @@
               }
             },
             "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
           }
         },
         "security": [
@@ -13018,7 +12985,6 @@
         "tags": [
           "adapters"
         ],
-        "x-signalforge-app-scope": "query",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "manage_apps"
       }
@@ -13034,22 +13000,6 @@
             "schema": {
               "title": "Adapter Id",
               "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
             }
           }
         ],
@@ -13084,7 +13034,6 @@
         "tags": [
           "adapters"
         ],
-        "x-signalforge-app-scope": "query",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "manage_apps"
       }
@@ -13287,24 +13236,6 @@
       },
       "post": {
         "operationId": "register_application_apps_post",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
-            }
-          }
-        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -13346,7 +13277,6 @@
         "tags": [
           "onboarding"
         ],
-        "x-signalforge-app-scope": "query",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "manage_apps"
       }
@@ -15020,24 +14950,6 @@
       },
       "post": {
         "operationId": "create_connector_connectors_post",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
-            }
-          }
-        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -15079,7 +14991,6 @@
         "tags": [
           "adapters"
         ],
-        "x-signalforge-app-scope": "query",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "manage_apps"
       }
@@ -15158,22 +15069,6 @@
               "title": "Binding Id",
               "type": "string"
             }
-          },
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
-            }
           }
         ],
         "responses": {
@@ -15200,7 +15095,6 @@
         "tags": [
           "adapters"
         ],
-        "x-signalforge-app-scope": "query",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "manage_apps"
       },
@@ -15214,22 +15108,6 @@
             "schema": {
               "title": "Binding Id",
               "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
             }
           }
         ],
@@ -15264,7 +15142,6 @@
         "tags": [
           "adapters"
         ],
-        "x-signalforge-app-scope": "query",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "manage_apps"
       },
@@ -15278,22 +15155,6 @@
             "schema": {
               "title": "Binding Id",
               "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
             }
           }
         ],
@@ -15338,7 +15199,6 @@
         "tags": [
           "adapters"
         ],
-        "x-signalforge-app-scope": "query",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "manage_apps"
       }
@@ -15375,24 +15235,6 @@
       },
       "post": {
         "operationId": "create_policy_escalation_policies_post",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
-            }
-          }
-        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -15434,7 +15276,6 @@
         "tags": [
           "escalation"
         ],
-        "x-signalforge-app-scope": "query",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "manage_org"
       }
@@ -15450,22 +15291,6 @@
             "schema": {
               "title": "Policy Id",
               "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
             }
           }
         ],
@@ -15493,7 +15318,6 @@
         "tags": [
           "escalation"
         ],
-        "x-signalforge-app-scope": "query",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "manage_org"
       },
@@ -15507,22 +15331,6 @@
             "schema": {
               "title": "Policy Id",
               "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
             }
           }
         ],
@@ -15567,7 +15375,6 @@
         "tags": [
           "escalation"
         ],
-        "x-signalforge-app-scope": "query",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "manage_org"
       }
@@ -15583,22 +15390,6 @@
             "schema": {
               "title": "Policy Id",
               "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
             }
           }
         ],
@@ -15633,7 +15424,6 @@
         "tags": [
           "escalation"
         ],
-        "x-signalforge-app-scope": "query",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "run_drills"
       }
@@ -15732,22 +15522,6 @@
               "title": "Limit",
               "type": "integer"
             }
-          },
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
-            }
           }
         ],
         "responses": {
@@ -15781,7 +15555,6 @@
         "tags": [
           "events"
         ],
-        "x-signalforge-app-scope": "query",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "read_audit"
       }
@@ -15804,22 +15577,6 @@
                 }
               ],
               "title": "Incident Id"
-            }
-          },
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
             }
           }
         ],
@@ -15858,30 +15615,11 @@
         "tags": [
           "events"
         ],
-        "x-signalforge-app-scope": "query",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "read_audit"
       },
       "post": {
         "operationId": "create_seal_events_seals_post",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
-            }
-          }
-        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -15923,7 +15661,6 @@
         "tags": [
           "events"
         ],
-        "x-signalforge-app-scope": "query",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "close_incident"
       }
@@ -15939,22 +15676,6 @@
             "schema": {
               "title": "Seal Id",
               "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
             }
           }
         ],
@@ -15989,7 +15710,6 @@
         "tags": [
           "events"
         ],
-        "x-signalforge-app-scope": "query",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "read_audit"
       }
@@ -16005,22 +15725,6 @@
             "schema": {
               "title": "Event Id",
               "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
             }
           }
         ],
@@ -16055,7 +15759,6 @@
         "tags": [
           "events"
         ],
-        "x-signalforge-app-scope": "query",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "read_audit"
       }
@@ -16071,22 +15774,6 @@
             "schema": {
               "title": "Event Id",
               "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
             }
           }
         ],
@@ -16121,7 +15808,6 @@
         "tags": [
           "events"
         ],
-        "x-signalforge-app-scope": "query",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "read_audit"
       }
@@ -17940,7 +17626,7 @@
     },
     "/incidents/{incident_id}/executions/{execution_id}/run": {
       "post": {
-        "description": "Send an approved execution.\n\nEverything is re-checked here and nothing is trusted from the request that\ncreated the row: the policy version in force now, the approval's expiry, the\nfingerprint, and whether the approver still holds the permission.",
+        "description": "Send an approved execution.\n\nEverything is re-checked here and nothing is trusted from the request that\ncreated the row: the policy version in force now, the approval's expiry, the\nfingerprint, and whether the approver still holds the permission. The\narguments sent are the ones the execution was authorised for, read back off\nthe ledger; a body is needed only when a value was redacted on the way in.",
         "operationId": "run_execution_incidents__incident_id__executions__execution_id__run_post",
         "parameters": [
           {
@@ -17962,6 +17648,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/RunIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {
@@ -18368,22 +18071,6 @@
               "title": "Incident Id",
               "type": "string"
             }
-          },
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
-            }
           }
         ],
         "responses": {
@@ -18417,7 +18104,7 @@
         "tags": [
           "audit"
         ],
-        "x-signalforge-app-scope": "query",
+        "x-signalforge-app-scope": "incident",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "read_audit"
       },
@@ -18432,22 +18119,6 @@
             "schema": {
               "title": "Incident Id",
               "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
             }
           }
         ],
@@ -18482,7 +18153,7 @@
         "tags": [
           "audit"
         ],
-        "x-signalforge-app-scope": "query",
+        "x-signalforge-app-scope": "incident",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "read_audit"
       }
@@ -18643,22 +18314,6 @@
               "description": "Replay only up to this audit seq - the scrubber position.",
               "title": "Until Seq"
             }
-          },
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
-            }
           }
         ],
         "responses": {
@@ -18692,7 +18347,7 @@
         "tags": [
           "audit"
         ],
-        "x-signalforge-app-scope": "query",
+        "x-signalforge-app-scope": "incident",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "read_audit"
       }
@@ -19369,24 +19024,6 @@
       },
       "post": {
         "operationId": "issue_ingest_key_ingest_keys_post",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
-            }
-          }
-        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -19428,7 +19065,6 @@
         "tags": [
           "ingest"
         ],
-        "x-signalforge-app-scope": "query",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "manage_apps"
       }
@@ -19444,22 +19080,6 @@
             "schema": {
               "title": "Key Id",
               "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
             }
           }
         ],
@@ -19494,7 +19114,6 @@
         "tags": [
           "ingest"
         ],
-        "x-signalforge-app-scope": "query",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "manage_apps"
       },
@@ -19508,22 +19127,6 @@
             "schema": {
               "title": "Key Id",
               "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
             }
           }
         ],
@@ -19558,7 +19161,6 @@
         "tags": [
           "ingest"
         ],
-        "x-signalforge-app-scope": "query",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "manage_apps"
       }
@@ -19575,22 +19177,6 @@
             "schema": {
               "title": "Key Id",
               "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
             }
           }
         ],
@@ -19625,7 +19211,6 @@
         "tags": [
           "ingest"
         ],
-        "x-signalforge-app-scope": "query",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "manage_apps"
       }
@@ -19633,24 +19218,6 @@
     "/invites": {
       "get": {
         "operationId": "list_invites_invites_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "content": {
@@ -19665,16 +19232,6 @@
               }
             },
             "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
           }
         },
         "security": [
@@ -19686,30 +19243,11 @@
         "tags": [
           "invites"
         ],
-        "x-signalforge-app-scope": "query",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "manage_org"
       },
       "post": {
         "operationId": "create_invite_invites_post",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
-            }
-          }
-        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -19751,7 +19289,6 @@
         "tags": [
           "invites"
         ],
-        "x-signalforge-app-scope": "query",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "manage_org"
       }
@@ -19767,22 +19304,6 @@
             "schema": {
               "title": "Invite Id",
               "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
             }
           }
         ],
@@ -19817,7 +19338,6 @@
         "tags": [
           "invites"
         ],
-        "x-signalforge-app-scope": "query",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "manage_org"
       }
@@ -19932,24 +19452,6 @@
       },
       "post": {
         "operationId": "create_rotation_oncall_rotations_post",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
-            }
-          }
-        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -19991,7 +19493,6 @@
         "tags": [
           "oncall"
         ],
-        "x-signalforge-app-scope": "query",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "manage_org"
       }
@@ -20007,22 +19508,6 @@
             "schema": {
               "title": "Rotation Id",
               "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
             }
           }
         ],
@@ -20050,7 +19535,6 @@
         "tags": [
           "oncall"
         ],
-        "x-signalforge-app-scope": "query",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "manage_org"
       },
@@ -20064,22 +19548,6 @@
             "schema": {
               "title": "Rotation Id",
               "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
             }
           }
         ],
@@ -20124,7 +19592,6 @@
         "tags": [
           "oncall"
         ],
-        "x-signalforge-app-scope": "query",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "manage_org"
       }
@@ -20157,24 +19624,6 @@
       },
       "patch": {
         "operationId": "rename_org_orgs_current_patch",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
-            }
-          }
-        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -20216,7 +19665,6 @@
         "tags": [
           "orgs"
         ],
-        "x-signalforge-app-scope": "query",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "manage_org"
       }
@@ -20251,22 +19699,6 @@
               "minimum": 1,
               "title": "Limit",
               "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
             }
           }
         ],
@@ -20305,7 +19737,6 @@
         "tags": [
           "platform"
         ],
-        "x-signalforge-app-scope": "query",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "read_audit"
       }
@@ -20321,22 +19752,6 @@
             "schema": {
               "title": "Run Id",
               "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
             }
           }
         ],
@@ -20371,7 +19786,6 @@
         "tags": [
           "platform"
         ],
-        "x-signalforge-app-scope": "query",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "read_audit"
       }
@@ -20423,22 +19837,6 @@
               "title": "Limit",
               "type": "integer"
             }
-          },
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
-            }
           }
         ],
         "responses": {
@@ -20476,7 +19874,6 @@
         "tags": [
           "platform"
         ],
-        "x-signalforge-app-scope": "query",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "manage_apps"
       }
@@ -20492,22 +19889,6 @@
             "schema": {
               "title": "Dead Letter Id",
               "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
             }
           }
         ],
@@ -20542,7 +19923,6 @@
         "tags": [
           "platform"
         ],
-        "x-signalforge-app-scope": "query",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "manage_apps"
       }
@@ -20550,24 +19930,6 @@
     "/platform/status": {
       "get": {
         "operationId": "platform_status_platform_status_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "content": {
@@ -20578,16 +19940,6 @@
               }
             },
             "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
           }
         },
         "security": [
@@ -20599,7 +19951,6 @@
         "tags": [
           "platform"
         ],
-        "x-signalforge-app-scope": "query",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "manage_apps"
       }
@@ -20674,22 +20025,6 @@
               "title": "User Id",
               "type": "string"
             }
-          },
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
-            }
           }
         ],
         "requestBody": {
@@ -20733,7 +20068,6 @@
         "tags": [
           "users"
         ],
-        "x-signalforge-app-scope": "query",
         "x-signalforge-auth": "session",
         "x-signalforge-permission": "manage_org"
       }

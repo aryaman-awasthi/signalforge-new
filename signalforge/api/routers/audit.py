@@ -35,7 +35,7 @@ async def replay_incident(
         ge=1,
         description="Replay only up to this audit seq - the scrubber position.",
     ),
-    principal: Principal = Depends(deps.require(Permission.READ_AUDIT)),
+    principal: Principal = Depends(deps.require_incident(Permission.READ_AUDIT)),
     container: deps.Container = Depends(deps.get_container),
 ):
     """Reconstruct the incident from the hash-chained audit log.
@@ -54,7 +54,7 @@ async def replay_incident(
 @router.post("/incidents/{incident_id}/pir", response_model=PirOut, status_code=201)
 async def generate_pir(
     incident_id: str,
-    principal: Principal = Depends(deps.require(Permission.READ_AUDIT)),
+    principal: Principal = Depends(deps.require_incident(Permission.READ_AUDIT)),
     container: deps.Container = Depends(deps.get_container),
 ):
     """Generate the post-incident review from the incident's own records.
@@ -73,7 +73,7 @@ async def generate_pir(
 @router.get("/incidents/{incident_id}/pir", response_model=PirOut)
 async def read_pir(
     incident_id: str,
-    principal: Principal = Depends(deps.require(Permission.READ_AUDIT)),
+    principal: Principal = Depends(deps.require_incident(Permission.READ_AUDIT)),
     container: deps.Container = Depends(deps.get_container),
 ):
     """The same document, regenerated.
