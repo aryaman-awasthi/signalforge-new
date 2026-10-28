@@ -17,13 +17,15 @@ if the conversation goes deep.
 
 > SignalForge is an incident command centre where the AI reads, correlates and explains, and
 > people decide. It proposes, never declares. It ranks actions, never runs a risky one on its
-> own. And when the model is down, every number on the screen is still the same.
+> own. And when the model is down, the same screens still work, with the same verdicts and the
+> same arithmetic behind the numbers.
 
 Three promises you will prove live, in this order:
 
 1. **Every AI number is arithmetic you can check.** The model never produces a confidence.
 2. **The AI has no buttons.** It cannot declare, approve, execute, page, send or close.
-3. **Turn the model off and nothing breaks.** Only the written explanations change.
+3. **Turn the model off and nothing breaks.** The verdicts and the arithmetic stay; only the
+   written explanations change.
 
 ---
 
@@ -36,8 +38,10 @@ Three promises you will prove live, in this order:
 - Follow the Quick start in `README.md` once: install, `npm install` in `web/`, copy
   `.env.example` to `.env`.
 - Decide whether you demo **with a model** or **without one**, and prepare for both:
-  - With a model: set `GENAILAB_API_KEY`, set the three `LLM_MODEL_*` values exactly as
-    `.env.example` shows, and set `LLM_INCIDENT_TOKEN_BUDGET=3000000`. The default budget of
+  - With a model: put `GENAILAB_API_KEY` in `.env` itself (the scripts load `.env` and it wins
+    over your shell; an empty key line in `.env` hides a key you exported), set the three
+    `LLM_MODEL_*` values exactly as `.env.example` shows, and set
+    `LLM_INCIDENT_TOKEN_BUDGET=3000000`. The default budget of
     200,000 tokens per incident was spent in about ten minutes on the Claude endpoint during the
     last rehearsal, after which every AI surface degrades by design. Run `make llm-smoke` the
     morning of; it must exit 0.
@@ -56,7 +60,8 @@ Terminal 1:
 bash reset.sh && bash run.sh
 ```
 
-Wait for the banner. Read its `Model:` line.
+Wait for the banner. Read its `Model:` line. `gateway configured` only means a key is present;
+`make llm-smoke` exiting 0 is the proof that the model path works.
 
 Terminal 2 (takes about three minutes):
 
@@ -129,8 +134,9 @@ Say the three promises. Then: "Everything you see today is also a test. The suit
 tests and none of them needs a model or a network."
 
 If you are running without a model, say now: "I have deliberately left the model key out. You
-will see a `degraded` badge on the AI panels. Every number will be identical with the key in;
-only the written sentences change. I will show you why that is the design."
+will see a `degraded` badge on the AI panels. Every verdict is the same with the key in, and the
+numbers come from the same arithmetic; only the written sentences change. I will show you why
+that is the design."
 
 ### 0:02 A healthy application (3 minutes)
 
@@ -255,8 +261,10 @@ Then type a question the record cannot answer:
 
 > how many customers were charged twice?
 
-The answer says the record does not contain enough to answer that, and lists what it does
-hold. Say: "It says it does not know. That is the behaviour we test for."
+With a model, the answer says the record does not contain enough to answer that, and lists what
+it does hold. Say: "It says it does not know. That is the behaviour we test for." Without a
+model you see the same degraded listing as before; say that the live tests check exactly this
+refusal.
 
 ### 0:18 Act, under the floor (5 minutes)
 
@@ -270,7 +278,8 @@ reason.
 
 Say: "The score is urgency times impact times information gain, minus risk. You can check it on
 paper. The model's only contribution is the one-sentence rationale, written after the score
-exists, and it is labelled. Turn the model off and the ranking is identical."
+exists, and it is labelled. Turn the model off and the same arithmetic ranks the same actions;
+only that sentence goes missing."
 
 Say: "This action is high risk. Six kinds of action always are: rollback, restart, failover,
 traffic shift, config change, and anything customer-impacting. They can never run on their own.
@@ -391,8 +400,9 @@ Model traffic can go to exactly two hostnames, written into the code, not a sett
 only, and TLS verification cannot be switched off. What is sent is short incident text: record
 excerpts such as bridge lines, alert and change summaries and hypotheses, each cut to 1,200
 characters, the copilot question up to 500 characters, and draft statements. Email addresses
-and card-length numbers are masked before bridge text is quoted. Nothing else is redacted, so I
-will not call it anonymised. With no key configured, nothing leaves the machine at all.
+and card-length numbers are masked before bridge text is quoted. Nothing else is redacted:
+people's names in chat lines and the copilot question itself go through as typed, so I will not
+call it anonymised. With no key configured, nothing leaves the machine at all.
 Show: `signalforge/infrastructure/llm/hosts.py` line 27, then
 `python scripts/llm_smoke.py --dry-run`, which prints the endpoint and never the key.
 
@@ -417,6 +427,11 @@ is the right one; it is a decision, and it is written down.
 The only other outbound calls go to the application you onboarded, at the address its owner
 typed in. Everything is stored in two local database files. There is no email, no cloud service,
 no telemetry phoning home.
+
+**Do you support single sign-on?**
+Not in this build. Accounts are local: a password hashed with argon2id, invitations as links the
+owner copies out by hand, fifteen-minute access tokens with rotating refresh. Single sign-on is
+not there yet, and I would rather say so than hint otherwise.
 
 ### Models and vendors
 
@@ -486,7 +501,11 @@ Read, correlate, write proposals into the record, and draft text. Nothing else. 
 a function from evidence to proposed record entries; it holds no repository, no event bus, no
 tool and no network client, and a test reads the source of every agent to assert that. The
 platform writes what the agent proposed, with provenance. Declaring, re-grading, closing,
-approving and issuing statements are permissions only human roles hold.
+approving and issuing statements are permissions only human roles hold. If they widen the
+question to "what runs without a person at all": thirteen scheduled jobs, such as polling,
+detection, the escalation sweep and the brain pass. None of them changes an incident's state,
+except that a failed recovery validation, which a person has to request, moves an incident from
+recovering back to active.
 Show: `python -m pytest signalforge/tests/security/test_brain_boundary.py -q -k "no_agent_holds or cannot_touch"`.
 
 **Who is accountable when it is wrong?**
@@ -542,8 +561,11 @@ that empties a section or drops a caveat is rejected whole.
 Show: `python -m pytest signalforge/tests/ai_eval -q -k "test_13 or test_17"`.
 
 **If I ask the same question twice, do I get the same answer?**
-The numbers, always: confidences, rankings and blast radius are deterministic and tested to be.
-The prose, mostly: we ask for temperature zero and cached calls return the identical answer, but
+The numbers are deterministic for a given record: the same evidence always scores the same, and
+that is tested. One subtlety to volunteer: with a model, a chat line the rules left as chatter
+can be classified as a fact and become a small piece of evidence, at a quarter of the weight of
+a measurement, so a percentage can differ by a few points between a run with a model and one
+without. The verdicts never do. The prose, mostly: we ask for temperature zero and cached calls return the identical answer, but
 some models refuse temperature zero, and then the provider drops it and repeatability rests on the
 cache. The copilot is never cached, on purpose, because the record changes between questions.
 
@@ -582,7 +604,10 @@ Each entry stores a hash of its payload and the hash of the previous entry. Veri
 the whole chain; an edited payload, a rewritten hash or a deleted row comes back invalid with the
 first broken sequence number, and the replay says it is not evidence. The post-incident review
 refuses to generate at all from a broken chain. There is no switch to disable the audit, and a
-policy document that so much as names an audit setting is rejected.
+policy document that so much as names an audit setting is rejected. One honest limit: this is
+tamper-evident, not tamper-proof. The chain is not signed or anchored outside the database, so
+someone with write access to the database who recomputed every later hash would not be caught.
+Seals give you a hash to copy somewhere else if you need that.
 Show: `python -m pytest signalforge/tests/audit -q`. The tests edit a stored payload on a scratch
 database and assert the replay reports it.
 
@@ -640,6 +665,8 @@ the repository.
 | "Deterministic model output" | "Deterministic numbers; prose is cached and asked for at temperature zero" |
 | "Certified" | "Tested controls, written-down gaps" |
 | "Two-person approval" | "A second person approves; the requester cannot" |
+| "Tamper-proof" | "Tamper-evident: edited, re-hashed or deleted entries are detected; the chain is not signed or anchored outside the database" |
+| "Every number is identical without the model" | "Same verdicts, same arithmetic; a percentage can differ by a few points" |
 
 ---
 

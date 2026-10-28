@@ -12,8 +12,9 @@ Three things to know before anything else:
   high-risk action on its own, never sends a message to a customer, and never closes an
   incident. Each of those is a person pressing something, with a permission check behind it.
 - **The AI is an accelerator, not a dependency.** With no model configured, every screen still
-  works and every number is the same. Only the written explanations fall back to templates,
-  and the screen says `degraded` when they do.
+  works. Detection, severity, policy decisions, approvals, validation and the audit record are
+  identical, and confidence numbers come from the same arithmetic. Only the written
+  explanations fall back to templates, and the screen says `degraded` when they do.
 - **Any application can be onboarded, with no app-specific code.** An application is connected
   through two public contracts. A build guard (`scripts/check_clean.sh`) fails if the demo
   application's name appears anywhere in the core.
@@ -91,7 +92,9 @@ file under `var/run/`. When everything is up it prints:
 | Demo application | http://127.0.0.1:8080 (only when it started) |
 
 The banner ends with a `Model:` line that reads either `gateway configured` or
-`no key set - deterministic mode, which is supported`. Ctrl-C stops everything.
+`no key set - deterministic mode, which is supported`. The first only means a key is present;
+`make llm-smoke` is what checks that the endpoint, the key and the model ids actually work.
+Ctrl-C stops everything.
 
 `reset.sh` deletes only what a run wrote: the `var/` folder (databases, caches, generated keys,
 logs) and the demo application's data and logs. It never touches source, specs or drills.
@@ -180,8 +183,9 @@ nobody can do them on your behalf.
   badge, and one `system.llm.degraded` event per episode.
 - **What is sent to a model when a key is configured:** short excerpts of incident text (bridge
   lines, alert and change summaries, hypotheses, draft statements), each capped at 1,200
-  characters, with email addresses and card-length numbers masked. That is the only masking,
-  so do not describe it as full anonymisation. With no key, nothing leaves the machine.
+  characters, with email addresses and card-length numbers masked. That is the only masking:
+  people's names in chat lines and the question typed into the copilot are not masked, so do
+  not describe it as anonymisation. With no key, nothing leaves the machine.
 
 The eighteen AI controls are tested offline in `signalforge/tests/ai_eval/` and described in
 `docs/15-ai-eval.md`. That suite is a regression fence, not a benchmark, and it does not
@@ -209,15 +213,23 @@ carries no secret values. The ones most people touch:
 | `SIGNALFORGE_WORKER_ENABLED` | `1` | `0` makes a node serve requests only |
 | `SIGNALFORGE_SIGNAL_RETENTION_DAYS` | `7` | How long raw signal events are kept (1 to 90) |
 
+Two things to know about `.env`: the scripts load it with `set -a`, so a value in `.env` wins
+over the same variable exported in your shell, and an empty `GENAILAB_API_KEY=` line in `.env`
+hides a key you exported. If you change `SIGNALFORGE_PORT`, also set `SIGNALFORGE_API_URL` and
+`NEXT_PUBLIC_API_URL` so the cockpit finds the API.
+
 Set the three `LLM_MODEL_*` values as `.env.example` shows and run `make llm-smoke` before a
 live demo. It checks the endpoint, the key and the model ids, and never prints the key. It is
 the only thing in the repository that talks to a live model; `make test` never does.
 
 ## How it is built
 
-One process runs the API and the background worker (dispatcher, pollers, detection, probes,
-escalation sweep, bridge harvest, brain pass, approval expiry, uncertain-execution watch). The
-cockpit is a separate Next.js app that talks to the API through a same-origin proxy, so session
+One process runs the API and the background worker: thirteen scheduled jobs (dispatcher,
+pollers, detection, probes, escalation sweep, bridge harvest, brain pass, approval expiry,
+uncertain-execution watch, ITSM sync, retention). None of them declares, approves, executes,
+sends or closes anything. The one machine move inside an incident is recovering back to active
+after a recovery validation fails, and a person has to ask for that validation. The cockpit is
+a separate Next.js app that talks to the API through a same-origin proxy, so session
 tokens live in httpOnly cookies and never reach browser JavaScript. The demo application is a
 Spring Boot service that exposes the `/observe/*` contract and pushes changes through
 `/api/v1/ingest/*`.
@@ -298,6 +310,12 @@ its tests with their last result, and the events the running platform has emitte
   helpfulness or robustness under a red-team campaign. Only two opt-in tests ever talk to a real
   model.
 - Redaction before a prompt masks email addresses and card-length numbers only.
+- The audit chain is tamper-evident, not tamper-proof. It detects edited, re-hashed or deleted
+  entries, but it is not signed or anchored outside the database, so someone with write access
+  to the database who recomputed every later hash would not be caught. Seals (`POST /seals`)
+  give you a hash to copy somewhere else.
+- Sign-in is local accounts only: passwords plus invitation links. There is no single sign-on
+  in this build.
 - `observability/` is a placeholder. There is no Prometheus or Grafana provisioning in this
   repository, although `/metrics` serves Prometheus text.
 - The web dependencies carry four known high-severity advisories (in `next`, `postcss` and the
