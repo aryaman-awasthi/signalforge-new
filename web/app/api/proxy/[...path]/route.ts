@@ -22,7 +22,9 @@ async function forward(
   body: string | undefined,
 ): Promise<Response> {
   const url = new URL(`${API_BASE}/${path}`);
-  request.nextUrl.searchParams.forEach((value, key) => url.searchParams.set(key, value));
+  // `append`, not `set`: the API declares repeated query parameters (the
+  // timeline's `topics`), and `set` would keep only the last value of each.
+  request.nextUrl.searchParams.forEach((value, key) => url.searchParams.append(key, value));
   return fetch(url, {
     method: request.method,
     headers: {
