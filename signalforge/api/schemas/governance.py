@@ -107,6 +107,19 @@ class NoteIn(BaseModel):
     note: str = Field(default="", max_length=400)
 
 
+class RunIn(BaseModel):
+    args: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Normally empty: an approved execution runs with the arguments it "
+            "was authorised for, read back off the ledger. Needed only when a "
+            "value was redacted on the way in - then the caller sends the "
+            "arguments again and they are checked against the recorded "
+            "fingerprint."
+        ),
+    )
+
+
 class TakeoverIn(BaseModel):
     note: str = Field(
         min_length=1,

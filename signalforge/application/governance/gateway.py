@@ -55,6 +55,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import datetime
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Optional, Sequence
 
@@ -70,6 +71,7 @@ from signalforge.application.governance.common import (
     APPROVAL_REVOKED_TOPIC,
     EXECUTION_BLOCKED_TOPIC,
     EXECUTION_CANCELLED_TOPIC,
+    EXECUTION_COMPENSATED_TOPIC,
     EXECUTION_COMPENSATING_TOPIC,
     EXECUTION_DECIDED_TOPIC,
     EXECUTION_DUPLICATE_TOPIC,
@@ -105,6 +107,7 @@ from signalforge.domain.governance.approvals import Approval, ApprovalState
 from signalforge.domain.governance.errors import (
     ApprovalInvalidError,
     ApprovalRequiredError,
+    DuplicateExecutionError,
     ExecutionBlockedError,
     ExecutionNotFoundError,
     GovernanceValidationError,
@@ -142,6 +145,18 @@ MAX_KEY_PROBES = 12
 Bounded so a pathological history cannot make a request scan forever, and
 comfortably above the policy retry ceiling (five) so an ordinary incident never
 reaches it."""
+
+DUPLICATE_WINDOW_S = 120
+"""How long a *settled* attempt still answers a repeat of the same request as a
+duplicate.
+
+The idempotency key exists for the double-click, the retried HTTP call and the
+redelivered event - all of which arrive within seconds of the attempt they
+repeat, and a fast diagnostic can have succeeded by then. Inside this window a
+repeat is answered with the row that already has it and nothing is sent. Past
+it, the same action with the same arguments is a new attempt (S10-T22): a
+licence renewed at 10:20 and asked for again at 10:40, after the key lapsed a
+second time, must not be told "already done"."""
 
 
 @dataclass(frozen=True)
@@ -217,6 +232,7 @@ class ToolGateway:
             incident_id=incident_id,
             action_id=action_id,
             args_digest=digest,
+            now=now,
         )
         if existing is not None:
             return await self._duplicate(principal, incident, existing, decision)
@@ -247,7 +263,17 @@ class ToolGateway:
         )
 
         async with self._uow_factory() as uow:
-            await uow.executions.add(record_row)
+            try:
+                await uow.executions.add(record_row)
+            except DuplicateExecutionError:
+                # Two identical requests in the same instant: the unique index
+                # on the key decides, and the loser is answered exactly as a
+                # duplicate found by the read above would have been - with the
+                # row that won, and nothing sent twice.
+                raced = await uow.executions.find_by_key(principal.tenant_id, key)
+                if raced is None:
+                    raise
+                return await self._duplicate(principal, incident, raced, decision)
             await record(
                 uow,
                 self._bus,
@@ -319,7 +345,13 @@ class ToolGateway:
                 ttl_s=policy.ttl_for(execution.action_id),
                 approver_user_id=principal.user_id,
                 approver_label=principal.display_name or "",
-                approver_roles=tuple(binding.role for binding in principal.bindings),
+                # Only what the approver holds *on this application*: a role
+                # bound to another application is not a seat at this table.
+                approver_roles=tuple(
+                    binding.role
+                    for binding in principal.bindings
+                    if binding.app_id is None or binding.app_id == incident.app_id
+                ),
                 permission=Permission.APPROVE_HIGH_RISK,
                 note=note,
             )
@@ -503,11 +535,19 @@ class ToolGateway:
             )
 
         digest = execution.args_digest
-        if arguments and args_hash(arguments) != digest:
-            raise GovernanceValidationError(
-                "the arguments do not match the ones this execution was "
-                "authorised for; request a new execution instead"
-            )
+        if arguments:
+            if args_hash(arguments) != digest:
+                raise GovernanceValidationError(
+                    "the arguments do not match the ones this execution was "
+                    "authorised for; request a new execution instead"
+                )
+        else:
+            # The approve-then-run and retry paths carry no arguments of their
+            # own: the ones that were authorised are on the row, and they are
+            # what the adapter has to receive. Sending `{}` here is how a
+            # rollback approved with `release: v11` reached the target with
+            # no release at all.
+            arguments = _stored_arguments(execution)
 
         binding = await self._actions_binding(principal.tenant_id, incident.app_id)
         if binding is None:
@@ -537,6 +577,8 @@ class ToolGateway:
         result, finished = await self._invoke(
             principal, incident, running, binding, arguments
         )
+        if finished.compensates_execution_id:
+            await self._settle_compensation(principal, incident, finished)
         return GatewayResult(
             execution=finished,
             decision=decision,
@@ -695,13 +737,27 @@ class ToolGateway:
                 )
             raise
 
-        key = idempotency_key(
-            tenant_id=principal.tenant_id,
-            incident_id=incident_id,
-            action_id=execution.action_id,
-            args_digest=execution.args_digest,
-            attempt=execution.attempt + 1,
-        )
+        # The next attempt number that is free. A request for the same action
+        # may already have minted `attempt + 1` by stepping over this settled
+        # row, and a retry that insisted on that number would collide with it.
+        attempt = execution.attempt + 1
+        async with self._uow_factory() as uow:
+            while attempt <= MAX_KEY_PROBES:
+                key = idempotency_key(
+                    tenant_id=principal.tenant_id,
+                    incident_id=incident_id,
+                    action_id=execution.action_id,
+                    args_digest=execution.args_digest,
+                    attempt=attempt,
+                )
+                if await uow.executions.find_by_key(principal.tenant_id, key) is None:
+                    break
+                attempt += 1
+            else:
+                raise ExecutionBlockedError(
+                    f"{execution.action_id} has been attempted {MAX_KEY_PROBES} "
+                    "times under this key; a person takes over from here"
+                )
         policy = await self._policies.current(principal.tenant_id, incident.app_id)
         async with self._uow_factory() as uow:
             action = await self._require_action(
@@ -724,6 +780,7 @@ class ToolGateway:
             requested_by=principal.user_id,
             key=key,
         )
+        fresh = _with_attempt(fresh, attempt)
         fresh = _with_decision(fresh, decision, digest=execution.args_digest)
         async with self._uow_factory() as uow:
             await uow.executions.add(fresh)
@@ -789,10 +846,40 @@ class ToolGateway:
                 f"{execution.state.value}"
             )
 
+        # Everything that can refuse the reverse action is checked *before* the
+        # source row moves. A compensation that moved the source to COMPENSATING
+        # and then found the reverse action missing, or its arguments invalid,
+        # left the source stranded there for good - and because COMPENSATING is
+        # not settled, the original action could never be asked for again.
+        async with self._uow_factory() as uow:
+            reverse = await self._require_action(
+                uow, principal.tenant_id, incident.app_id, action.reverse_action_id
+            )
+        reverse_args = _reverse_arguments(execution, reverse)
+        _validate_args(reverse, reverse_args)
+
+        result = await self.request(
+            principal,
+            incident_id,
+            action_id=action.reverse_action_id,
+            args=reverse_args,
+            note=f"compensating {execution.id}",
+        )
+        if result.execution.state is LedgerState.BLOCKED:
+            # Policy refused the reverse action; the refusal is on the ledger
+            # and the source is untouched - there is nothing in flight.
+            raise ExecutionBlockedError(
+                f"{action.reverse_action_id} was refused by policy: "
+                f"{result.execution.decision_reason}"
+            )
+
         compensating = execution.moved_to(
             LedgerState.COMPENSATING, at=now, takeover_note=note[:400]
         )
+        linked = _with_compensation(result.execution, compensates=execution.id)
+        compensating = _with_compensated_by(compensating, linked.id)
         async with self._uow_factory() as uow:
+            await uow.executions.update(linked)
             await uow.executions.update(compensating)
             await record(
                 uow,
@@ -805,31 +892,20 @@ class ToolGateway:
                 payload={
                     **compensating.as_payload(),
                     "reverse_action_id": action.reverse_action_id,
+                    "reverse_execution_id": linked.id,
                     "note": note[:400],
                 },
             )
             await uow.commit()
-
-        result = await self.request(
-            principal,
-            incident_id,
-            action_id=action.reverse_action_id,
-            args={},
-            note=f"compensating {execution.id}",
-        )
-        linked = _with_compensation(result.execution, compensates=execution.id)
-        async with self._uow_factory() as uow:
-            await uow.executions.update(linked)
-            source = await uow.executions.get(principal.tenant_id, execution.id)
-            if source is not None:
-                await uow.executions.update(
-                    _with_compensated_by(source, linked.id)
-                )
-            await uow.commit()
+        # A reverse action policy let run straight away has already finished;
+        # the source is settled now rather than on a later call that never comes.
+        if linked.state.terminal:
+            await self._settle_compensation(principal, incident, linked)
         return GatewayResult(
             execution=linked,
             decision=result.decision,
             approval=result.approval,
+            duplicate=result.duplicate,
         )
 
     async def cancel(
@@ -961,6 +1037,43 @@ class ToolGateway:
                     topic="execution.approval.expired",
                     payload=approval.as_payload(),
                 )
+                # The execution the approval was for is still APPROVED and not
+                # settled, so left alone it blocks every later request for the
+                # same action as a "duplicate" while `run` refuses it for its
+                # expired approval - a dead end with no door. Deny and revoke
+                # move the execution to BLOCKED; expiry does the same, and the
+                # next request is a fresh attempt.
+                execution = await uow.executions.get(
+                    approval.tenant_id, approval.execution_id
+                )
+                if (
+                    execution is not None
+                    and execution.state is LedgerState.APPROVED
+                    and execution.approval_id == approval.id
+                ):
+                    blocked = execution.moved_to(
+                        LedgerState.BLOCKED,
+                        at=now,
+                        decision_reason=(
+                            "approval expired before the action was sent; "
+                            "ask for it again"
+                        ),
+                    )
+                    await uow.executions.update(blocked)
+                    await publish_system(
+                        uow,
+                        self._bus,
+                        self._clock,
+                        tenant_id=approval.tenant_id,
+                        app_id=approval.app_id,
+                        incident_id=approval.incident_id,
+                        topic=EXECUTION_BLOCKED_TOPIC,
+                        payload={
+                            **blocked.as_payload(),
+                            "reason": blocked.decision_reason,
+                            "floor_rules": [],
+                        },
+                    )
             await uow.commit()
         return len(expired)
 
@@ -1363,6 +1476,7 @@ class ToolGateway:
         incident_id: str,
         action_id: str,
         args_digest: str,
+        now: Optional[datetime] = None,
     ) -> tuple[Optional[ExecutionRecord], str, int]:
         """The idempotency key this request should use, and what already holds it.
 
@@ -1405,7 +1519,64 @@ class ToolGateway:
             last = found
             if not found.state.settled:
                 return found, key, attempt
+            if _just_settled(found, now):
+                # Over and done, but seconds ago: this is the double-click or
+                # the retried call, not a new decision. Answered with the row
+                # that already has it.
+                return found, key, attempt
         return last, last.idempotency_key if last else "", MAX_KEY_PROBES
+
+    async def _settle_compensation(
+        self, principal: Principal, incident, reverse: ExecutionRecord
+    ) -> None:
+        """Close the loop on the row a finished reverse action compensates.
+
+        COMPENSATING is not a resting state: the source either was undone
+        (COMPENSATED) or the attempt to undo it failed (FAILED), and until one
+        of those is written the original action reads as "something in
+        flight" to every later request. Written here, by the execution that
+        settles it, so that nothing depends on a separate call being made.
+        """
+        if not reverse.compensates_execution_id or not reverse.state.terminal:
+            return
+        if reverse.state.nothing_was_sent:
+            return
+        target = (
+            LedgerState.COMPENSATED if reverse.state.applied else LedgerState.FAILED
+        )
+        now = self._clock.now()
+        async with self._uow_factory() as uow:
+            source = await uow.executions.get(
+                principal.tenant_id, reverse.compensates_execution_id
+            )
+            if source is None or source.state is not LedgerState.COMPENSATING:
+                return
+            settled = source.moved_to(
+                target,
+                at=now,
+                compensated_by_execution_id=reverse.id,
+                error=(
+                    ""
+                    if target is LedgerState.COMPENSATED
+                    else f"compensation {reverse.id} ended {reverse.state.value}"
+                ),
+            )
+            await uow.executions.update(settled)
+            await record(
+                uow,
+                self._bus,
+                self._clock,
+                principal=principal,
+                app_id=incident.app_id,
+                incident_id=incident.id,
+                topic=EXECUTION_COMPENSATED_TOPIC,
+                payload={
+                    **settled.as_payload(),
+                    "reverse_execution_id": reverse.id,
+                    "reverse_state": reverse.state.value,
+                },
+            )
+            await uow.commit()
 
     async def _actions_binding(
         self, tenant_id: str, app_id: str
@@ -1594,6 +1765,53 @@ def _validate_args(action: MappedAction, args: Mapping[str, Any]) -> None:
         ) from exc
 
 
+def _stored_arguments(execution: ExecutionRecord) -> dict[str, Any]:
+    """The arguments this execution was authorised for, read back off the row.
+
+    The ledger stores `redact_args(args)`. When nothing in them looked like a
+    credential and nothing was clipped, that is the authorised mapping itself
+    and it hashes to the recorded digest; it is what the adapter receives on
+    `run` and on a retry. When it does not - a value was masked - the caller
+    has to send the arguments again, and they are checked against the digest.
+    """
+    stored = dict(execution.args or {})
+    if args_hash(stored) == execution.args_digest:
+        return stored
+    raise GovernanceValidationError(
+        f"execution {execution.id} was authorised for arguments the ledger "
+        "holds only redacted; send them again with the run request so they "
+        "can be checked against the recorded fingerprint"
+    )
+
+
+def _reverse_arguments(execution: ExecutionRecord, reverse: MappedAction) -> dict[str, Any]:
+    """What to call the reverse action with: the source's own arguments, kept
+    where the reverse action declares the same parameter.
+
+    `failover-route {region}` is undone by `restore-route {region}`, and the
+    region is on the source row. Anything the reverse action does not declare
+    is dropped rather than guessed, and the schema check that follows refuses
+    a reverse action whose required parameters the source cannot supply -
+    before anything has moved.
+    """
+    schema = dict(reverse.params_schema or {})
+    declared = set((schema.get("properties") or {}).keys())
+    if not declared:
+        return {}
+    try:
+        source_args = _stored_arguments(execution)
+    except GovernanceValidationError:
+        source_args = {}
+    return {key: value for key, value in source_args.items() if key in declared}
+
+
+def _just_settled(found: ExecutionRecord, now: Optional[datetime]) -> bool:
+    """A settled row that is still inside the duplicate window."""
+    if now is None or found.finished_at is None or found.state.nothing_was_sent:
+        return False
+    return (now - found.finished_at).total_seconds() <= DUPLICATE_WINDOW_S
+
+
 def _reconcile_outcome(found: Optional[ActionExecution]) -> ReconcileOutcome:
     """The verdict, from what the target system says about the key.
 
@@ -1623,6 +1841,12 @@ def _with_adapter_id(record_row: ExecutionRecord, adapter_execution_id: str):
     from dataclasses import replace
 
     return replace(record_row, adapter_execution_id=adapter_execution_id)
+
+
+def _with_attempt(record_row: ExecutionRecord, attempt: int):
+    from dataclasses import replace
+
+    return replace(record_row, attempt=attempt)
 
 
 def _with_compensation(record_row: ExecutionRecord, *, compensates: str):

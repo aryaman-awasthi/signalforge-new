@@ -76,6 +76,7 @@ from signalforge.api.schemas.governance import (
     PlanIn,
     PlanOut,
     PolicyIn,
+    RunIn,
     PolicyOut,
     PolicyVersionOut,
     TakeoverIn,
@@ -425,6 +426,7 @@ async def revoke_approval(
 async def run_execution(
     incident_id: str,
     execution_id: str,
+    body: Optional[RunIn] = None,
     principal: Principal = Depends(
         deps.require_incident(Permission.DECLARE_INCIDENT)
     ),
@@ -434,9 +436,13 @@ async def run_execution(
 
     Everything is re-checked here and nothing is trusted from the request that
     created the row: the policy version in force now, the approval's expiry, the
-    fingerprint, and whether the approver still holds the permission.
+    fingerprint, and whether the approver still holds the permission. The
+    arguments sent are the ones the execution was authorised for, read back off
+    the ledger; a body is needed only when a value was redacted on the way in.
     """
-    result = await container.gateway.execute(principal, incident_id, execution_id)
+    result = await container.gateway.execute(
+        principal, incident_id, execution_id, args=(body.args if body else None)
+    )
     return gateway_out(result, now=container.clock.now())
 
 
