@@ -126,14 +126,23 @@ class IncidentTaskService:
         principal: Principal,
         task_id: str,
         *,
+        incident_id: Optional[str] = None,
         owner_user_id: Optional[str] = None,
         due_at: Optional[datetime] = None,
         cancel: bool = False,
         note: str = "",
     ) -> IncidentTask:
-        """Reassign, re-time or cancel. Command work, so it carries a permission."""
+        """Reassign, re-time or cancel. Command work, so it carries a permission.
+
+        `incident_id` is the incident the route was called under. The permission
+        was decided against *that* incident's application, so the task has to be
+        that incident's: a commander bound to one application must not reach a
+        task of another application's incident by naming their own in the URL.
+        """
         async with self._uow_factory() as uow:
-            task = await self._require_task(uow, principal.tenant_id, task_id)
+            task = await self._require_task(
+                uow, principal.tenant_id, task_id, incident_id=incident_id
+            )
             incident = await self._require_incident(
                 uow, principal.tenant_id, task.incident_id
             )
@@ -170,7 +179,12 @@ class IncidentTaskService:
         return updated
 
     async def complete(
-        self, principal: Principal, task_id: str, *, note: str = ""
+        self,
+        principal: Principal,
+        task_id: str,
+        *,
+        incident_id: Optional[str] = None,
+        note: str = "",
     ) -> IncidentTask:
         """Tick your own task.
 
@@ -181,7 +195,9 @@ class IncidentTaskService:
         anything.
         """
         async with self._uow_factory() as uow:
-            task = await self._require_task(uow, principal.tenant_id, task_id)
+            task = await self._require_task(
+                uow, principal.tenant_id, task_id, incident_id=incident_id
+            )
             if task.owner_user_id and task.owner_user_id != principal.user_id:
                 raise NotYourPageError(
                     "a task is completed by the person who owns it"
@@ -228,11 +244,16 @@ class IncidentTaskService:
 
     @staticmethod
     async def _require_task(
-        uow: IdentityUnitOfWork, tenant_id: str, task_id: str
+        uow: IdentityUnitOfWork,
+        tenant_id: str,
+        task_id: str,
+        *,
+        incident_id: Optional[str] = None,
     ) -> IncidentTask:
         task = await uow.incident_tasks.get(tenant_id, task_id)
-        if task is None:
-            # Identical whether it belongs to another tenant or to nobody.
+        if task is None or (incident_id is not None and task.incident_id != incident_id):
+            # Identical whether it belongs to another tenant, to another
+            # incident, or to nobody.
             raise TaskNotFoundError(f"task {task_id} not found")
         return task
 

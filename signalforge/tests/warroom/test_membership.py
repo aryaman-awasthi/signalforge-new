@@ -384,3 +384,41 @@ async def test_joining_is_recorded_once_and_marks_the_room_present(api):
         if event["payload"]["user_id"] == sme["user"]["id"]
     ]
     assert len(events) == 1, "only the first arrival is an event"
+
+
+@pytest.mark.req("REQ-045")
+async def test_the_room_names_the_services_downstream_of_the_mapped_application(api):
+    """Written failing-first. The room's topology loader read an attribute the
+    stored version does not have, swallowed the AttributeError as "the stored
+    topology could not be read", and every room opened with no downstream
+    services however good the map was."""
+    from signalforge.tests.onboarding.conftest import upload_topology
+
+    owner_token, _tenant = owner(api)
+    onboard(api, owner_token)
+    upload_topology(
+        api,
+        owner_token,
+        {
+            "version": "v1",
+            "captured_at": "2026-09-01T11:00:00+00:00",
+            "nodes": [
+                {"node_id": APP_ID, "name": APP_ID, "node_type": "service"},
+                {"node_id": "mobile-bff", "name": "mobile-bff", "node_type": "service"},
+                {"node_id": "ledger-db", "name": "ledger-db", "node_type": "database"},
+            ],
+            "edges": [
+                {"source": "mobile-bff", "target": APP_ID, "edge_type": "depends_on"},
+                {"source": APP_ID, "target": "ledger-db", "edge_type": "depends_on"},
+            ],
+        },
+        APP_ID,
+    )
+    ic = commander(api, owner_token)
+    incident = declare(api, ic["tokens"]["access_token"], severity="P1")
+
+    room = war_room(api, ic["tokens"]["access_token"], incident["id"])
+    assert room["blast_radius"]["services"] == ["mobile-bff"], (
+        "what depends on the application is its blast radius; what it depends "
+        "on is not"
+    )

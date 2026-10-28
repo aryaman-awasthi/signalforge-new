@@ -22,6 +22,7 @@ from signalforge.application.identity.uow import IdentityUnitOfWork
 from signalforge.contracts.canonical import NotificationChannel
 from signalforge.domain.identity.ports import Clock
 from signalforge.domain.integrations.entities import NotificationDelivery
+from signalforge.domain.identity.errors import PermissionDeniedError
 from signalforge.domain.shared.errors import NotFoundError
 
 ACK_TOPIC = "notification.acknowledged"
@@ -69,6 +70,13 @@ class NotificationInbox:
             delivery = await uow.notifications.get(tenant_id, notification_id)
             if delivery is None:
                 raise NotFoundError(f"notification {notification_id} not found")
+            if delivery.recipient and delivery.recipient != by:
+                # "I have this" is said by the person it was sent to. A session
+                # in the same tenant acknowledging somebody else's page would
+                # silence an escalation that person never answered.
+                raise PermissionDeniedError(
+                    "a notification is acknowledged by the person it was sent to"
+                )
             if delivery.status.value == "acked":
                 return delivery
             acknowledged = delivery.acknowledged(at=now, by=by)

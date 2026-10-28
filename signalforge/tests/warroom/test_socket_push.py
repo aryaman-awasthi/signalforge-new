@@ -209,3 +209,50 @@ async def test_a_malformed_watch_frame_subscribes_to_nothing(api):
             "type": "watching",
             "incident_ids": [],
         }
+
+
+@pytest.mark.req("REQ-013", "REQ-033")
+async def test_a_notification_is_acknowledged_over_the_socket_only_by_its_recipient(api):
+    """Written failing-first. The `ack` frame used to acknowledge any
+    notification in the tenant: a commander's cockpit could silence the page
+    ringing on an SME's phone, and the escalation that page was counting down
+    to with it. The socket now answers with an error and the delivery stands;
+    the person it was sent to acknowledges it as before."""
+    owner_token, _tenant = owner(api)
+    onboard(api, owner_token)
+    wire_paging(api, owner_token)
+    ic = commander(api, owner_token)
+    ic_token = ic["tokens"]["access_token"]
+    sme = responder(api, owner_token, email="sme@acme.io")
+    incident = declare(api, ic_token, severity="P0")
+
+    from signalforge.tests.warroom.conftest import page_for, pages
+
+    row = page_for(pages(api, ic_token, incident["id"]), sme["user"]["id"])
+    assert row is not None, "the SME was paged by the P0"
+    notification_id = next(
+        link["notification_id"]
+        for link in row["deliveries"]
+        if link["channel"] == "in_app"
+    )
+
+    with api.client.websocket_connect(
+        "/ws", subprotocols=["ticket", ws_ticket(api, ic_token)]
+    ) as socket:
+        assert socket.receive_json()["type"] == "ready"
+        socket.send_json({"type": "ack", "notification_id": notification_id})
+        # Flushed by a ping rather than waited for: an `ack.ok` here would
+        # otherwise be a hang, not a failure.
+        socket.send_json({"type": "ping"})
+        frames = drain(socket, until="pong")
+        assert not [f for f in frames if f.get("type") == "ack.ok"], frames
+        answer = next(f for f in frames if f.get("type") == "error")
+        assert "person it was sent to" in answer["detail"]
+
+    with api.client.websocket_connect(
+        "/ws", subprotocols=["ticket", ws_ticket(api, sme["tokens"]["access_token"])]
+    ) as socket:
+        assert socket.receive_json()["type"] == "ready"
+        socket.send_json({"type": "ack", "notification_id": notification_id})
+        answer = drain(socket, until="ack.ok")[-1]
+        assert answer["acked_by"] == sme["user"]["id"]
