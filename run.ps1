@@ -246,6 +246,8 @@ try {
             Assert-PortFree 'web' $WebPort
             Say "starting web on :$WebPort"
             $webLog = "$LogDir\web.log"
+            # No usage telemetry from the dev server either: the platform phones nobody.
+            $env:NEXT_TELEMETRY_DISABLED = '1'
             Start-Logged -Name 'web' -CommandLine "npm run dev -- --port $WebPort" `
                 -WorkingDirectory "$Root\web" -Log $webLog -Port $WebPort
             $started = $true

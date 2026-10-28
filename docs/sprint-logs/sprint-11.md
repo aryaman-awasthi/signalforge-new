@@ -91,6 +91,22 @@ or features it deferred, are listed at the end rather than "fixed".
   prompt recorded a take-over; the timeline read a `kind` the API never sent; the approval
   countdown ran off the laptop's clock.
 
+- **[S11-T19][REQ-000, REQ-006] The documented install works on a fresh machine.**
+  `pip install -e ".[dev]"` refused the checkout: pyproject.toml named no build backend, so
+  setuptools saw `web/`, `specs/`, `drills/` and `var/` beside `signalforge/` and stopped;
+  fastapi, uvicorn and websockets were never declared. `make nfr` was advertised with no
+  recipe. `scripts/demo.sh` dropped every argument after the drill path, so
+  `--scenario license-expiry` only worked through the PowerShell twin.
+
+- **[S11-T20][REQ-006] A README and a demo script.** The repository had no root README.
+  `README.md` says what the platform does, how to install and run it, where the model is
+  used and where it stops, and what it does not do yet. `docs/demo-script-ai-lead.md` is a
+  thirty-minute run sheet for an AI leader, with the exact words on screen, the questions
+  such an audience asks, and the claims a presenter must not make. Both were read against
+  the code by six independent reviewers and corrected until every claim pointed at a line.
+  Both launchers now start the cockpit with `NEXT_TELEMETRY_DISABLED=1`, so the dev server
+  phones nobody either.
+
 ## Tests
 
 1,317 tests (8 skipped); the full suite passes on Python 3.13 in a clean Linux container with no model
