@@ -104,9 +104,14 @@ async def test_steady_then_watch_then_a_corroborated_p0_proposal(api, observe):
 
 
 @pytest.mark.req("REQ-041", "REQ-046")
-async def test_a_single_region_fault_proposes_p1_rather_than_p0(api, observe):
-    """The matrix discriminates. One region below target is not everywhere
-    below 80 percent, and proposing P0 for it would train an IC to downgrade."""
+async def test_a_single_region_fault_is_graded_by_its_impact_not_its_region_count(
+    api, observe
+):
+    """The matrix discriminates on how far the success rate fell, not on how
+    many regions fell (S10-T06). A region count is a poor proxy for blast
+    radius: in a single-region deployment the worst incident and the mildest are
+    both "one region". One region with a tier-1 journey at 70 percent is a P0,
+    and the proposal still names which region it is."""
     token, tenant_id = owner(api)
     onboard(api, token)
     await steady(api, observe, tenant_id, WARMUP_TICKS, evaluate=True)
@@ -116,7 +121,7 @@ async def test_a_single_region_fault_proposes_p1_rather_than_p0(api, observe):
         _report, verdict = await tick(api, tenant_id, evaluate=True)
 
     assert verdict.stance.value == "proposed"
-    assert verdict.severity.severity.value == "P1"
+    assert verdict.severity.severity.value == "P0"
     assert verdict.severity.impact.regions_affected == 1
     assert verdict.severity.impact.affected_regions == (REGION_B,)
 
