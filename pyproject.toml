@@ -17,4 +17,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pip-audit"]  # pip-audit backs artifact 19; see docs/19 for the TLS limitation on this machine
+dev = ["pytest", "pip-audit"]  # pip-audit backs artifact 19; see docs/19 for the TLS limitation on this machine
+
+[tool.pytest.ini_options]
+testpaths = ["signalforge/tests"]
+markers = [
+    "req(id): links the test to a REQ id in specs/requirements.yaml (traceability, RTM)",
+]
