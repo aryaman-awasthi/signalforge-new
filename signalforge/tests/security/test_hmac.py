@@ -77,3 +77,21 @@ def test_malformed_timestamp_rejected(clock):
         signature=sign(SECRET, ts(clock), BODY),
     )
     assert not result.ok
+
+
+@pytest.mark.req("REQ-017")
+@pytest.mark.parametrize(
+    "presented",
+    ["é" * 64, "ＡＢＣ", "not-a-digest", "", "0" * 63, "0" * 65],
+    ids=["non-ascii", "fullwidth", "words", "empty", "short", "long"],
+)
+def test_a_signature_that_is_not_a_hex_digest_is_refused_not_crashed(clock, presented):
+    """Written failing-first: `compare_digest` raises on a string with
+    non-ASCII characters, and the header is attacker input, so a stray byte
+    turned a 401 into a 500."""
+    verifier = IngestHmacVerifier(clock=clock)
+    result = verifier.verify(
+        secret=SECRET, timestamp=str(ts(clock)), body=BODY, signature=presented
+    )
+    assert not result.ok
+    assert result.reason == "malformed signature"

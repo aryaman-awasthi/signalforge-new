@@ -251,3 +251,13 @@ def test_api_level_cross_tenant_isolation(api):
         headers=headers_b,
     )
     assert foreign_roles.status_code == 404, "another tenant's user does not exist here"
+
+
+@pytest.mark.req("REQ-010", "REQ-012")
+def test_a_role_named_twice_on_an_invite_is_one_role(api):
+    """Written failing-first: the duplicate reached the binding table's unique
+    constraint when the invite was *accepted*, as a 500 shown to the invitee."""
+    owner = api.signup()
+    token = owner["tokens"]["access_token"]
+    member = api.invite_and_accept(token, email="twice@acme.io", roles=["sme", "sme"])
+    assert [b["role"] for b in member["user"]["bindings"]] == ["sme"]
