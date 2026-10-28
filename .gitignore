@@ -56,3 +56,6 @@ web/playwright-report/
 *.pya
 .venv-*/
 web/tsconfig.tsbuildinfo
+
+# build metadata from an editable install
+*.egg-info/
