@@ -314,3 +314,44 @@ def test_an_unrun_probe_never_counts_toward_impact():
     assert impact.customer_impacting is False
     assert impact.success_rate_pct is None
     assert proposal.severity is Severity.P2
+
+
+@pytest.mark.req("REQ-042")
+def test_the_root_is_chosen_by_who_depends_on_it_not_by_how_many_edges_it_has():
+    """Written failing-first. The root was picked by undirected degree, so a
+    gateway that *calls* three services - which nothing depends on - outranked
+    the database two of them sit on. `source depends_on target`: the root is
+    the node the most cluster-mates point at."""
+    hub = TopologySnapshot(
+        version="v1",
+        captured_at=NOW,
+        nodes=[
+            TopologyNode(node_id="gateway", name="Gateway", node_type="service"),
+            TopologyNode(node_id="checkout", name="Checkout", node_type="service"),
+            TopologyNode(node_id="billing", name="Billing", node_type="service"),
+            TopologyNode(node_id="search", name="Search", node_type="service"),
+            TopologyNode(node_id="ledger-db", name="Ledger", node_type="database"),
+        ],
+        edges=[
+            TopologyEdge(source="gateway", target="checkout", edge_type="calls"),
+            TopologyEdge(source="gateway", target="billing", edge_type="calls"),
+            TopologyEdge(source="gateway", target="search", edge_type="calls"),
+            TopologyEdge(source="checkout", target="ledger-db", edge_type="depends_on"),
+            TopologyEdge(source="billing", target="ledger-db", edge_type="depends_on"),
+        ],
+    )
+    summary = cluster_alerts(
+        [
+            alert("a-gateway", "gateway", offset_s=0),
+            alert("a-checkout", "checkout", offset_s=1),
+            alert("a-billing", "billing", offset_s=2),
+            alert("a-search", "search", offset_s=3),
+            alert("a-ledger", "ledger-db", offset_s=4),
+        ],
+        hub,
+    )
+    (cluster,) = summary.clusters
+    assert cluster.root_node_id == "ledger-db", (
+        "the gateway has the most edges and explains nothing; the database two "
+        "members depend on explains them"
+    )

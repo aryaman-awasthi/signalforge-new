@@ -263,3 +263,39 @@ def _alert_envelope(tenant_id: str, alert_id: str, node: str, clock):
             )
         ),
     )
+
+
+@pytest.mark.req("REQ-042")
+async def test_an_alert_that_resolved_leaves_the_storm_and_a_naive_timestamp_does_not_break_it(
+    api, observe
+):
+    """Written failing-first, two defects in the timeline read.
+
+    Every alert row on the timeline was handed to the clusterer, so an alert's
+    firing row stayed a storm member after its resolution had arrived; the
+    clusterer only ever saw both rows. One alert is its latest row. And a
+    producer whose timestamps carry no zone made the subtraction against the
+    clock's aware `now` raise, failing the evaluation of every signal; such a
+    row is skipped like one that will not parse.
+    """
+    from signalforge.tests.onboarding.conftest import SIMPLE_TOPOLOGY, upload_topology
+
+    token, tenant_id = owner(api)
+    onboard(api, token)
+    upload_topology(api, token, SIMPLE_TOPOLOGY, app_id=APP_ID)
+
+    async with api.container.uow_factory() as uow:
+        await uow.events.append(_alert_envelope(tenant_id, "a0", "db", api.clock))
+        await uow.events.append(_alert_envelope(tenant_id, "a1", "web", api.clock))
+        resolved = _alert_envelope(tenant_id, "a1", "web", api.clock)
+        resolved.payload["status"] = "resolved"
+        resolved.payload["ends_at"] = api.clock.now().isoformat()
+        await uow.events.append(resolved.model_copy(update={"topic": "alert.resolved"}))
+        naive = _alert_envelope(tenant_id, "a2", "web", api.clock)
+        naive.payload["starts_at"] = api.clock.now().replace(tzinfo=None).isoformat()
+        await uow.events.append(naive)
+        await uow.commit()
+
+    verdict = await api.container.detection.evaluate(tenant_id, APP_ID)
+    assert verdict.storm.alerts == 1, "a1 resolved and a2 is malformed; a0 stands"
+    assert verdict.storm.clusters[0].alert_ids == ("a0",)

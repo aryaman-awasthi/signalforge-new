@@ -168,18 +168,30 @@ class DetectionService:
             topics=ALERT_TOPICS,
             limit=MAX_ALERTS,
         )
-        alerts: list[Alert] = []
+        # Keyed by alert id and read in timeline order, so the row that is kept
+        # for each alert is its *latest* status: a firing row followed by its
+        # resolution is one resolved alert, not a storm member that never clears.
+        latest: dict[str, Alert] = {}
         for envelope in rows:
             if envelope.app_id not in (None, app_id):
                 continue
             try:
-                alerts.append(Alert.model_validate(envelope.payload))
+                alert = Alert.model_validate(envelope.payload)
             except Exception:
                 # An alert payload that will not parse is a producer problem and
                 # is already recorded as an event. Clustering skips it rather
                 # than failing the whole evaluation over one bad row.
                 continue
-        return tuple(alerts)
+            if alert.starts_at.tzinfo is None or (
+                alert.ends_at is not None and alert.ends_at.tzinfo is None
+            ):
+                # The clusterer subtracts this from the clock's aware `now`; a
+                # naive timestamp would raise there and fail the evaluation of
+                # every signal over one producer's clock format. Treated as a
+                # malformed row, like a payload that will not parse.
+                continue
+            latest[alert.alert_id] = alert
+        return tuple(latest.values())
 
     # -- the three entry points --------------------------------------------
 
