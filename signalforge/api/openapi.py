@@ -328,7 +328,11 @@ def route_catalogue(app: FastAPI) -> list[RouteEntry]:
     """
     entries: list[RouteEntry] = []
     for route in _walk(app.routes):
-        path = route.path
+        # `path_format` is the path as the OpenAPI document spells it: a
+        # converter such as `{derived_key:path}` is stripped there, and a
+        # catalogue keyed on the raw `route.path` would never find that
+        # operation and so would publish it with no auth metadata at all.
+        path = getattr(route, "path_format", route.path)
         if path in DOC_ROUTES or not getattr(route, "include_in_schema", True):
             continue
         guard = guard_of(route.dependant)

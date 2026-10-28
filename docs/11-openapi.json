@@ -2075,6 +2075,30 @@
             "title": "Approver Roles",
             "type": "array"
           },
+          "causal_fit": {
+            "default": 1.0,
+            "description": "The factor the action's mitigation power was multiplied by: 1.0 direct, 0.45 indirect, 0.15 unsupported.",
+            "title": "Causal Fit",
+            "type": "number"
+          },
+          "causal_mechanism": {
+            "default": "",
+            "description": "How that cause produces the symptom.",
+            "title": "Causal Mechanism",
+            "type": "string"
+          },
+          "causal_reason": {
+            "default": "",
+            "description": "Why the action does or does not act on the mechanism, in one deterministic clause.",
+            "title": "Causal Reason",
+            "type": "string"
+          },
+          "causally_supported": {
+            "default": true,
+            "description": "Whether this action addresses the identified mechanism. An unsupported action is ranked below every supported one, whatever its mitigation power.",
+            "title": "Causally Supported",
+            "type": "boolean"
+          },
           "eligibility": {
             "title": "Eligibility",
             "type": "string"
@@ -2176,6 +2200,12 @@
           },
           "rollback_summary": {
             "title": "Rollback Summary",
+            "type": "string"
+          },
+          "root_cause": {
+            "default": "",
+            "description": "The leading hypothesis's root cause, as the brain recorded it - `license_expiry`, `disk_saturation`, `deployment_change`. Empty when no cause has been established.",
+            "title": "Root Cause",
             "type": "string"
           },
           "score": {
@@ -13226,25 +13256,8 @@
     },
     "/apps": {
       "get": {
+        "description": "The applications this person's bindings cover.\n\nA tenant-scoped read rather than `manage_apps`, like the incident list and\nthe lifecycle route: the Incident Commander and the SME hold no\n`manage_apps` in the frozen matrix, and they are the people an invite names\nfor an application. The service filters by binding - org-wide sees all,\napp-scoped sees its own - and every write below still carries the permission.",
         "operationId": "list_applications_apps_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "app_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "App Id"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "content": {
@@ -13259,16 +13272,6 @@
               }
             },
             "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
           }
         },
         "security": [
@@ -13280,9 +13283,7 @@
         "tags": [
           "onboarding"
         ],
-        "x-signalforge-app-scope": "query",
-        "x-signalforge-auth": "session",
-        "x-signalforge-permission": "manage_apps"
+        "x-signalforge-auth": "session"
       },
       "post": {
         "operationId": "register_application_apps_post",
@@ -13393,6 +13394,7 @@
         "x-signalforge-permission": "manage_apps"
       },
       "get": {
+        "description": "One application, readable by anybody whose binding names it. A binding\nscoped to another application is refused with the reason, in the same\ntenant, so the fix is in the message.",
         "operationId": "get_application_apps__app_id__get",
         "parameters": [
           {
@@ -13436,9 +13438,7 @@
         "tags": [
           "onboarding"
         ],
-        "x-signalforge-app-scope": "path",
-        "x-signalforge-auth": "session",
-        "x-signalforge-permission": "manage_apps"
+        "x-signalforge-auth": "session"
       },
       "patch": {
         "operationId": "update_application_apps__app_id__patch",
@@ -16609,10 +16609,16 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "sessionBearer": []
+          }
+        ],
         "summary": "Get Node History",
         "tags": [
           "incident-brain"
-        ]
+        ],
+        "x-signalforge-auth": "session"
       }
     },
     "/incidents/{incident_id}/brain/refresh": {

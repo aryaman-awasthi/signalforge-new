@@ -219,10 +219,10 @@ The seven wizard steps: basics, connect and discover, map, topology, SLOs and po
 
 | Method | Path | Credential | Permission | Purpose |
 |---|---|---|---|---|
-| GET | `/apps` | session | `manage_apps` (`?app_id=`) | List applications |
+| GET | `/apps` | session | (session only) | The applications this person's bindings cover. |
 | POST | `/apps` | session | `manage_apps` (`?app_id=`) | Register application |
 | DELETE | `/apps/{app_id}` | session | `manage_apps` (path) | Remove application |
-| GET | `/apps/{app_id}` | session | `manage_apps` (path) | Get application |
+| GET | `/apps/{app_id}` | session | (session only) | One application, readable by anybody whose binding names it. |
 | PATCH | `/apps/{app_id}` | session | `manage_apps` (path) | Update application |
 | POST | `/apps/{app_id}/actions/import` | session | `manage_apps` (path) | Import the actions the application publishes in its own manifest. |
 | PATCH | `/apps/{app_id}/actions/{action_id}` | session | `manage_apps` (path) | Override action |
@@ -319,7 +319,7 @@ What the platform believes about an incident and why: a versioned graph of facts
 | GET | `/incidents/{incident_id}/brain` | session | (session only) | The ledger, the hypotheses and their confidence history. |
 | POST | `/incidents/{incident_id}/brain/ask` | session | (session only) | Ask the copilot about this incident. |
 | GET | `/incidents/{incident_id}/brain/guidance` | session | (session only) | Similar prior incidents, mistake warnings, contradictions and any content that tried to instruct the assistant. |
-| GET | `/incidents/{incident_id}/brain/nodes/{derived_key:path}` | session | (session only) | Every version of one belief, oldest first. |
+| GET | `/incidents/{incident_id}/brain/nodes/{derived_key}` | session | (session only) | Every version of one belief, oldest first. |
 | POST | `/incidents/{incident_id}/brain/refresh` | session | `declare_incident` | Run a reasoning pass now. |
 | GET | `/incidents/{incident_id}/brain/topology` | session | (session only) | The dependency map, what changed, and the impact split. |
 
