@@ -247,3 +247,44 @@ def test_the_cockpit_types_match_the_api_response_models():
     for model in (ExecutionOut, DecisionOut, CandidateOut, LayerOut):
         for field in model.model_fields:
             assert field in api, f"{model.__name__}.{field} is not in the client"
+
+
+@pytest.mark.req("REQ-061", "REQ-062")
+def test_the_approval_countdown_ticks_from_the_servers_seconds_not_the_laptops_clock():
+    """The gateway refuses an approval when *its* clock passes `expires_at`. A
+    browser computing `expires_at - Date.now()` showed a different number on
+    every skewed laptop; it now counts down from the `seconds_left` the server
+    sent and re-anchors on every poll, as the pager's useCountdown does."""
+    hooks = read("features", "governance", "hooks", "useGovernance.ts")
+    assert "Date.now()" not in hooks.split("export function useSecondsLeft")[1]
+    assert "secondsLeft: number | null | undefined" in hooks
+    sheet = read("features", "governance", "components", "ApprovalSheet.tsx")
+    assert "useSecondsLeft(approval?.seconds_left" in sheet
+
+
+@pytest.mark.req("REQ-062")
+def test_cancelling_the_take_over_prompt_records_nothing():
+    ledger = read("features", "governance", "components", "ExecutionLedger.tsx")
+    assert "if (note === null) return;" in ledger, (
+        "closing the dialog is not a take-over; 'handled manually' must not be "
+        "recorded for a person who pressed Cancel"
+    )
+    assert '?? "handled manually"' not in ledger
+
+
+@pytest.mark.req("REQ-033")
+def test_the_one_websocket_store_opens_one_socket_even_under_a_racing_subscribe():
+    store = read("lib", "ws", "store.ts")
+    assert "private opening = false;" in store
+    assert "if (this.socket || this.retry || this.opening) return;" in store
+
+
+@pytest.mark.req("REQ-040")
+def test_the_timeline_panel_reads_a_transition_kind_the_api_sends():
+    """`move.kind === "severity"` was compared against a field the API never
+    sent, so a re-grade rendered as "active -> active" with no severity."""
+    from signalforge.api.schemas.incidents import TransitionOut
+
+    assert "kind" in TransitionOut.model_fields
+    shell = read("features", "warroom", "components", "WarRoomShell.tsx")
+    assert 'move.kind === "severity"' in shell

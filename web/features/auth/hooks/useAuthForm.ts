@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { ApiError } from "@/lib/api/client";
+import { safeNext } from "@/lib/safeNext";
 
 export type FormStatus =
   | { kind: "idle" }
@@ -21,8 +22,7 @@ export function useAuthForm(defaultDestination: string) {
       setStatus({ kind: "submitting" });
       try {
         await action();
-        const next = searchParams.get("next");
-        router.push(next && next.startsWith("/") ? next : defaultDestination);
+        router.push(safeNext(searchParams.get("next"), defaultDestination));
         router.refresh();
       } catch (error) {
         setStatus({

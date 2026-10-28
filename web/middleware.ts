@@ -36,15 +36,21 @@ const ORG_GROUP = ["org_owner"];
 /** Prefix-matched: everything under these paths is organisation administration. */
 const ORG_GROUP_PATHS = ["/setup", "/settings", "/integration-health"];
 
-/** Administration that lives *under* an incident-response path. */
-const ORG_GROUP_SUFFIXES = ["/onboard"];
+/** Administration that lives *under* an incident-response path: the wizard is
+ * `/apps/[appId]/onboard`. Matched as a whole path segment, never as a
+ * substring: an application whose id happens to start with "onboard" is still
+ * an application page, and locking its detail screen behind the org group was
+ * exactly the redirect this file's comment warns about. */
+const ORG_GROUP_SEGMENTS = ["onboard"];
 
 function orgGroupPath(pathname: string): string | undefined {
   const prefixed = ORG_GROUP_PATHS.find((path) => pathname.startsWith(path));
   if (prefixed) return prefixed;
+  const segments = pathname.split("/").filter(Boolean);
   if (
-    pathname.startsWith("/apps/") &&
-    ORG_GROUP_SUFFIXES.some((suffix) => pathname.includes(suffix))
+    segments[0] === "apps" &&
+    segments.length >= 3 &&
+    ORG_GROUP_SEGMENTS.includes(segments[2])
   ) {
     return "/onboard";
   }
@@ -55,7 +61,13 @@ function isPublic(pathname: string): boolean {
   return (
     PUBLIC_PATHS.includes(pathname) ||
     pathname.startsWith("/invite/") ||
-    pathname.startsWith("/api/auth/") ||
+    // Every route handler under /api authenticates for itself: the proxy
+    // forwards the cookie's bearer token and performs its own one-shot
+    // refresh on a 401. Redirecting a lapsed POST or PATCH from here turned it
+    // into a GET of /api/auth/refresh - a 405 from the browser's point of view
+    // - so a form submitted in the sixteenth minute failed instead of
+    // refreshing. Pages are guarded below; API calls are not pages.
+    pathname.startsWith("/api/") ||
     pathname.startsWith("/_next/") ||
     pathname === "/favicon.ico"
   );

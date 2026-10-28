@@ -109,3 +109,34 @@ def test_oncall_editor_exposes_order_and_escalation_timers():
         WEB / "features" / "org-setup" / "components" / "EscalationPanel.tsx"
     ).read_text(encoding="utf-8")
     assert "timeout_s" in escalation and "page_offsets_s" in escalation
+
+
+@pytest.mark.req("REQ-010")
+def test_a_sign_in_lands_only_on_a_same_origin_path_by_one_rule():
+    """One `safeNext`, used by the server-side refresh handler and the client
+    sign-in form alike. The form used to accept anything starting with "/",
+    which admits `//evil.example` and `/\\evil.example` - both read by browsers
+    as another host."""
+    rule = (WEB / "lib" / "safeNext.ts").read_text(encoding="utf-8")
+    assert r"/^\/(?![\/\\])/" in rule, "one leading slash, then neither slash nor backslash"
+    form = (WEB / "features" / "auth" / "hooks" / "useAuthForm.ts").read_text(encoding="utf-8")
+    assert "safeNext(" in form and 'startsWith("/")' not in form
+    session = (WEB / "app" / "api" / "_lib" / "session.ts").read_text(encoding="utf-8")
+    assert 'from "@/lib/safeNext"' in session
+
+
+@pytest.mark.req("REQ-010")
+def test_api_calls_are_never_redirected_by_the_page_middleware():
+    """A lapsed access cookie on a POST to /api/proxy used to be redirected to
+    /api/auth/refresh, which the browser follows as a GET: a 405 instead of the
+    one-shot refresh the proxy performs for itself."""
+    middleware = (WEB / "middleware.ts").read_text(encoding="utf-8")
+    assert 'pathname.startsWith("/api/")' in middleware
+
+
+@pytest.mark.req("REQ-010", "REQ-045")
+def test_a_validation_failure_reads_as_a_sentence_not_an_object():
+    client = (WEB / "lib" / "api" / "client.ts").read_text(encoding="utf-8")
+    assert "export function describeDetail" in client
+    assert "Array.isArray(detail)" in client, "a 422 carries a list of {loc, msg}"
+    assert "describeDetail(" in client.split("function makeClient")[1]
