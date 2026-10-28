@@ -609,3 +609,29 @@ async def test_a_task_or_a_page_is_reached_only_through_its_own_incident(api):
     assert patch_task(api, ic_token, theirs["id"], task["id"], note="moved")["id"] == task["id"]
     assert finish_task(api, sme_token, theirs["id"], task["id"])["status"] == "done"
     assert ack(api, sme_token, theirs["id"], page["id"])["state"] == "acked"
+
+
+@pytest.mark.req("REQ-045")
+async def test_a_due_time_without_a_zone_is_refused_rather_than_stored(api):
+    """Written failing-first. A naive `due_at` was accepted, stored, and then
+    compared against the server's aware clock on every read of the board - a
+    TypeError, so one task made the whole task list a 500."""
+    owner_token, _tenant = owner(api)
+    onboard(api, owner_token)
+    wire_paging(api, owner_token)
+    ic = commander(api, owner_token)
+    ic_token = ic["tokens"]["access_token"]
+    incident = declare(api, ic_token, severity="P1")
+
+    refused = create_task(
+        api, ic_token, incident["id"], title="drain the queue",
+        due_at="2026-09-01T13:00:00", expect=422,
+    )
+    assert "due_at" in json.dumps(refused["detail"])
+    task = create_task(
+        api, ic_token, incident["id"], title="drain the queue",
+        due_at="2026-09-01T13:00:00+00:00",
+    )
+    patch_task(api, ic_token, incident["id"], task["id"], due_at="2026-09-01T14:00:00", expect=422)
+    board = tasks(api, ic_token, incident["id"])
+    assert [t["id"] for t in board["tasks"]] == [task["id"]]
