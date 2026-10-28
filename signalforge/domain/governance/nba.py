@@ -799,6 +799,7 @@ def revise_plan(
     changed_assumptions: Sequence[str] = (),
     evidence_refs: Sequence[str] = (),
     note: str = "",
+    act_threshold: float = ACT_CONFIDENCE_THRESHOLD,
 ) -> ResponsePlan:
     """Version n+1, with every action labelled against version n.
 
@@ -808,8 +809,12 @@ def revise_plan(
     dropped: a paused action stays on the screen with its reason, because "we
     considered that and stopped" is information and an empty row is not.
     """
-    eligible = [c for c in rank(candidates) if c.eligible]
-    current = {c.action_id: c for c in rank(candidates)}
+    # The same ordering `recommend` uses, under the same policy threshold: a
+    # plan whose first row disagreed with the recommendation card beside it
+    # would be two answers to one question.
+    ranked = rank(candidates, act_threshold=act_threshold)
+    eligible = [c for c in ranked if c.eligible]
+    current = {c.action_id: c for c in ranked}
     before = {item.action_id for item in previous.items} if previous else set()
     assumption = changed_assumptions[0] if changed_assumptions else ""
 
