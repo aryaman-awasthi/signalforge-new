@@ -341,3 +341,41 @@ async def test_a_connector_disabled_mid_incident_leaves_the_incident_intact(itsm
     assert closed["ticket"]["state"] == "not_configured"
 
 
+
+
+@pytest.mark.req("REQ-043", "REQ-040")
+async def test_the_sweep_writes_the_ticket_link_and_nothing_else_onto_the_incident(itsm_api):
+    """Written failing-first. The sweep reads its batch and then calls the ITSM
+    for each row; a person can close the incident while that call is in
+    flight. The store used to write the *whole* stale row back, so a closed
+    incident came back active with its ticket synced. Only the ticket moves."""
+    api = itsm_api
+    owner_token, tenant_id = owner(api)
+    onboard(api, owner_token)
+    connect(api, owner_token, "probe-itsm", app_id=APP_ID)
+    ic = commander(api, owner_token)
+    token = ic["tokens"]["access_token"]
+
+    StubItsmAdapter.behaviour["create"] = AdapterError("ticket queue is read-only today")
+    incident = declare(api, token, severity="P1")
+    assert incident["ticket"]["state"] == "failed"
+
+    # The sweep's view of the row, taken before anybody touched it.
+    async with api.container.uow_factory() as uow:
+        stale = next(
+            row for row in await uow.incidents.needing_sync() if row.id == incident["id"]
+        )
+    assert stale.state.value == "active"
+
+    # Meanwhile a person closes the incident. Closing does not raise a ticket
+    # for a link that failed to create, so the row still needs a sync.
+    StubItsmAdapter.behaviour.pop("create")
+    closed = close_incident(api, token, incident["id"], reason="false alarm")
+    assert closed["state"] == "closed"
+
+    # The in-flight sync lands with the stale row in hand.
+    await api.container.incident_tickets.sync(stale)
+
+    after = read_incident(api, token, incident["id"])
+    assert after["state"] == "closed", "a sync of the ticket must not reopen the incident"
+    assert after["ticket"]["state"] == "synced"

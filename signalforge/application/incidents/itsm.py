@@ -314,29 +314,42 @@ class IncidentTicketSync:
     async def _store(
         self, incident: Incident, before: TicketSync, after: TicketSync
     ) -> Incident:
-        if (
+        """Write the ticket link onto the incident *as it is now*.
+
+        The incident this method was handed may be minutes old: the sweep reads
+        its batch, then calls the ITSM for each row, and a person can close or
+        re-grade an incident while that call is in flight. Writing the whole
+        stale row back would reopen a closed incident. So the ticket link is
+        applied to the row re-read inside the same transaction, and only the
+        ticket moves.
+        """
+        unchanged = (
             before.state is after.state
             and before.reference == after.reference
             and before.status == after.status
             and before.detail == after.detail
-        ):
-            # Nothing observable changed. The row is still written so `attempts`
-            # and the timestamp move, but no event: a thirty-second retry loop
-            # that published every attempt would bury the incident's timeline.
-            updated = incident.with_ticket(after, at=incident.updated_at)
-            async with self._uow_factory() as uow:
-                await uow.incidents.update(updated)
-                await uow.commit()
-            return updated
-
+        )
         now = self._clock.now()
-        updated = incident.with_ticket(after, at=now)
         topic = {
             TicketSyncState.SYNCED: ITSM_SYNCED_TOPIC,
             TicketSyncState.FAILED: ITSM_FAILED_TOPIC,
             TicketSyncState.UNCERTAIN: ITSM_UNCERTAIN_TOPIC,
         }.get(after.state)
         async with self._uow_factory() as uow:
+            current = await uow.incidents.get(incident.tenant_id, incident.id)
+            if current is None:
+                # Removed with its application while the call was in flight.
+                return incident.with_ticket(after, at=now)
+            if unchanged:
+                # Nothing observable changed. The row is still written so
+                # `attempts` and the timestamp move, but no event: a thirty-second
+                # retry loop that published every attempt would bury the
+                # incident's timeline.
+                updated = current.with_ticket(after, at=current.updated_at)
+                await uow.incidents.update(updated)
+                await uow.commit()
+                return updated
+            updated = current.with_ticket(after, at=now)
             await uow.incidents.update(updated)
             if topic is not None:
                 await publish_system(
