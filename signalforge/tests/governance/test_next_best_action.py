@@ -17,7 +17,10 @@ from __future__ import annotations
 
 import pytest
 
+from datetime import datetime, timezone
+
 from signalforge.domain.governance.nba import (
+    Eligibility,
     Score,
     impact_of,
     information_gain_of,
@@ -223,3 +226,51 @@ async def test_revising_a_plan_is_incident_command_work(governed):
         incident["id"],
         explain=False,
     )
+
+
+@pytest.mark.req("REQ-063")
+def test_a_plan_is_ordered_under_the_same_threshold_as_the_recommendation():
+    """Written failing-first. `revise_plan` ranked with the domain's default
+    threshold while `recommend` used the application's policy, so a policy that
+    said "act at 50%" produced a card recommending the rollback beside a plan
+    whose first row was the diagnostic. One ordering, under one threshold."""
+    from signalforge.domain.governance.nba import ActionCandidate, rank, revise_plan
+    from signalforge.domain.governance.policy import Outcome, PolicyDecision
+
+    def candidate(action_id: str, action_class: ActionClass, *, score: float, confidence: float):
+        return ActionCandidate(
+            action_id=action_id,
+            name=action_id,
+            action_class=action_class,
+            risk_class=RiskClass.LOW_RISK,
+            score=Score(urgency=1.0, impact=score, information_gain=1.0, risk=0.0),
+            decision=PolicyDecision(
+                outcome=Outcome.ALLOW,
+                action_id=action_id,
+                action_class=action_class,
+                risk_class=RiskClass.LOW_RISK,
+                reason="allowed",
+            ),
+            eligibility=Eligibility.ELIGIBLE,
+            hypothesis_confidence=confidence,
+        )
+
+    diagnose = candidate("collect-diagnostics", ActionClass.DIAGNOSTIC, score=0.9, confidence=0.6)
+    fix = candidate("rollback-release", ActionClass.ROLLBACK, score=0.5, confidence=0.6)
+    candidates = (diagnose, fix)
+
+    at = datetime(2026, 9, 1, 12, 0, tzinfo=timezone.utc)
+    def plan(**kwargs):
+        return revise_plan(
+            None, candidates, plan_id="p1", tenant_id="t", incident_id="i",
+            at=at, by="ic", **kwargs,
+        )
+
+    # At the default threshold the hypothesis is not established: the free
+    # diagnostic leads. At 50% the rollback acts on a settled mechanism.
+    assert [i.action_id for i in plan().items] == [c.action_id for c in rank(candidates)]
+    assert [i.action_id for i in plan(act_threshold=0.5).items] == [
+        c.action_id for c in rank(candidates, act_threshold=0.5)
+    ]
+    assert plan().items[0].action_id == "collect-diagnostics"
+    assert plan(act_threshold=0.5).items[0].action_id == "rollback-release"

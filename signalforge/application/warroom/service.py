@@ -277,7 +277,9 @@ class WarRoomService:
         if version is None:
             return None
         try:
-            return TopologySnapshot.model_validate(version.document)
+            # The repository already hands back a parsed snapshot; re-validating
+            # it guards the row a migration or a hand edit could have left behind.
+            return TopologySnapshot.model_validate(version.snapshot.model_dump())
         except Exception:
             # A stored topology that will not parse is a mapped estate this
             # platform cannot read. The room opens without downstream services

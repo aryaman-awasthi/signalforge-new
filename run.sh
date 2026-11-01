@@ -115,7 +115,8 @@ wait_for "api" "http://$API_HOST:$API_PORT/health" "$LOG_DIR/api.log"
 if [ -f "$ROOT/web/package.json" ]; then
   if [ -d "$ROOT/web/node_modules" ]; then
     say "starting web on :$WEB_PORT"
-    (cd "$ROOT/web" && npm run dev -- --port "$WEB_PORT") >"$LOG_DIR/web.log" 2>&1 &
+    # No usage telemetry from the dev server either: the platform phones nobody.
+    (cd "$ROOT/web" && NEXT_TELEMETRY_DISABLED=1 npm run dev -- --port "$WEB_PORT") >"$LOG_DIR/web.log" 2>&1 &
     pids+=($!)
     started=1
     wait_for "web" "http://127.0.0.1:$WEB_PORT/" "$LOG_DIR/web.log"

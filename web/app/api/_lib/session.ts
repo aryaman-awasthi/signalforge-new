@@ -108,10 +108,6 @@ export async function bootstrapSession(path: string, body: unknown): Promise<Nex
   return response;
 }
 
-/** Where a sign-in or a refresh should land. Only a same-origin path is honoured:
- * a `next` that names another host is how a sign-in form becomes a redirector. */
-export function safeNext(candidate: string | null | undefined, fallback = "/apps"): string {
-  if (!candidate) return fallback;
-  if (!candidate.startsWith("/") || candidate.startsWith("//")) return fallback;
-  return candidate;
-}
+/** Where a sign-in or a refresh should land. One rule, shared with the
+ * sign-in form: see lib/safeNext.ts. */
+export { safeNext } from "@/lib/safeNext";

@@ -67,7 +67,7 @@ export function ApprovalSheet({
   const [deciding, setDeciding] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const left = useSecondsLeft(approval?.expires_at ?? null);
+  const left = useSecondsLeft(approval?.seconds_left ?? null);
 
   const granted = approval?.state === "granted" || execution.state === "approved";
   const confirmed = typed.trim() === execution.action_id;

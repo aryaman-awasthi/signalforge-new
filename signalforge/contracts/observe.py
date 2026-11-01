@@ -34,6 +34,7 @@ OBSERVE_PATHS: dict[str, str] = {
     "action_execution": "/observe/actions/executions/{idempotency_key}",
     "chaos_manifest": "/observe/chaos",
     "chaos_inject": "/observe/chaos/{scenario_id}/inject",
+    "chaos_injections": "/observe/chaos/injections",
     "chaos_status": "/observe/chaos/injections/{injection_id}",
     "chaos_abort": "/observe/chaos/injections/{injection_id}/abort",
 }

@@ -10596,6 +10596,7 @@
                 "type": "null"
               }
             ],
+            "description": "Timezone-aware. A bare wall-clock time is refused: the board compares it against the server's clock to say *overdue*.",
             "title": "Due At"
           },
           "note": {
@@ -11431,6 +11432,12 @@
           },
           "from_state": {
             "title": "From State",
+            "type": "string"
+          },
+          "kind": {
+            "default": "state",
+            "description": "`state` for a lifecycle move, `severity` for a re-grade (from_state equals to_state and the severity fields carry the change). The timeline renders the two differently and used to read a field that was never sent.",
+            "title": "Kind",
             "type": "string"
           },
           "reason": {

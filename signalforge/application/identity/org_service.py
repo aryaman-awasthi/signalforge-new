@@ -146,6 +146,10 @@ class OrgService:
         app_id: Optional[str] = None,
     ) -> CreatedInvite:
         email = normalize_email(email)
+        # A role named twice is one role: the binding table is unique on it, and
+        # the duplicate would otherwise surface as a 500 when the invite is
+        # accepted - by the invitee, who cannot see what the inviter typed.
+        roles = tuple(dict.fromkeys(roles))
         now = self._clock.now()
         async with self._uow_factory() as uow:
             if await uow.users.get_by_email(principal.tenant_id, email) is not None:
@@ -219,7 +223,7 @@ class OrgService:
                 RoleBinding(
                     tenant_id=tenant.id, user_id=user.id, role=r, app_id=invite.app_id
                 )
-                for r in invite.roles
+                for r in dict.fromkeys(invite.roles)
             )
             await uow.bindings.replace_for_user(tenant.id, user.id, bindings)
             invite.accepted_at = now

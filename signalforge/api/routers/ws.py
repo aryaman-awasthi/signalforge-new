@@ -50,6 +50,7 @@ from signalforge.api import deps
 from signalforge.application.identity.principal import Principal
 from signalforge.contracts.canonical import NotificationChannel
 from signalforge.domain.integrations.entities import delivery_frame
+from signalforge.domain.identity.errors import PermissionDeniedError
 from signalforge.domain.shared.errors import DomainValidationError, NotFoundError
 
 logger = logging.getLogger("signalforge.notifications")
@@ -188,7 +189,7 @@ async def _handle(
                 {"type": "error", "detail": "notification not found"}
             )
             return
-        except DomainValidationError as exc:
+        except (DomainValidationError, PermissionDeniedError) as exc:
             await websocket.send_json({"type": "error", "detail": str(exc)})
             return
         await websocket.send_json(

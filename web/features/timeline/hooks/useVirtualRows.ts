@@ -15,12 +15,21 @@ export const ROW_HEIGHT = 56;
 const OVERSCAN = 8;
 
 export function useVirtualRows(count: number, rowHeight: number = ROW_HEIGHT) {
-  const ref = useRef<HTMLDivElement | null>(null);
+  // A callback ref rather than a ref object: the list is rendered only once
+  // the timeline has loaded, which is after this hook's first effect has run.
+  // An effect with no dependencies saw `ref.current === null` on mount and
+  // never ran again, so no scroll listener was ever attached and the window
+  // stayed on the first rows however far the person scrolled.
+  const [element, setElement] = useState<HTMLDivElement | null>(null);
+  const elementRef = useRef<HTMLDivElement | null>(null);
+  const ref = useCallback((node: HTMLDivElement | null) => {
+    elementRef.current = node;
+    setElement(node);
+  }, []);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(480);
 
   useEffect(() => {
-    const element = ref.current;
     if (!element) return;
     const onScroll = () => setScrollTop(element.scrollTop);
     const measure = () => setViewportHeight(element.clientHeight || 480);
@@ -32,7 +41,7 @@ export function useVirtualRows(count: number, rowHeight: number = ROW_HEIGHT) {
       element.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", measure);
     };
-  }, []);
+  }, [element]);
 
   const first = Math.max(0, Math.floor(scrollTop / rowHeight) - OVERSCAN);
   const visibleCount = Math.ceil(viewportHeight / rowHeight) + OVERSCAN * 2;
@@ -40,10 +49,10 @@ export function useVirtualRows(count: number, rowHeight: number = ROW_HEIGHT) {
 
   const scrollToIndex = useCallback(
     (index: number) => {
-      const element = ref.current;
-      if (!element) return;
-      element.scrollTop = Math.max(0, index * rowHeight);
-      setScrollTop(element.scrollTop);
+      const target = elementRef.current;
+      if (!target) return;
+      target.scrollTop = Math.max(0, index * rowHeight);
+      setScrollTop(target.scrollTop);
     },
     [rowHeight],
   );

@@ -228,6 +228,7 @@ class NextBestActionService:
                 changed_assumptions=changed_assumptions,
                 evidence_refs=evidence,
                 note=note,
+                act_threshold=act_threshold,
             )
             await uow.response_plans.add(plan)
             await record(

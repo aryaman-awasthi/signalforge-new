@@ -148,6 +148,10 @@ async def test_the_whole_state_machine_is_walked_by_people_and_recorded(api, obs
     assert all(row["actor_id"] == ic["user"]["id"] for row in detail["transitions"])
     assert detail["transitions"][1]["severity_before"] == "P2"
     assert detail["transitions"][1]["severity_after"] == "P0"
+    # The timeline tells a re-grade from a move by this field, which the API
+    # did not send until the panel was found reading it.
+    assert detail["transitions"][1]["kind"] == "severity"
+    assert {row["kind"] for i, row in enumerate(detail["transitions"]) if i != 1} == {"state"}
     assert detail["transitions"][0]["severity_before"] is None, (
         "a declaration grades an incident for the first time; it re-grades nothing"
     )

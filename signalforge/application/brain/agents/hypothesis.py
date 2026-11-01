@@ -889,7 +889,13 @@ def _link(spec: HypothesisSpec, node: GraphNode) -> Optional[WeightedEvidence]:
             # single signal is weaker for it, and the number should say so.
             stance = Stance.REFUTES
         if wanted and subject and wanted not in subject and subject not in wanted:
-            if kind in (EvidenceKind.TELEMETRY_ANOMALY, EvidenceKind.TOPOLOGY_PATH):
+            # Only a measurement is about one component. A topology path bears
+            # on this slot by construction - it is the queue of callers behind
+            # the dependency, whichever dependency the slot ends up naming -
+            # so it stays linked when a bridge message sharpens the subject
+            # from "a dependency" to "connection-pool". Dropping it was how a
+            # measurement of the suspected component *lowered* the hypothesis.
+            if kind is EvidenceKind.TELEMETRY_ANOMALY:
                 return None
     elif spec.slug == "infrastructure":
         if kind not in (

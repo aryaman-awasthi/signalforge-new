@@ -52,6 +52,7 @@ from signalforge.domain.brain.nodes import GraphNode, NodeStatus, NodeType
 from signalforge.domain.brain.untrusted import SYSTEM_FLOOR, UntrustedItem, fence
 from signalforge.domain.governance.comms import (
     AUDIENCE_PERMISSION,
+    TRANSITIONS,
     Audience,
     Communication,
     CommunicationState,
@@ -350,7 +351,9 @@ class CommunicationService:
                 original = await uow.communications.get(
                     principal.tenant_id, communication.corrects_id
                 )
-                if original is not None and original.state.public:
+                if original is not None and (
+                    CommunicationState.CORRECTED in TRANSITIONS[original.state]
+                ):
                     await uow.communications.update(
                         original.corrected_by(issued.id)
                     )
@@ -464,6 +467,16 @@ class CommunicationService:
             original = await self._require_communication(
                 uow, principal.tenant_id, incident_id, communication_id
             )
+            if original.state is CommunicationState.CORRECTED:
+                # CORRECTED is terminal: the record of what was said and what
+                # replaced it. A second correction of the same text would draft
+                # fine and then never issue, because the original cannot move
+                # again. The thing to correct is the statement that stands.
+                raise CommunicationStateError(
+                    f"communication {communication_id} was already corrected by "
+                    f"{original.corrected_by_id}; a further correction corrects "
+                    "that one"
+                )
             incident = await self._require_incident(
                 uow, principal.tenant_id, incident_id
             )

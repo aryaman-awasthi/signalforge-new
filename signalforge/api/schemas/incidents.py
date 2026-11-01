@@ -123,6 +123,13 @@ class TicketSyncOut(BaseModel):
 
 
 class TransitionOut(BaseModel):
+    kind: str = Field(
+        default="state",
+        description="`state` for a lifecycle move, `severity` for a re-grade "
+        "(from_state equals to_state and the severity fields carry the change). "
+        "The timeline renders the two differently and used to read a field "
+        "that was never sent.",
+    )
     from_state: str
     to_state: str
     at: datetime
@@ -387,7 +394,12 @@ def _proposal_out(incident: Incident) -> Optional[ProposalOut]:
 
 
 def _transition_out(transition: IncidentTransition) -> TransitionOut:
+    regrade = (
+        transition.from_state is transition.to_state
+        and transition.severity_after is not None
+    )
     return TransitionOut(
+        kind="severity" if regrade else "state",
         from_state=transition.from_state.value,
         to_state=transition.to_state.value,
         at=transition.at,

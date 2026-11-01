@@ -104,9 +104,14 @@ async def test_steady_then_watch_then_a_corroborated_p0_proposal(api, observe):
 
 
 @pytest.mark.req("REQ-041", "REQ-046")
-async def test_a_single_region_fault_proposes_p1_rather_than_p0(api, observe):
-    """The matrix discriminates. One region below target is not everywhere
-    below 80 percent, and proposing P0 for it would train an IC to downgrade."""
+async def test_a_single_region_fault_is_graded_by_its_impact_not_its_region_count(
+    api, observe
+):
+    """The matrix discriminates on how far the success rate fell, not on how
+    many regions fell (S10-T06). A region count is a poor proxy for blast
+    radius: in a single-region deployment the worst incident and the mildest are
+    both "one region". One region with a tier-1 journey at 70 percent is a P0,
+    and the proposal still names which region it is."""
     token, tenant_id = owner(api)
     onboard(api, token)
     await steady(api, observe, tenant_id, WARMUP_TICKS, evaluate=True)
@@ -116,7 +121,7 @@ async def test_a_single_region_fault_proposes_p1_rather_than_p0(api, observe):
         _report, verdict = await tick(api, tenant_id, evaluate=True)
 
     assert verdict.stance.value == "proposed"
-    assert verdict.severity.severity.value == "P1"
+    assert verdict.severity.severity.value == "P0"
     assert verdict.severity.impact.regions_affected == 1
     assert verdict.severity.impact.affected_regions == (REGION_B,)
 
@@ -258,3 +263,39 @@ def _alert_envelope(tenant_id: str, alert_id: str, node: str, clock):
             )
         ),
     )
+
+
+@pytest.mark.req("REQ-042")
+async def test_an_alert_that_resolved_leaves_the_storm_and_a_naive_timestamp_does_not_break_it(
+    api, observe
+):
+    """Written failing-first, two defects in the timeline read.
+
+    Every alert row on the timeline was handed to the clusterer, so an alert's
+    firing row stayed a storm member after its resolution had arrived; the
+    clusterer only ever saw both rows. One alert is its latest row. And a
+    producer whose timestamps carry no zone made the subtraction against the
+    clock's aware `now` raise, failing the evaluation of every signal; such a
+    row is skipped like one that will not parse.
+    """
+    from signalforge.tests.onboarding.conftest import SIMPLE_TOPOLOGY, upload_topology
+
+    token, tenant_id = owner(api)
+    onboard(api, token)
+    upload_topology(api, token, SIMPLE_TOPOLOGY, app_id=APP_ID)
+
+    async with api.container.uow_factory() as uow:
+        await uow.events.append(_alert_envelope(tenant_id, "a0", "db", api.clock))
+        await uow.events.append(_alert_envelope(tenant_id, "a1", "web", api.clock))
+        resolved = _alert_envelope(tenant_id, "a1", "web", api.clock)
+        resolved.payload["status"] = "resolved"
+        resolved.payload["ends_at"] = api.clock.now().isoformat()
+        await uow.events.append(resolved.model_copy(update={"topic": "alert.resolved"}))
+        naive = _alert_envelope(tenant_id, "a2", "web", api.clock)
+        naive.payload["starts_at"] = api.clock.now().replace(tzinfo=None).isoformat()
+        await uow.events.append(naive)
+        await uow.commit()
+
+    verdict = await api.container.detection.evaluate(tenant_id, APP_ID)
+    assert verdict.storm.alerts == 1, "a1 resolved and a2 is malformed; a0 stands"
+    assert verdict.storm.clusters[0].alert_ids == ("a0",)

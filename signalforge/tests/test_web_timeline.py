@@ -120,3 +120,19 @@ def test_settings_is_guarded_by_the_org_role_group():
     assert "UX layer only" in middleware, (
         "the guard must stay documented as UX over the API's real enforcement"
     )
+
+
+@pytest.mark.req("REQ-021")
+def test_the_virtual_window_attaches_its_scroll_listener_to_the_list_once_it_exists():
+    """The list renders only after the timeline has loaded, which is after a
+    mount-time effect has run. A `useRef` read in an effect with no
+    dependencies saw null once and never looked again, so the window stayed on
+    the first rows however far the person scrolled."""
+    virtual = (WEB / "features" / "timeline" / "hooks" / "useVirtualRows.ts").read_text(
+        encoding="utf-8"
+    )
+    assert "useState<HTMLDivElement | null>" in virtual, "the element is state"
+    assert "useCallback((node: HTMLDivElement | null)" in virtual, "and the ref a callback"
+    assert "}, [element]);" in virtual, "the listener effect re-runs when the element arrives"
+    listener_effect = virtual.split("useEffect(() => {")[1].split("}, [")[1]
+    assert listener_effect.startswith("element]"), "and depends on the element, not on nothing"

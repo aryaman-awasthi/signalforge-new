@@ -126,6 +126,7 @@ def _node_index(snapshot: Optional[TopologySnapshot]) -> dict[str, str]:
 
 
 def _adjacency(snapshot: Optional[TopologySnapshot]) -> dict[str, set[str]]:
+    """Undirected: who is within reach of whom, for membership."""
     edges: dict[str, set[str]] = {}
     if snapshot is None:
         return edges
@@ -133,6 +134,20 @@ def _adjacency(snapshot: Optional[TopologySnapshot]) -> dict[str, set[str]]:
         edges.setdefault(edge.source, set()).add(edge.target)
         edges.setdefault(edge.target, set()).add(edge.source)
     return edges
+
+
+def _dependents(snapshot: Optional[TopologySnapshot]) -> dict[str, set[str]]:
+    """Directed: for each node, the nodes that depend on it (`source depends_on
+    target`, as the canonical model declares an edge). The root is chosen by
+    this, not by undirected degree: a gateway that calls five services has
+    degree five and explains nothing, while the database those five sit on is
+    the one row worth reading first."""
+    incoming: dict[str, set[str]] = {}
+    if snapshot is None:
+        return incoming
+    for edge in snapshot.edges:
+        incoming.setdefault(edge.target, set()).add(edge.source)
+    return incoming
 
 
 def resolve_node(alert: Alert, index: dict[str, str]) -> Optional[str]:
@@ -186,6 +201,7 @@ def cluster_alerts(
     )[-MAX_CLUSTERED_ALERTS:]
     index = _node_index(snapshot)
     adjacency = _adjacency(snapshot)
+    dependents = _dependents(snapshot)
     nodes = {alert.alert_id: resolve_node(alert, index) for alert in firing}
 
     parent: dict[str, str] = {alert.alert_id: alert.alert_id for alert in firing}
@@ -222,7 +238,7 @@ def cluster_alerts(
 
     clusters = tuple(
         sorted(
-            (_build(members, nodes, adjacency) for members in groups.values()),
+            (_build(members, nodes, dependents) for members in groups.values()),
             key=lambda cluster: (cluster.started_at, cluster.root_alert_id),
         )
     )
@@ -237,7 +253,7 @@ def cluster_alerts(
 def _build(
     members: Sequence[Alert],
     nodes: dict[str, Optional[str]],
-    adjacency: dict[str, set[str]],
+    dependents: dict[str, set[str]],
 ) -> AlertCluster:
     member_nodes = {
         alert.alert_id: nodes[alert.alert_id]
@@ -250,7 +266,7 @@ def _build(
         node = nodes[alert.alert_id]
         if node is None:
             return -1
-        return len(adjacency.get(node, set()) & (node_set - {node}))
+        return len(dependents.get(node, set()) & (node_set - {node}))
 
     root = max(
         members,

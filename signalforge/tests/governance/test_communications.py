@@ -323,3 +323,66 @@ async def _retract(governed, incident_id: str, node_id: str) -> None:
             reason="the measurement was wrong",
         )
         await uow.commit()
+
+
+@pytest.mark.req("REQ-032", "REQ-064")
+async def test_a_corrected_statement_is_corrected_once_and_the_correction_can_itself_be_corrected(
+    governed,
+):
+    """Written failing-first. CORRECTED is terminal, but a correction of an
+    already-corrected statement drafted fine and then could never issue: the
+    original had no move left. The draft is refused up front and points at the
+    statement that stands, which can be corrected in its turn."""
+    incident, nodes = await _grounded_incident(governed)
+    lead = governed.api.invite_and_accept(
+        governed.owner_token,
+        email="comms@acme.io",
+        roles=["comms_lead"],
+        display_name="Cara Comms",
+        password="comms-strong-password",
+    )
+    token = lead["tokens"]["access_token"]
+    cited = [node["id"] for node in nodes if node["status"] == "current"][:2]
+
+    def publish(communication_id: str) -> dict:
+        communication_action(governed.api, token, incident["id"], communication_id, "approve")
+        return communication_action(governed.api, token, incident["id"], communication_id, "issue")
+
+    original = draft_communication(
+        governed.api, governed.requester_token, incident["id"],
+        audience="customer", subject="Checkout is degraded",
+        body="Checkout is degraded in eu-west-1 only.", node_ids=cited,
+    )
+    publish(original["communication_id"])
+    first = communication_action(
+        governed.api, governed.requester_token, incident["id"], original["communication_id"],
+        "correction", body="Checkout is degraded in eu-west-1 and eu-central-1.",
+        node_ids=cited, reason="a second region", use_model=False, expect=201,
+    )
+    publish(first["communication_id"])
+
+    # The original is now the record of what was said. It does not get a
+    # second correction; the refusal names the one that stands.
+    refused = communication_action(
+        governed.api, governed.requester_token, incident["id"], original["communication_id"],
+        "correction", body="Checkout is degraded everywhere.", node_ids=cited,
+        reason="third thoughts", use_model=False, expect=409,
+    )
+    assert first["communication_id"] in refused["detail"]
+
+    # The correction can be corrected, and the chain is recorded.
+    second = communication_action(
+        governed.api, governed.requester_token, incident["id"], first["communication_id"],
+        "correction", body="Checkout is degraded in every region.", node_ids=cited,
+        reason="the map showed a third region", use_model=False, expect=201,
+    )
+    assert second["corrects_id"] == first["communication_id"]
+    issued = publish(second["communication_id"])
+    assert issued["state"] == "issued"
+    board = {
+        c["communication_id"]: c
+        for c in communications(governed.api, governed.requester_token, incident["id"])["communications"]
+    }
+    assert board[first["communication_id"]]["state"] == "corrected"
+    assert board[first["communication_id"]]["corrected_by_id"] == second["communication_id"]
+    assert board[original["communication_id"]]["corrected_by_id"] == first["communication_id"]

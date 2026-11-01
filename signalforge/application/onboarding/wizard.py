@@ -81,6 +81,21 @@ from signalforge.domain.onboarding.profile import (
     summarize,
 )
 
+
+def _require_aware_capture_time(value: object) -> None:
+    if isinstance(value, datetime):
+        parsed: Optional[datetime] = value
+    else:
+        try:
+            parsed = datetime.fromisoformat(str(value))
+        except ValueError:
+            parsed = None  # not a timestamp at all: the snapshot model says so
+    if parsed is not None and parsed.tzinfo is None:
+        raise OnboardingValidationError(
+            "captured_at must be timezone-aware (for example "
+            "2026-09-01T11:00:00+00:00)"
+        )
+
 MANIFEST_CAPABILITY = "manifest"
 NORMALIZE_CAPABILITY = "normalize"
 QUERY_INSTANT_CAPABILITY = "query_instant"
@@ -381,6 +396,12 @@ class OnboardingService:
         document = dict(document)
         if not document.get("captured_at"):
             document["captured_at"] = self._clock.now().isoformat()
+        else:
+            # The profile codec refuses a naive timestamp on *read*, so one
+            # stored here would make the whole application list unreadable
+            # (GET /apps) long after this upload answered 200. Refused now,
+            # where the person who typed it can see the answer.
+            _require_aware_capture_time(document["captured_at"])
 
         try:
             if binding is not None:

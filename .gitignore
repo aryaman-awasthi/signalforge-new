@@ -51,3 +51,11 @@ web/playwright-report/
 
 # Editor state, never part of the product.
 .vscode/
+
+# editor backups and stray interpreters
+*.pya
+.venv-*/
+web/tsconfig.tsbuildinfo
+
+# build metadata from an editable install
+*.egg-info/

@@ -21,7 +21,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import AwareDatetime, BaseModel, Field
 
 from signalforge.application.warroom.bridge import BridgeMessage
 from signalforge.application.warroom.service import WarRoomView
@@ -78,13 +78,17 @@ class TaskIn(BaseModel):
         description="A name for an owner this platform cannot resolve to a user. "
         "The task stays visibly unassigned rather than being given to a guess.",
     )
-    due_at: Optional[datetime] = None
+    due_at: Optional[AwareDatetime] = Field(
+        default=None,
+        description="Timezone-aware. A bare wall-clock time is refused: the "
+        "board compares it against the server's clock to say *overdue*.",
+    )
     note: str = Field(default="", max_length=2000)
 
 
 class TaskPatchIn(BaseModel):
     owner_user_id: Optional[str] = None
-    due_at: Optional[datetime] = None
+    due_at: Optional[AwareDatetime] = None
     cancel: bool = False
     note: str = Field(default="", max_length=2000)
 

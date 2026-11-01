@@ -81,6 +81,11 @@ class WsStore {
   private attempt = 0;
   private retry: ReturnType<typeof setTimeout> | null = null;
   private closing = false;
+  /** True from the ticket request until the socket exists or the attempt
+   * fails. `connect()` checks it: a second subscriber arriving while the ticket
+   * is in flight used to open a second socket, and a cockpit with six panels
+   * came up holding six. */
+  private opening = false;
 
   status: WsStatus = "disconnected";
 
@@ -88,7 +93,7 @@ class WsStore {
 
   connect(): void {
     if (typeof window === "undefined") return; // server render: nothing to open
-    if (this.socket || this.retry) return;
+    if (this.socket || this.retry || this.opening) return;
     void this.open();
   }
 
@@ -107,6 +112,8 @@ class WsStore {
   }
 
   private async open(): Promise<void> {
+    if (this.opening) return;
+    this.opening = true;
     this.setStatus("connecting");
     let ticket: string;
     try {
@@ -114,17 +121,28 @@ class WsStore {
     } catch {
       // No ticket, no socket - and no error on screen either: the caller is
       // still polling, so this is a slower cockpit rather than a broken one.
-      this.scheduleRetry();
+      this.opening = false;
+      if (this.listeners.size > 0) this.scheduleRetry();
+      else this.setStatus("disconnected");
+      return;
+    }
+    if (this.listeners.size === 0) {
+      // Everybody unsubscribed while the ticket was in flight. The ticket is
+      // single-use and expires on its own; nothing to close.
+      this.opening = false;
+      this.setStatus("disconnected");
       return;
     }
     let socket: WebSocket;
     try {
       socket = new WebSocket(WS_URL, [TICKET_SUBPROTOCOL, ticket]);
     } catch {
+      this.opening = false;
       this.scheduleRetry();
       return;
     }
     this.socket = socket;
+    this.opening = false;
 
     socket.onopen = () => {
       this.attempt = 0;

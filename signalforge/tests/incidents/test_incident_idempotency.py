@@ -28,6 +28,7 @@ from signalforge.tests.incidents.conftest import (
     commander,
     declare,
     issue_key,
+    list_incidents,
     onboard,
     owner,
     read_incident,
@@ -170,3 +171,14 @@ async def test_a_completion_that_arrives_before_its_start_still_closes_the_windo
     assert window["recent"][0]["announced_started"] is True, (
         "the late start is still recorded; it just does not reopen the window"
     )
+
+
+@pytest.mark.req("REQ-040")
+def test_a_state_filter_that_names_no_state_is_malformed_input(api):
+    """Written failing-first: `?state=bogus` answered 409, the code for a move
+    the lifecycle refuses, when no move was asked for at all."""
+    owner_token, _tenant = owner(api)
+    onboard(api, owner_token)
+    answer = list_incidents(api, owner_token, state="bogus", expect=422)
+    assert "is not a lifecycle state" in answer["detail"]
+    assert list_incidents(api, owner_token, state="open")["count"] == 0

@@ -41,6 +41,10 @@ openapi:
 	@if [ -f scripts/gen_openapi.py ]; then $(PY) scripts/gen_openapi.py; \
 	else echo "make openapi: scripts/gen_openapi.py not implemented yet"; exit 1; fi
 
+nfr:
+	@if [ -f scripts/gen_nfr_report.py ]; then $(PY) scripts/gen_nfr_report.py; \
+	else echo "make nfr: scripts/gen_nfr_report.py not implemented yet"; exit 1; fi
+
 evidence:
 	@if [ -f scripts/evidence.py ]; then $(PY) scripts/evidence.py $(REQ); \
 	else echo "make evidence: scripts/evidence.py not implemented yet"; exit 1; fi

@@ -40,6 +40,7 @@ from signalforge.tests.warroom.conftest import (
     onboard,
     owner,
     page_for,
+    pages,
     patch_task,
     raise_page,
     read_bridge,
@@ -560,3 +561,77 @@ async def test_the_bridge_applies_the_same_redaction_floor_as_ingest(api):
             assert secret not in surface, (
                 f"the bridge's redaction floor did not reach the {name}"
             )
+
+
+@pytest.mark.req("REQ-012", "REQ-013", "REQ-045")
+async def test_a_task_or_a_page_is_reached_only_through_its_own_incident(api):
+    """Written failing-first. The route's permission is decided against the
+    incident in the URL; the handler used to act on whatever task or page id
+    followed it, in any incident of the tenant. A commander bound to one
+    application could therefore reassign, tick, acknowledge or escalate on
+    another application's incident by naming their own incident in the path.
+    The answer is the same 404 another tenant's id gets.
+    """
+    from signalforge.tests.onboarding.conftest import register_app
+
+    owner_token, _tenant = owner(api)
+    onboard(api, owner_token)
+    register_app(api, owner_token, app_id="billing", name="Billing")
+    wire_paging(api, owner_token)
+    wire_paging(api, owner_token, app_id="billing")
+    ic = commander(api, owner_token)
+    ic_token = ic["tokens"]["access_token"]
+    sme = responder(api, owner_token, email="sme@acme.io")
+    sme_token = sme["tokens"]["access_token"]
+    mine = declare(api, ic_token, severity="P1")
+    theirs = declare(api, ic_token, app_id="billing", severity="P1", title="Billing down")
+
+    task = create_task(
+        api, ic_token, theirs["id"], title="drain the queue", owner_user_id=sme["user"]["id"]
+    )
+    page = raise_page(
+        api, ic_token, theirs["id"], user_id=sme["user"]["id"], reason="knows the pool"
+    )
+
+    # Through the wrong incident: not there.
+    patch_task(api, ic_token, mine["id"], task["id"], note="moved", expect=404)
+    finish_task(api, sme_token, mine["id"], task["id"], expect=404)
+    ack(api, sme_token, mine["id"], page["id"], expect=404)
+    escalate(api, ic_token, mine["id"], page["id"], expect=404)
+
+    # Nothing moved.
+    board = tasks(api, ic_token, theirs["id"])
+    assert next(t for t in board["tasks"] if t["id"] == task["id"])["status"] == "open"
+    row = page_for(pages(api, ic_token, theirs["id"]), sme["user"]["id"])
+    assert row["state"] != "acked"
+
+    # Through its own incident the same calls work.
+    assert patch_task(api, ic_token, theirs["id"], task["id"], note="moved")["id"] == task["id"]
+    assert finish_task(api, sme_token, theirs["id"], task["id"])["status"] == "done"
+    assert ack(api, sme_token, theirs["id"], page["id"])["state"] == "acked"
+
+
+@pytest.mark.req("REQ-045")
+async def test_a_due_time_without_a_zone_is_refused_rather_than_stored(api):
+    """Written failing-first. A naive `due_at` was accepted, stored, and then
+    compared against the server's aware clock on every read of the board - a
+    TypeError, so one task made the whole task list a 500."""
+    owner_token, _tenant = owner(api)
+    onboard(api, owner_token)
+    wire_paging(api, owner_token)
+    ic = commander(api, owner_token)
+    ic_token = ic["tokens"]["access_token"]
+    incident = declare(api, ic_token, severity="P1")
+
+    refused = create_task(
+        api, ic_token, incident["id"], title="drain the queue",
+        due_at="2026-09-01T13:00:00", expect=422,
+    )
+    assert "due_at" in json.dumps(refused["detail"])
+    task = create_task(
+        api, ic_token, incident["id"], title="drain the queue",
+        due_at="2026-09-01T13:00:00+00:00",
+    )
+    patch_task(api, ic_token, incident["id"], task["id"], due_at="2026-09-01T14:00:00", expect=422)
+    board = tasks(api, ic_token, incident["id"])
+    assert [t["id"] for t in board["tasks"]] == [task["id"]]

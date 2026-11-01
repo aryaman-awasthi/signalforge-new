@@ -330,7 +330,12 @@ class PagingService:
     # -- acknowledgement -----------------------------------------------------
 
     async def acknowledge(
-        self, principal: Principal, page_id: str, *, note: str = ""
+        self,
+        principal: Principal,
+        page_id: str,
+        *,
+        incident_id: Optional[str] = None,
+        note: str = "",
     ) -> Page:
         """The human override, and the one act a role cannot confer.
 
@@ -339,10 +344,7 @@ class PagingService:
         terminal: a second tap returns the same page and writes no second event.
         """
         tenant_id = principal.tenant_id
-        async with self._uow_factory() as uow:
-            page = await uow.incident_pages.get(tenant_id, page_id)
-        if page is None:
-            raise PageNotFoundError(f"page {page_id} not found")
+        page = await self._require_page(tenant_id, page_id, incident_id=incident_id)
         if page.state is PageState.ACKED:
             # Checked before the entity so an already-acknowledged page is not
             # a second event, and so acknowledging twice cannot be told from
@@ -561,15 +563,36 @@ class PagingService:
         self._count(moved)
         return successor
 
-    async def escalate_now(self, principal: Principal, page_id: str) -> Page:
-        """A commander deciding not to wait for the countdown."""
-        async with self._uow_factory() as uow:
-            page = await uow.incident_pages.get(principal.tenant_id, page_id)
-        if page is None:
-            raise PageNotFoundError(f"page {page_id} not found")
+    async def escalate_now(
+        self, principal: Principal, page_id: str, *, incident_id: Optional[str] = None
+    ) -> Page:
+        """A commander deciding not to wait for the countdown.
+
+        The route's permission was decided against the URL's incident, so the
+        page has to belong to that incident (see `_require_page`).
+        """
+        page = await self._require_page(
+            principal.tenant_id, page_id, incident_id=incident_id
+        )
         return await self.escalate(
             page, by=principal, reason="escalated by hand before the countdown ended"
         )
+
+    async def _require_page(
+        self, tenant_id: str, page_id: str, *, incident_id: Optional[str]
+    ) -> Page:
+        """The page, and only when it is the named incident's.
+
+        A per-application commander's `declare_incident` is checked against the
+        incident in the URL; a page of some other incident reached through that
+        URL would be acted on under a permission that was never evaluated for
+        it. The answer is the same 404 as for another tenant's id (REQ-013).
+        """
+        async with self._uow_factory() as uow:
+            page = await uow.incident_pages.get(tenant_id, page_id)
+        if page is None or (incident_id is not None and page.incident_id != incident_id):
+            raise PageNotFoundError(f"page {page_id} not found")
+        return page
 
     async def cancel_open_pages(self, incident: Incident) -> int:
         """The incident closed. Stop ringing phones for it.

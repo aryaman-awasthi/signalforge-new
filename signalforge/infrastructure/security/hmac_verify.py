@@ -6,11 +6,16 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import re
 from dataclasses import dataclass
 from typing import Optional, Union
 
 from signalforge.contracts.ingest import REPLAY_WINDOW_S
 from signalforge.domain.identity.ports import Clock
+
+
+_HEX_DIGEST = re.compile(r"[0-9a-f]{64}")
+"""The only shape an HMAC-SHA256 hex digest has."""
 
 
 @dataclass(frozen=True)
@@ -42,10 +47,17 @@ class IngestHmacVerifier:
         if abs(now - ts) > self._replay_window_s:
             return VerificationResult(False, "timestamp outside replay window")
 
+        presented = str(signature or "").strip().lower()
+        if not _HEX_DIGEST.fullmatch(presented):
+            # Checked before the comparison: `compare_digest` refuses strings
+            # with non-ASCII characters by raising, and a header is attacker
+            # input. A signature that is not a hex digest is simply wrong.
+            return VerificationResult(False, "malformed signature")
+
         key = secret.encode("utf-8") if isinstance(secret, str) else secret
         expected = hmac.new(
             key, f"{ts}.".encode("utf-8") + body, hashlib.sha256
         ).hexdigest()
-        if not hmac.compare_digest(expected, signature.lower()):
+        if not hmac.compare_digest(expected, presented):
             return VerificationResult(False, "signature mismatch")
         return VerificationResult(True)

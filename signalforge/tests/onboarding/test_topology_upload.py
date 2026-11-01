@@ -160,3 +160,26 @@ def test_upload_counts_toward_readiness(api, observe):
         check for check in after["checks"] if check["key"] == "topology.version"
     )
     assert topology_check["passed"] is True
+
+
+@pytest.mark.req("REQ-036")
+def test_a_capture_time_without_a_zone_is_refused_where_it_is_typed(api, observe):
+    """Written failing-first. A document declaring a naive `captured_at` was
+    stored, and the profile codec - which refuses naive timestamps on read -
+    then failed every read of the application list. The upload is the place to
+    say no, to the person who can fix it."""
+    token, _tenant_id = owner(api)
+    register_app(api, token)
+
+    naive = copy.deepcopy(SIMPLE_TOPOLOGY)
+    naive["captured_at"] = "2026-09-01T11:00:00"
+    refused = upload_topology(api, token, naive, expect=422)
+    assert "timezone-aware" in refused["detail"]
+
+    listing = api.client.get("/apps", headers=api.auth_header(token))
+    assert listing.status_code == 200, listing.text
+
+    aware = copy.deepcopy(SIMPLE_TOPOLOGY)
+    aware["captured_at"] = "2026-09-01T11:00:00+00:00"
+    upload_topology(api, token, aware)
+    assert api.client.get("/apps", headers=api.auth_header(token)).status_code == 200

@@ -237,15 +237,16 @@ function Row({
               label="I did it by hand"
               busy={working("takeover")}
               disabled={!canCommand}
-              onClick={() =>
+              onClick={() => {
+                // Cancel means cancel. `null` is the person closing the dialog,
+                // and recording "handled manually" for them would put a
+                // take-over nobody performed on the ledger.
+                const note = window.prompt("What did you do?");
+                if (note === null) return;
                 onRun("takeover", () =>
-                  takeOverExecution(
-                    incidentId,
-                    id,
-                    window.prompt("What did you do?") ?? "handled manually",
-                  ),
-                )
-              }
+                  takeOverExecution(incidentId, id, note.trim() || "handled manually"),
+                );
+              }}
             />
           </>
         )}

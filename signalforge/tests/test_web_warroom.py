@@ -281,8 +281,14 @@ def test_the_war_room_and_the_pager_are_not_behind_a_role_group():
     # commander, who never holds manage_apps (DR-089). Only the wizard beneath
     # it is administration.
     assert '"/apps"' not in groups
-    suffixes = middleware.split("ORG_GROUP_SUFFIXES = ")[1].split("]")[0]
-    assert '"/onboard"' in suffixes
+    # The wizard is matched as a whole path segment, never as a substring: an
+    # application whose id starts with "onboard" is still an application page.
+    segments = middleware.split("ORG_GROUP_SEGMENTS = ")[1].split("]")[0]
+    assert '"onboard"' in segments
+    assert 'pathname.includes(' not in middleware
+    # API calls are not pages: a lapsed POST redirected to the refresh route
+    # arrives there as a GET and fails. The proxy refreshes for itself.
+    assert 'pathname.startsWith("/api/")' in middleware
 
 
 @pytest.mark.req("REQ-007")

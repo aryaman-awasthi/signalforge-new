@@ -96,31 +96,32 @@ export function useGovernance(incidentId: string) {
 }
 
 /**
- * A countdown that ticks in the browser from a server-issued expiry.
+ * A countdown that ticks in the browser from the server's `seconds_left`.
  *
  * The number on the screen is advisory and the server is the authority: an
  * approval that reads 00:03 here is refused at execution the moment its
- * `expires_at` passes, whether or not any tab was open to watch it. Ticking
- * locally rather than polling keeps the countdown smooth without asking the
- * server a question a second.
+ * `expires_at` passes, whether or not any tab was open to watch it. It ticks
+ * from the seconds the server said were left at the moment of the read, not
+ * from `expires_at - Date.now()`: a laptop clock a few minutes off would show
+ * an approval as expired while the gateway still honoured it, or as live after
+ * the gateway had refused it. Every poll re-anchors, so drift between polls is
+ * bounded and never cumulative (the same design as the pager's useCountdown).
  */
-export function useSecondsLeft(expiresAt: string | null): number {
-  const [left, setLeft] = useState(() => secondsUntil(expiresAt));
+export function useSecondsLeft(secondsLeft: number | null | undefined): number {
+  const anchor = secondsLeft ?? null;
+  const [left, setLeft] = useState(() => Math.max(0, anchor ?? 0));
 
   useEffect(() => {
-    setLeft(secondsUntil(expiresAt));
-    if (!expiresAt) return;
-    const handle = setInterval(() => setLeft(secondsUntil(expiresAt)), 1000);
+    setLeft(Math.max(0, anchor ?? 0));
+    if (anchor === null || anchor <= 0) return;
+    const handle = setInterval(
+      () => setLeft((current) => (current > 0 ? current - 1 : 0)),
+      1000,
+    );
     return () => clearInterval(handle);
-  }, [expiresAt]);
+  }, [anchor]);
 
   return left;
-}
-
-function secondsUntil(at: string | null): number {
-  if (!at) return 0;
-  const remaining = new Date(at).getTime() - Date.now();
-  return remaining > 0 ? Math.floor(remaining / 1000) : 0;
 }
 
 export function formatCountdown(seconds: number): string {

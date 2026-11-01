@@ -179,7 +179,9 @@ async def acknowledge_page(
     names itself: acknowledging anybody else's page is a 403 from the entity,
     whatever the caller's roles say. Idempotent and terminal.
     """
-    page = await container.paging.acknowledge(principal, page_id, note=body.note)
+    page = await container.paging.acknowledge(
+        principal, page_id, incident_id=incident_id, note=body.note
+    )
     return page_out(page, now=container.clock.now())
 
 
@@ -197,7 +199,9 @@ async def escalate_page(
     Returns the *successor* page - the one now ringing - because that is the row
     the board needs to start counting down.
     """
-    successor = await container.paging.escalate_now(principal, page_id)
+    successor = await container.paging.escalate_now(
+        principal, page_id, incident_id=incident_id
+    )
     return page_out(successor, now=container.clock.now())
 
 
@@ -306,6 +310,7 @@ async def update_task(
     task = await container.incident_tasks.update(
         principal,
         task_id,
+        incident_id=incident_id,
         owner_user_id=body.owner_user_id,
         due_at=body.due_at,
         cancel=body.cancel,
@@ -330,5 +335,7 @@ async def complete_task(
     actually done, and refusing until a commander assigns it first is how a board
     fills with things everybody knows are finished.
     """
-    task = await container.incident_tasks.complete(principal, task_id, note=body.note)
+    task = await container.incident_tasks.complete(
+        principal, task_id, incident_id=incident_id, note=body.note
+    )
     return task_out(task, now=container.clock.now())

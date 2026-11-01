@@ -33,7 +33,14 @@ APP="${SIGNALFORGE_APP_BASE_URL:-http://127.0.0.1:8080}"
 # no panel of the cockpit reads empty. s4-acceptance is still here and is still
 # the acceptance scenario - the smallest world in which the corroboration rule
 # can be proved - and is played by passing it as the argument.
-DRILL="${1:-$ROOT/drills/demo-setup.yaml}"
+# Anything after the drill file is passed through to drill_run.py, so
+#   bash scripts/demo.sh drills/demo-setup.yaml --scenario license-expiry
+# works, as does `bash scripts/demo.sh --refault` against the default drill.
+DRILL="$ROOT/drills/demo-setup.yaml"
+if [ $# -gt 0 ] && [ "${1#--}" = "$1" ]; then
+  DRILL="$1"
+  shift
+fi
 
 if [ ! -f "$DRILL" ]; then
   echo "[demo] no such drill: $DRILL" >&2
@@ -46,4 +53,4 @@ echo "[demo] harness   $APP"
 echo "[demo] scenario  $(basename "$DRILL")"
 echo
 
-exec "$PY" "$ROOT/scripts/drill_run.py" "$DRILL" --api "$API" --app-base-url "$APP"
+exec "$PY" "$ROOT/scripts/drill_run.py" "$DRILL" --api "$API" --app-base-url "$APP" "$@"
